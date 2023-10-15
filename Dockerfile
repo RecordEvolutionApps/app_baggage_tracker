@@ -11,5 +11,5 @@ COPY . /app
 
 # RUN python3 -m pip install reswarm==0.0.16
 
-# CMD ["python3", "-u", "index.py"]
-CMD ["sleep", "infinity"]
+CMD ["python3", "-u", "index.py"]
+# CMD ["sleep", "infinity"]

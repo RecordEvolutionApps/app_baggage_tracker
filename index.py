@@ -1,14 +1,15 @@
 from ultralytics import YOLO
 # from reswarm import Reswarm
-import gi
-gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk
+# import gi
+# gi.require_version('Gtk', '3.0')
+# from gi.repository import Gtk
 import cv2
 import math 
 # start webcam
 cap = cv2.VideoCapture(0)
 cap.set(3, 640)
 cap.set(4, 480)
+print(cv2.__file__)
 
 # model
 model = YOLO("./yolov8l.pt")
@@ -26,7 +27,7 @@ classNames = ["person", "bicycle", "car", "motorbike", "aeroplane", "bus", "trai
               "teddy bear", "hair drier", "toothbrush"
               ]
 
-# framerate = 25.0
+framerate = 25.0
 
 out = cv2.VideoWriter('appsrc ! videoconvert ! '
                       'vp8enc deadline=2 threads=2 keyframe-max-dist=60 ! video/x-vp8 ! '
@@ -52,14 +53,14 @@ while True:
 
             # confidence
             confidence = math.ceil((box.conf[0]*100))/100
-            print("Confidence --->",confidence)
+            # print("Confidence --->",confidence)
 
             # class name
             cls = int(box.cls[0])
-            print("Class name -->", classNames[cls])
+            # print("Class name -->", classNames[cls])
 
             # object details
-            org = [x1, y1]
+            org = (x1, y1)
             font = cv2.FONT_HERSHEY_SIMPLEX
             fontScale = 1
             color = (255, 0, 0)
@@ -67,7 +68,8 @@ while True:
 
             cv2.putText(img, classNames[cls], org, font, fontScale, color, thickness)
 
-    cv2.imshow('Webcam', img)
+    # cv2.imshow('Webcam', img)
+    out.write(img)
     if cv2.waitKey(1) == ord('q'):
         break
 
