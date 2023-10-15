@@ -1,0 +1,2 @@
+cryptography==3.4.6
+reswarm==0.0.14

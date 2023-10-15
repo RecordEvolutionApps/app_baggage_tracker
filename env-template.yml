@@ -1,0 +1,45 @@
+############################################################
+# Sample Environment variable template
+# Defines the form displayed to users in the device or group settings to provide parameters to the app
+############################################################
+
+# NOTE: Template entries without a label property will not be displayed
+# NOTE: the "label" and "type" must be present on each variable
+
+SPEED:                                      # The name of the environment variable that contains the user provided value
+    label: Speed                            # Label displayed above the input field. (string)
+    type: numeric                           # Type of value. ('numeric' | 'text' | 'textarea' | 'boolean')
+    defaultValue: 1000                      # Default value. (string | number)
+    description: Numeric field example      # Description. (string)
+    unit: km/h                              # Unit displayed next to label. (string)
+    max: 4000                               # Maximum allowed value. Only makes sense with 'numeric' type. (number)
+    min: 500                                # Minimum allowed value. Only makes sense with 'numeric' type. (number)
+    secret: false                           # Makes value invisible once set. (boolean)
+SENSITIVITY:
+    label: Sensitivity
+    type: numeric
+    defaultValue: 600
+    description: Dropdown Example
+    valueList: [500, 600, 800, 2000, 4000]  # Renders a dropdown field allowing the selection from a list of values.  (number[] | string[])
+MY_CONFIG:
+    label: Service config yaml
+    type: textarea                          # Renders a text area with multiple lines
+    description: Text Area Example
+    defaultValue: |
+        this:
+            can:
+                - be
+                - any
+                - yaml
+        or: any
+        other: config
+PASSWORD:
+    label: Password
+    type: text
+    description: Secret input example
+    secret: true
+ENABLED:                                    # The provided values in this env variable will be 'true' or 'false'
+    label: Radio Options True / False
+    type: boolean                           # Renders Radio Options
+    defaultValue: false
+    description: Checkbox example
