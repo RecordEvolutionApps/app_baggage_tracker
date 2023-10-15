@@ -1,17 +1,15 @@
-# 1. Set a base image
-FROM python:3.9-slim
+FROM ultralytics/ultralytics:latest-jetson
 
-# 2. (optional) use python wheels from piwheels.org (speeds up build time for arm architectures)
-RUN echo '[global]' > /etc/pip.conf && echo 'extra-index-url=https://www.piwheels.org/simple' >> /etc/pip.conf
+RUN apt-get update && apt-get install -y \
+    libgtk-3-dev
 
-# 3. Copy over a list of required dependencies and install them
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-
-# 4. Create a main app directory and copy over the code
-RUN mkdir app
 WORKDIR /app
-COPY index.py app/index.py
 
-# 5. Start the application
-CMD ["python", "-u", "app/index.py"]
+RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8l.pt 
+
+COPY . /app
+
+# RUN python3 -m pip install reswarm==0.0.16
+
+# CMD ["python3", "-u", "index.py"]
+CMD ["sleep", "infinity"]
