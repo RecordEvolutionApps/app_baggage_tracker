@@ -9,7 +9,7 @@
 CAM_NUM:
     label: Camera USB Device Number
     type: numeric
-    defaultValue: 0
+    defaultValue: 1
     description: The device path number of the camera. (e.g. in case the camera is attached to /dev/video0 then the number would be 0)
     min: 0
 
@@ -25,7 +25,7 @@ FRAMERATE:
 RESOLUTION_X:
     label: Width
     type: numeric
-    defaultValue: 640
+    defaultValue: 1920
     description: Horizontal Resolution
     unit: pixel
     min: 1
@@ -33,8 +33,40 @@ RESOLUTION_X:
 RESOLUTION_Y:
     label: Height
     type: numeric
-    defaultValue: 480
+    defaultValue: 1080
     description: Vertical Resolution
     unit: pixel
     min: 1
     max: 10000
+
+
+    # 'MJPG' (Motion-JPEG, compressed)
+    #             Size: Discrete 1920x1080
+    #                     Interval: Discrete 0.033s (30.000 fps)
+    #             Size: Discrete 1280x720
+    #                     Interval: Discrete 0.017s (60.000 fps)
+    #             Size: Discrete 1024x768
+    #                     Interval: Discrete 0.033s (30.000 fps)
+    #             Size: Discrete 640x480
+    #                     Interval: Discrete 0.008s (120.101 fps)
+    #             Size: Discrete 800x600
+    #                     Interval: Discrete 0.017s (60.000 fps)
+    #             Size: Discrete 1280x1024
+    #                     Interval: Discrete 0.033s (30.000 fps)
+    #             Size: Discrete 320x240
+    #                     Interval: Discrete 0.008s (120.101 fps)
+    #     [1]: 'YUYV' (YUYV 4:2:2)
+    #             Size: Discrete 1920x1080
+    #                     Interval: Discrete 0.167s (6.000 fps)
+    #             Size: Discrete 1280x720
+    #                     Interval: Discrete 0.111s (9.000 fps)
+    #             Size: Discrete 1024x768
+    #                     Interval: Discrete 0.167s (6.000 fps)
+    #             Size: Discrete 640x480
+    #                     Interval: Discrete 0.033s (30.000 fps)
+    #             Size: Discrete 800x600
+    #                     Interval: Discrete 0.050s (20.000 fps)
+    #             Size: Discrete 1280x1024
+    #                     Interval: Discrete 0.167s (6.000 fps)
+    #             Size: Discrete 320x240
+    #                     Interval: Discrete 0.033s (30.000 fps)

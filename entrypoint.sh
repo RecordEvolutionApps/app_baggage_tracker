@@ -27,7 +27,7 @@ nvgpu_out=$(lsmod | grep nvgpu)
     #     udpsink host=127.0.0.1 port=5004 &
 # fi
 
-nohup python3 -u index.py &
+# nohup python3 -u index.py &
 
 # nohup gst-launch-1.0 v4l2src device=$CAM ! \
 #     'image/jpeg,framerate=30/1' ! \
@@ -38,4 +38,6 @@ nohup python3 -u index.py &
 
 nginx 
 
-exec /usr/local/bin/janus
+/usr/local/bin/janus --daemon
+
+exec python3 -u index.py

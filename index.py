@@ -9,12 +9,15 @@ import os
 # start webcam
 
 CAM_NUM = os.environ.get('CAM_NUM', 0)
+RESOLUTION_X = int(os.environ.get('RESOLUTION_X', 640))
+RESOLUTION_Y = int(os.environ.get('RESOLUTION_Y', 480))
+
 cap = cv2.VideoCapture(0)
-cap.set(3, 640)
-cap.set(4, 480)
+cap.set(3, RESOLUTION_X)
+cap.set(4, RESOLUTION_Y)
 
 # model
-model = YOLO("./yolov8l.pt")
+model = YOLO("./yolov8n.pt")
 
 # object classes
 classNames = ["person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck", "boat",
@@ -35,11 +38,11 @@ out = cv2.VideoWriter('appsrc ! videoconvert ! '
                       'vp8enc deadline=2 threads=2 keyframe-max-dist=60 ! video/x-vp8 ! '
                       'rtpvp8pay !'
                       'udpsink host=127.0.0.1 port=5004',
-                      0, framerate, (640, 480))
+                      0, framerate, (RESOLUTION_X, RESOLUTION_Y))
 
 while True:
     success, img = cap.read()
-    results = model(img, stream=True)
+    results = model(img, stream=True, imgsz=RESOLUTION_X, classes=[2])
     
     # coordinates
     for r in results:
@@ -51,7 +54,7 @@ while True:
             x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2) # convert to int values
 
             # put box in cam
-            cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 255), 3)
+            cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 255), 2)
 
             # confidence
             confidence = math.ceil((box.conf[0]*100))/100
@@ -65,10 +68,10 @@ while True:
             org = (x1, y1)
             font = cv2.FONT_HERSHEY_SIMPLEX
             fontScale = 1
-            color = (255, 0, 0)
+            color = (255, 0, 255)
             thickness = 2
 
-            cv2.putText(img, classNames[cls], org, font, fontScale, color, thickness)
+            # cv2.putText(img, classNames[cls], org, font, fontScale, color, thickness)
 
     # cv2.imshow('Webcam', img)
     out.write(img)
