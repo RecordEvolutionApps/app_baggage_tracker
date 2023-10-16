@@ -4,12 +4,14 @@ from ultralytics import YOLO
 # gi.require_version('Gtk', '3.0')
 # from gi.repository import Gtk
 import cv2
-import math 
+import math
+import os
 # start webcam
+
+CAM_NUM = os.environ.get('CAM_NUM', 0)
 cap = cv2.VideoCapture(0)
 cap.set(3, 640)
 cap.set(4, 480)
-print(cv2.__file__)
 
 # model
 model = YOLO("./yolov8l.pt")

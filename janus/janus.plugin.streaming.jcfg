@@ -1,0 +1,35 @@
+
+general: {
+        #admin_key = "supersecret"              # If set, mountpoints can be created via API
+                                                                        # only if this key is provided in the request
+        rtp_port_range = "1400-1400" # Range of ports to use for RTP/RTCP when '0' is
+                                                                        # passed as port for a mountpoint (default=10000-60000)
+        #events = false                                 # Whether events should be sent to event
+                                                                        # handlers (default=true)
+
+        # By default, integers are used as a unique ID for both mountpoints. In case
+        # you want to use strings instead (e.g., a UUID), set string_ids to true.
+        #string_ids = true
+}
+
+#
+# This is an example of an RTP source stream, which is what you'll need
+# in the vast majority of cases: here, the Streaming plugin will bind to
+# some ports, and expect media to be sent by an external source (e.g.,
+# FFmpeg or Gstreamer). This sample listens on 5002 for audio (Opus) and
+# 5004 for video (VP8), which is what the sample gstreamer script in the
+# plugins/streams folder sends to. Whatever is sent to those ports will
+# be the source of a WebRTC broadcast users can subscribe to.
+#
+rtp-sample: {
+        type = "rtp"
+        id = 1
+        description = "Opus/VP8 live stream coming from external source"
+        metadata = "Streaming from a USB WebCam"
+        audio = false
+        video = true
+        videoport = 5004
+        videopt = 100
+        videocodec = "vp8"
+        #secret = "adminpwd"
+}

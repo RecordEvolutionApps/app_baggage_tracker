@@ -11,9 +11,9 @@
 
 ports:
   - name: Web interface       # Label of the port in the device's app settings
-    port: 19999               # Port under which a web server provides a user interface
+    port: 1100               # Port under which a web server provides a user interface
     main: true                # This is the port used for the quick-access icon on a device's app list
-  - name: Video Stream
-    port: 4443
-    protocol: tcp             # Possible values: "http" | "tcp" | "udp" (default: "http")
+  - name: Video Stream        # The Janus Web endpoint
+    port: 1200
+    protocol: http             # Possible values: "http" | "tcp" | "udp" (default: "http")
     remote_port_environment: EXAMPLE_ENV # Defines the environment variable name in which the remote port will be stored (TCP and UDP only)
