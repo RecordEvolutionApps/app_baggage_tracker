@@ -71,7 +71,7 @@ while True:
             color = (255, 0, 255)
             thickness = 2
 
-            # cv2.putText(img, classNames[cls], org, font, fontScale, color, thickness)
+            cv2.putText(img, classNames[cls], org, font, fontScale, color, thickness)
 
     # cv2.imshow('Webcam', img)
     out.write(img)
