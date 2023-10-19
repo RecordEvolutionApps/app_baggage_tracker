@@ -56,8 +56,8 @@ WORKDIR /app
 
 RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt 
 
-# COPY requirements.txt /app/requirements.txt
-# RUN python3 -m pip install -r requirements.txt
+COPY requirements.txt /app/requirements.txt
+RUN python3 -m pip install -r requirements.txt
 
 
 COPY . /app
