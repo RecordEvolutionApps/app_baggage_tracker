@@ -9,11 +9,15 @@ import math
 import os
 # start webcam
 
-CAM_NUM = os.environ.get('CAM_NUM', 0)
+CAM_NUM = os.environ.get('CAM_NUM', 1)
 RESOLUTION_X = int(os.environ.get('RESOLUTION_X', 640))
 RESOLUTION_Y = int(os.environ.get('RESOLUTION_Y', 480))
+FRAMERATE = int(os.environ.get('FRAMERATE', 20))
 
-cap = cv2.VideoCapture(0)
+print('CAMERA NUMBER' + CAM_NUM)
+
+gstring = f"v4l2src device=/dev/video{CAM_NUM} ! videorate ! image/jpeg,format=I420,width={RESOLUTION_X},height={RESOLUTION_Y},framerate={FRAMERATE}/1"
+cap = cv2.VideoCapture(int(CAM_NUM))
 cap.set(3, RESOLUTION_X)
 cap.set(4, RESOLUTION_Y)
 
@@ -43,12 +47,12 @@ out = cv2.VideoWriter('appsrc ! videoconvert ! '
 
 while True:
     success, img = cap.read()
-    results = model.track(img, stream=True, imgsz=RESOLUTION_X, classes=[2])
+    results = model(img, stream=True, imgsz=RESOLUTION_X, classes=[2, 3, 5, 7])
     
     # coordinates
     for r in results:
         annotated_frame = r.plot()
-        # boxes = r.boxes.xywh.cpu()
+        boxes = r.boxes.xywh.cpu()
         # track_ids = r.boxes.id.int().cpu().tolist()
 
         # Plot the tracks
@@ -63,8 +67,34 @@ while True:
         #     points = np.hstack(track).astype(np.int32).reshape((-1, 1, 2))
         #     cv2.polylines(annotated_frame, [points], isClosed=False, color=(230, 230, 230), thickness=10)
 
+        # boxes = r.boxes
+
+        # for box in boxes:
+        #     # bounding box
+        #     x1, y1, x2, y2 = box.xyxy[0]
+        #     x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2) # convert to int values
+
+        #     # put box in cam
+        #     cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 255), 2)
+
+        #     # confidence
+        #     confidence = math.ceil((box.conf[0]*100))/100
+        #     # print("Confidence --->",confidence)
+
+        #     # class name
+        #     cls = int(box.cls[0])
+        #     # print("Class name -->", classNames[cls])
+
+        #     # object details
+        #     org = (x1, y1)
+        #     font = cv2.FONT_HERSHEY_SIMPLEX
+        #     fontScale = 1
+        #     color = (255, 0, 255)
+        #     thickness = 2
+
+        #     cv2.putText(img, classNames[cls], org, font, fontScale, color, thickness)
+
  
-    # cv2.imshow('Webcam', img)
     out.write(annotated_frame)
     if cv2.waitKey(1) == ord('q'):
         break

@@ -1,3 +1,3 @@
-# reswarm==0.0.16
-torchvision==0.15
+reswarm==0.0.16
+# torchvision==0.15
 lapx==0.5.5

@@ -1,4 +1,4 @@
-FROM ultralytics/ultralytics:latest-jetson
+FROM ultralytics/ultralytics:8.0.211-jetson
 
 RUN apt-get -y update && apt-get -y upgrade && \
 	apt-get install -y \
@@ -26,10 +26,6 @@ RUN apt-get -y update && apt-get -y upgrade && \
 
 RUN apt-get update && apt-get install -y 
 
-# RUN curl -sL -o /etc/apt/trusted.gpg.d/morph027-janus.asc https://packaging.gitlab.io/janus/gpg.key && \
-# 	. /etc/lsb-release; echo "deb https://packaging.gitlab.io/janus/$DISTRIB_CODENAME $DISTRIB_CODENAME main" | tee /etc/apt/sources.list.d/morph027-janus.list
-# RUN apt-get update && apt-get install -y janus
-
 RUN cd /tmp && \
 	wget https://github.com/cisco/libsrtp/archive/v2.5.0.tar.gz && \
 	tar xfv v2.5.0.tar.gz && \
@@ -38,12 +34,8 @@ RUN cd /tmp && \
 	make shared_library && \
 	make install
 
-# RUN git clone https://gitlab.freedesktop.org/libnice/libnice && \
-# 	cd libnice && \
-# 	meson --prefix=/usr build && ninja -C build && sudo ninja -C build install
 WORKDIR /usr/local/src
-# RUN wget https://github.com/meetecho/janus-gateway/archive/refs/tags/v1.2.0.tar.gz && \
-# 	tar xfv v1.2.0.tar.gz && \
+
 RUN git clone --depth=1 https://github.com/meetecho/janus-gateway.git && \
     cd /usr/local/src/janus-gateway && \
 	sh autogen.sh && \
