@@ -134,8 +134,8 @@
 
     function getJanusUrl() {
       let pa = location.host.split('-');
-      let jns = pa[2].split('.');
-      jns[0] = WEBRTC_PORT;
+      let jns = pa[2]?.split('.') ?? [];
+      jns[0] = WEBRTC_PORT ?? 1111;
       let jjns = jns.join('.');
       pa[2] = jjns;
       let jpa = pa.join('-');

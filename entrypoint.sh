@@ -36,7 +36,7 @@ nvgpu_out=$(lsmod | grep nvgpu)
 #     vp8enc deadline=2 threads=2 keyframe-max-dist=60 ! video/x-vp8 ! rtpvp8pay ! \
 #     udpsink host=127.0.0.1 port=5004 &
 
-nginx 
+bun /backend/index.ts
 
 /usr/local/bin/janus --daemon
 
