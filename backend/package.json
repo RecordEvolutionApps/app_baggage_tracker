@@ -1,0 +1,19 @@
+{
+  "name": "app",
+  "version": "1.0.50",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "bun run --watch src/index.ts"
+  },
+  "dependencies": {
+    "@elysiajs/cors": "^0.7.2",
+    "@elysiajs/html": "^0.7.3",
+    "@elysiajs/static": "^0.7.1",
+    "elysia": "latest",
+    "v4l2camera": "^1.0.4"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  },
+  "module": "src/index.js"
+}
