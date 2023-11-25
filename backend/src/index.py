@@ -3,16 +3,26 @@ import cv2
 import numpy as np
 import math
 import os
+import argparse
+
+parser = argparse.ArgumentParser(description='Start a Video Stream for the given Camera Device')
+
+parser.add_argument('device', type=str, help='A device path like e.g. /dev/video0')
+
+args = parser.parse_args()
+
 
 CAM_NUM = os.environ.get('CAM_NUM', 1)
+device = args.device or f"/dev/video{CAM_NUM}"
+
 RESOLUTION_X = int(os.environ.get('RESOLUTION_X', 640))
 RESOLUTION_Y = int(os.environ.get('RESOLUTION_Y', 480))
 FRAMERATE = int(os.environ.get('FRAMERATE', 20))
 
-print('CAMERA NUMBER' + CAM_NUM)
+print('CAMERA USED:' + device)
 
-gstring = f"v4l2src device=/dev/video{CAM_NUM} ! videorate ! image/jpeg,format=I420,width={RESOLUTION_X},height={RESOLUTION_Y},framerate={FRAMERATE}/1"
-cap = cv2.VideoCapture(int(CAM_NUM))
+#gstring = f"v4l2src device={device} ! videorate ! image/jpeg,format=I420,width={RESOLUTION_X},height={RESOLUTION_Y},framerate={FRAMERATE}/1"
+cap = cv2.VideoCapture(f"v4l2src device={device}")
 cap.set(3, RESOLUTION_X)
 cap.set(4, RESOLUTION_Y)
 

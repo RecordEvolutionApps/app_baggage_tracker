@@ -2,7 +2,7 @@ import { Elysia } from "elysia";
 import { staticPlugin } from '@elysiajs/static'
 import { html } from '@elysiajs/html'
 import { cors } from '@elysiajs/cors'
-import { getCameras } from './cameras.js'
+import { getCameras, selectCamera } from './cameras.js'
 
 
 const app = new Elysia();
@@ -13,6 +13,7 @@ app.use(staticPlugin({
 app.use(html())
 app.use(cors())
 app.get('/cameras', getCameras)
+app.post('/cameras/select', selectCamera)
 app.get('/', async () => {
   return Bun.file('../web/dist/index.html')
 })

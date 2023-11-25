@@ -8,6 +8,8 @@ v4l2-ctl --list-formats-ext -d $CAM_PATH
 
 # CAM=$(v4l2-ctl --list-devices | grep -m 1 -o '/dev/video[0-9]*')
 # echo $CAM
+
+echo "NVIDIA GPU Present?"
 nvgpu_out=$(lsmod | grep nvgpu)
 
 # if [ -n "$nvgpu_out" ]; then
@@ -38,11 +40,10 @@ nvgpu_out=$(lsmod | grep nvgpu)
 
 # nohup ./code tunnel --accept-server-license-terms &
 
-bun backend/src/index.ts &
-
 /usr/local/bin/janus --daemon
 
 # sleep infinity
-exec python3 -u /app/backend/src/index.py
+# exec python3 -u /app/backend/src/index.py
+exec cd backend && bun src/index.ts
 
 
