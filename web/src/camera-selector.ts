@@ -4,6 +4,7 @@ import {repeat} from 'lit/directives/repeat.js';
 
 import '@material/web/select/outlined-select.js'
 import '@material/web/select/select-option.js'
+import { MdOutlinedSelect } from '@material/web/select/outlined-select.js';
 
 @customElement('camera-selector')
 export class CameraSelector extends LitElement {
@@ -11,13 +12,13 @@ export class CameraSelector extends LitElement {
   @state()
   private camList: any[] = [];
 
-  selector?: HTMLSelectElement
+  selector?: MdOutlinedSelect
   constructor() {
     super()
   }
   async firstUpdated() {
 
-      this.selector = this.shadowRoot?.getElementById('selector') as HTMLSelectElement
+      this.selector = this.shadowRoot?.getElementById('selector') as MdOutlinedSelect
       this.camList = await fetch('http://localhost:1100/cameras', {
         method: 'GET',
         headers: {
@@ -26,6 +27,16 @@ export class CameraSelector extends LitElement {
       }).then(res => res.json())
 
       console.log('CAMLIST', this.camList)
+      await this.updateComplete
+
+      const selected = await fetch(`http://localhost:1100/cameras/setup?cam=${this.id}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      }).then(res => res.json())
+      console.log('selected', selected)
+      this.selector.select(selected.device)
   }
 
   async selectCamera() {
@@ -65,7 +76,7 @@ export class CameraSelector extends LitElement {
     return html`
       <md-outlined-select id="selector" @change=${() => this.selectCamera()}>
         ${repeat(this.camList, c => c.path, c => html`
-        <md-select-option selected value="${c.path}">
+        <md-select-option value="${c.path}">
           <div slot="headline">${c.name}</div>
         </md-select-option>
         `)}

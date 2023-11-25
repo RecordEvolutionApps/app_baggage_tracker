@@ -29,6 +29,12 @@ async function initStreams() {
 
 initStreams()
 
+export function getStreamSetup(ctx: Context): any {
+    const params = ctx.query as any
+    console.log('getStreamSetup', params)
+    return {"device": streamSetup[params.cam]}
+}
+
 export const getCameras = (): any[] => {
     console.log('getting cameras')
     const cameraList = [];

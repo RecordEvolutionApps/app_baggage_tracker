@@ -2,7 +2,7 @@ import { Elysia } from "elysia";
 import { staticPlugin } from '@elysiajs/static'
 import { html } from '@elysiajs/html'
 import { cors } from '@elysiajs/cors'
-import { getCameras, selectCamera } from './cameras.js'
+import { getCameras, getStreamSetup, selectCamera } from './cameras.js'
 import { getStatus } from './MIRcontroller.js'
 
 const app = new Elysia();
@@ -13,6 +13,7 @@ app.use(staticPlugin({
 app.use(html())
 app.use(cors())
 app.get('/cameras', getCameras)
+app.get('/cameras/setup', getStreamSetup)
 app.post('/cameras/select', selectCamera)
 app.post('/mir/status', getStatus)
 app.get('/', async () => {
