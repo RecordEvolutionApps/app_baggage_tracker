@@ -1,7 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement } from 'lit/decorators.js';
 import './camera-player.js'
-import { initJanus } from './modules/webRTCPlayer.js'
+import { initJanus } from './modules/webRTCPlayer'
 
 @customElement('camera-shell')
 export class CameraShell extends LitElement {
