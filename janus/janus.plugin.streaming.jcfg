@@ -21,15 +21,72 @@ general: {
 # plugins/streams folder sends to. Whatever is sent to those ports will
 # be the source of a WebRTC broadcast users can subscribe to.
 #
-rtp-sample: {
-        type = "rtp"
-        id = 1
-        description = "Opus/VP8 live stream coming from external source"
-        metadata = "Streaming from a USB WebCam"
-        audio = false
-        video = true
-        videoport = 5004
-        videopt = 100
-        videocodec = "vp8"
-        #secret = "adminpwd"
+# rtp-front: {
+#         type = "rtp"
+#         id = 1
+#         description = "usb stream from gstreamer"
+#         metadata = "frontCam"
+#         audio = false
+#         video = true
+#         videoport = 5004
+#         videopt = 100
+#         videocodec = "h264"
+#         #secret = "adminpwd"
+# }
+# 
+# rtp-back: {
+#         type = "rtp"
+#         id = 2
+#         description = "usb stream from gstreamer"
+#         metadata = "backCam"
+#         audio = false
+#         video = true
+#         videoport = 5005
+#         videopt = 100
+#         videocodec = "h264"
+#         #secret = "adminpwd"
+# }
+
+multistream: {
+	type = "rtp"
+	id = 123
+	description = "Multistream test (2 video)"
+	metadata = "This is an example of a multistream mountpoint: you'll get two video feeds"
+	media = (
+		{
+			type = "video"
+			mid = "frontCam"
+			label = "Video stream Front"
+			port = 5004
+			pt = 126
+			codec = "h264"
+		},
+		{
+			type = "video"
+			mid = "leftCam"
+			label = "Video stream Left"
+			port = 5005
+			pt = 126
+			codec = "h264"
+		},
+		{
+			type = "video"
+			mid = "rightCam"
+			label = "Video stream Right"
+			port = 5006
+			pt = 126
+			codec = "h264"
+		},
+		{
+			type = "video"
+			mid = "backCam"
+			label = "Video stream Back"
+			port = 5007
+			pt = 126
+			codec = "h264"
+			# rtpmap = "H264/90000"
+			# fmtp = "profile-level-id=42e01f;packetization-mode=1"
+		}
+	)
+	# secret = "adminpwd"
 }

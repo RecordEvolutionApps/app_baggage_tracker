@@ -8,8 +8,14 @@ import argparse
 parser = argparse.ArgumentParser(description='Start a Video Stream for the given Camera Device')
 
 parser.add_argument('device', type=str, help='A device path like e.g. /dev/video0')
+parser.add_argument('cam', type=str, help='One of frontCam, leftCam, rightCam, backCam')
 
 args = parser.parse_args()
+
+portMap = {"frontCam": 5004,
+           "leftCam": 5005,
+           "rightCam": 5006,
+           "backCam": 5007}
 
 
 CAM_NUM = os.environ.get('CAM_NUM', 1)
@@ -31,11 +37,13 @@ model = YOLO("./yolov8n.pt")
 
 framerate = 25.0
 
-out = cv2.VideoWriter('appsrc ! videoconvert ! '
-                      'vp8enc deadline=2 threads=2 keyframe-max-dist=60 ! video/x-vp8 ! '
-                      'rtpvp8pay !'
-                      'udpsink host=127.0.0.1 port=5004',
-                      0, framerate, (RESOLUTION_X, RESOLUTION_Y))
+out = cv2.VideoWriter('appsrc ! '
+                    #   'videoconvert ! vp8enc deadline=2 threads=2 keyframe-max-dist=60 ! video/x-vp8 ! '
+                    #   'rtpvp8pay !'
+                    'nvvidconv !'
+                    'nvv4l2h264enc maxperf-enable=1 insert-sps-pps=true insert-vui=true ! h264parse ! rtph264pay ! '
+                    f'udpsink host=127.0.0.1 port={portMap[args.cam]}',
+                    0, framerate, (RESOLUTION_X, RESOLUTION_Y))
 
 while True:
     success, img = cap.read()

@@ -1,11 +1,35 @@
 // import v4l2camera from 'v4l2camera';
 
-import { Subprocess } from "bun";
-import { Context } from "elysia";
+import type { BunFile, Subprocess } from "bun";
+import type { Context } from "elysia";
 
 const streams = new Map()
+let streamSetup: any = {}
+const streamSetupFile: BunFile = Bun.file("streamSetup.json");
 
-export const getCameras = (ctx: Context) => {
+async function initStreams() {
+    const exists = await streamSetupFile.exists();
+    if (!exists) {
+        const camList = getCameras()
+        if (!camList.length) {
+            console.log('NO CAMERA DETECTED')
+            return
+        }
+        const firstCam = camList[0]
+        await startVideoStream(firstCam.path, 'frontCam')
+
+    } 
+    streamSetup = await streamSetupFile.json();
+
+    console.log('StreamSetup', streamSetup)
+    for (const [cam, dev] of Object.entries(streamSetup)) {
+        await startVideoStream(dev as string, cam as string)
+    }
+}
+
+initStreams()
+
+export const getCameras = (): any[] => {
     console.log('getting cameras')
     const cameraList = [];
 
@@ -49,9 +73,12 @@ export const getCameras = (ctx: Context) => {
 }
 
 export const selectCamera = async (ctx: Context) => {
-    console.log('selected camera', ctx.body)
+    
+    const {device, cam}: {device: string, cam: string} = JSON.parse(ctx.body as any)
+    console.log('selected camera', {device, cam})
 
-    const device: string = ctx.body?.selected
+    streamSetup[cam] = device
+    await Bun.write(streamSetupFile, JSON.stringify(streamSetup));
 
     const proc: Subprocess = streams.get(device)
 
@@ -60,15 +87,11 @@ export const selectCamera = async (ctx: Context) => {
         await proc.exited
     }
 
-    startVideoStream(device)
+    startVideoStream(device, cam)
 }
 
-async function startVideoStream(device: string) {
-    const proc2 = Bun.spawn(["pwd"]);
-    const text = await new Response(proc2.stdout).text();
-    console.log(text); // => "hello"
-
-    const proc = Bun.spawn(["python", "index.py", device], {
+async function startVideoStream(device: string, cam: string) {
+    const proc = Bun.spawn(["python", "-u", "index.py", device, cam], {
         cwd: "src", // specify a working directory
         env: { ...process.env}, // specify environment variables
         onExit(proc, exitCode, signalCode, error) {

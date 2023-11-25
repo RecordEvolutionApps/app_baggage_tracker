@@ -30,8 +30,11 @@ export class CameraSelector extends LitElement {
 
   async selectCamera() {
     const value = this.selector?.value
-    console.log('selected', value)
-    const payload = {selected: value}
+    console.log('selected', value, this.id)
+    const payload = {
+      device: value,
+      cam: this.id
+    }
     await fetch('http://localhost:1100/cameras/select', {
       method: 'POST',
       headers: {
@@ -60,7 +63,7 @@ export class CameraSelector extends LitElement {
 
   render() {
     return html`
-      <md-outlined-select id="selector" @change=${this.selectCamera}>
+      <md-outlined-select id="selector" @change=${() => this.selectCamera()}>
         ${repeat(this.camList, c => c.path, c => html`
         <md-select-option selected value="${c.path}">
           <div slot="headline">${c.name}</div>

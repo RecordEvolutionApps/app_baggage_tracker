@@ -14,7 +14,7 @@ general: {
 	#log_to_stdout = false					# Whether the Janus output should be written
 											# to stdout or not (default=true)
 	#log_to_file = "/path/to/janus.log"		# Whether to use a log file or not
-	debug_level = 3							# Debug/logging level, valid values are 0-7
+	debug_level = 4						# Debug/logging level, valid values are 0-7
 	#debug_timestamps = true				# Whether to show a timestamp for each log line
 	#debug_colors = false					# Whether colors should be disabled in the log
 	#debug_locks = true						# Whether to enable debugging of locks (very verbose!)
@@ -202,7 +202,7 @@ certificates: {
 	#cert_pem = "/path/to/certificate.pem"
 	#cert_key = "/path/to/key.pem"
 	#cert_pwd = "secretpassphrase"
-	dtls_accept_selfsigned = true
+	#dtls_accept_selfsigned = false
 	#dtls_ciphers = "your-desired-openssl-ciphers"
 	#rsa_private_key = false
 }
@@ -224,12 +224,12 @@ certificates: {
 # times, but may not work in case the RTT of the user is high: as such,
 # you should pick a reasonable trade-off (usually 2*max expected RTT).
 media: {
-	#ipv6 = true
+	ipv6 = true
 	#ipv6_linklocal = true
 	#min_nack_queue = 500
-	#rtp_port_range = "20000-40000"
+	rtp_port_range = "1400-1400"
 	#dtls_mtu = 1200
-	#no_media_timer = 1
+	no_media_timer = 4
 	#slowlink_threshold = 4
 	#twcc_period = 100
 	#dtls_timeout = 500
@@ -405,7 +405,7 @@ nat: {
 # names to identify the plugins to disable. By default all available
 # plugins are enabled and loaded at startup.
 plugins: {
-	disable = "libjanus_echotest.so,libjanus_recordplay.so"
+	disable = "libjanus_echotest.so,libjanus_recordplay.so,libjanus_rabbitmq.so,libjanus_textroom.so,libjanus_videoroom.so,libjanus_videocall.so,libjanus_pfunix.so"
 }
 
 # You can choose which of the available transports should be enabled or
