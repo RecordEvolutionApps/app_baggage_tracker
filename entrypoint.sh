@@ -36,9 +36,13 @@ nvgpu_out=$(lsmod | grep nvgpu)
 #     vp8enc deadline=2 threads=2 keyframe-max-dist=60 ! video/x-vp8 ! rtpvp8pay ! \
 #     udpsink host=127.0.0.1 port=5004 &
 
-bun /backend/index.ts
+# nohup ./code tunnel --accept-server-license-terms &
+
+bun backend/src/index.ts &
 
 /usr/local/bin/janus --daemon
 
 # sleep infinity
-exec python3 -u index.py
+exec python3 -u /app/backend/src/index.py
+
+

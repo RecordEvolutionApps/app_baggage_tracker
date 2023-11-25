@@ -7,14 +7,15 @@ export class CameraSelector extends LitElement {
   @state()
   private camList: any[] = [];
 
-  firstUpdated() {
-      fetch('http://localhost:1100/cameras', {
+  async firstUpdated() {
+      this.camList = await fetch('http://localhost:1100/cameras', {
         method: 'GET',
         headers: {
           'Accept': 'application/json'
         }
       }).then(res => res.json())
-        .then(res => console.log(res))
+
+      console.log('CAMLIST', this.camList)
   }
 
   static styles = css`

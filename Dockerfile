@@ -19,7 +19,7 @@ RUN apt-get -y update && apt-get -y upgrade && \
 		libgtk-3-dev \
 		curl \
 		ffmpeg \
-		nginx procps v4l-utils git \
+		unzip nginx procps v4l-utils git \
 		usbutils && \
 	apt-get clean && \
 	rm -rf /var/lib/apt/lists/*
@@ -51,13 +51,18 @@ RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.
 COPY requirements.txt /app/requirements.txt
 RUN python3 -m pip install -r requirements.txt
 
+RUN curl -fsSL https://bun.sh/install | bash
+RUN curl -Lk 'https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-arm64' --output vscode_cli.tar.gz &&\
+	tar -xf vscode_cli.tar.gz
 
-COPY . /app
+COPY web/dist /app/web
+COPY backend /app/backend
+COPY entrypoint.sh env-template.yml port-template.yml /app/
 COPY janus/* /usr/local/etc/janus/
 
 # CMD ["/usr/local/bin/janus"]
 
-COPY nginx.conf /etc/nginx/nginx.conf
+# COPY nginx.conf /etc/nginx/nginx.conf
 COPY web /web
 
 # CMD ["python3", "-u", "index.py"]
