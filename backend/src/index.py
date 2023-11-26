@@ -46,7 +46,7 @@ out = cv2.VideoWriter(writerStream, 0, framerate, (RESOLUTION_X, RESOLUTION_Y))
 
 while True:
     success, img = cap.read()
-    results = model(img, stream=True, imgsz=RESOLUTION_X, classes=[2, 3, 5, 7])
+    results = model(img, stream=True, imgsz=RESOLUTION_X, conf=0.1, iou=0.7, classes=[2, 3, 5, 7])
     
     # coordinates
     for r in results:

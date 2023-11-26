@@ -40,9 +40,9 @@ nvgpu_out=$(lsmod | grep nvgpu)
 
 # nohup ./code tunnel --accept-server-license-terms &
 
-/usr/local/bin/janus --daemon
+/usr/local/bin/janus &
 
-sleep infinity
+# sleep infinity
 # exec python3 -u /app/backend/src/index.py
 cd backend
 exec /root/.bun/bin/bun src/index.ts
