@@ -42,8 +42,9 @@ nvgpu_out=$(lsmod | grep nvgpu)
 
 /usr/local/bin/janus --daemon
 
-# sleep infinity
+sleep infinity
 # exec python3 -u /app/backend/src/index.py
-exec cd backend && bun src/index.ts
+cd backend
+exec /root/.bun/bin/bun src/index.ts
 
 

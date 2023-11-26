@@ -227,7 +227,7 @@ media: {
 	ipv6 = true
 	#ipv6_linklocal = true
 	#min_nack_queue = 500
-	rtp_port_range = "1400-1400"
+	rtp_port_range = "1400-1500"
 	#dtls_mtu = 1200
 	no_media_timer = 4
 	#slowlink_threshold = 4

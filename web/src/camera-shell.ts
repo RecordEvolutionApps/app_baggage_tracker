@@ -2,19 +2,27 @@ import { LitElement, html, css } from 'lit';
 import { customElement } from 'lit/decorators.js';
 import './camera-player.js'
 import { initJanus } from './modules/webRTCPlayer'
+import { CameraPlayer } from './camera-player.js';
 
 @customElement('camera-shell')
 export class CameraShell extends LitElement {
 
 
-  protected firstUpdated(): void {
-      const videoPlayers = {
-        frontCam: this.shadowRoot?.getElementById('frontCam'),
-        leftCam: this.shadowRoot?.getElementById('leftCam'),
-        backCam: this.shadowRoot?.getElementById('backCam'),
-        rightCam: this.shadowRoot?.getElementById('rightCam'),
-      }
-      initJanus(videoPlayers)
+  protected startJanus(): void {
+    const frontCam = this.shadowRoot?.getElementById('frontCam') as CameraPlayer
+    const leftCam = this.shadowRoot?.getElementById('leftCam') as CameraPlayer
+    const backCam = this.shadowRoot?.getElementById('backCam') as CameraPlayer
+    const rightCam = this.shadowRoot?.getElementById('rightCam') as CameraPlayer
+
+    const videoPlayers = {
+      frontCam: frontCam?.videoElement,
+      leftCam: leftCam?.videoElement,
+      backCam: backCam?.videoElement,
+      rightCam: rightCam?.videoElement,
+    }
+    console.log('videoPlayers', frontCam, videoPlayers)
+
+    initJanus(videoPlayers)
   }
 
   static styles = css`
@@ -42,7 +50,7 @@ export class CameraShell extends LitElement {
   render() {
     return html`
     <div class="cam-container">
-      <camera-player id="frontCam" label="Front"></camera-player>
+      <camera-player id="frontCam" label="Front" @video-ready=${this.startJanus}></camera-player>
     </div>
     <!-- <div class="cam-container">
       <camera-player id="leftCam" label="Left"></camera-player>

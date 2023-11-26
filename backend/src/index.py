@@ -19,16 +19,15 @@ portMap = {"frontCam": 5004,
 
 
 CAM_NUM = os.environ.get('CAM_NUM', 1)
-device = args.device or f"/dev/video{CAM_NUM}"
 
 RESOLUTION_X = int(os.environ.get('RESOLUTION_X', 640))
 RESOLUTION_Y = int(os.environ.get('RESOLUTION_Y', 480))
 FRAMERATE = int(os.environ.get('FRAMERATE', 20))
 
-print('CAMERA USED:' + device)
-
-#gstring = f"v4l2src device={device} ! videorate ! image/jpeg,format=I420,width={RESOLUTION_X},height={RESOLUTION_Y},framerate={FRAMERATE}/1"
-cap = cv2.VideoCapture(f"v4l2src device={device}")
+device = args.device
+gstring = f"v4l2src device={device} ! videorate ! video/x-raw, width={RESOLUTION_X},height={RESOLUTION_Y} ! videoconvert ! appsink "
+print('CAMERA USED:' + gstring)
+cap = cv2.VideoCapture(gstring)
 cap.set(3, RESOLUTION_X)
 cap.set(4, RESOLUTION_Y)
 
@@ -37,13 +36,13 @@ model = YOLO("./yolov8n.pt")
 
 framerate = 25.0
 
-out = cv2.VideoWriter('appsrc ! '
-                    #   'videoconvert ! vp8enc deadline=2 threads=2 keyframe-max-dist=60 ! video/x-vp8 ! '
-                    #   'rtpvp8pay !'
-                    'nvvidconv !'
-                    'nvv4l2h264enc maxperf-enable=1 insert-sps-pps=true insert-vui=true ! h264parse ! rtph264pay ! '
-                    f'udpsink host=127.0.0.1 port={portMap[args.cam]}',
-                    0, framerate, (RESOLUTION_X, RESOLUTION_Y))
+outputFormat = "videoconvert ! vp8enc deadline=2 threads=2 keyframe-max-dist=60 ! video/x-vp8 ! rtpvp8pay"
+# outputFormat = "nvvidconv ! nvv4l2h264enc maxperf-enable=1 insert-sps-pps=true insert-vui=true ! h264parse ! rtph264pay"
+
+writerStream = "appsrc ! " + outputFormat + " ! udpsink host=127.0.0.1 port=" + str(portMap[args.cam])
+print(writerStream)
+
+out = cv2.VideoWriter(writerStream, 0, framerate, (RESOLUTION_X, RESOLUTION_Y))
 
 while True:
     success, img = cap.read()

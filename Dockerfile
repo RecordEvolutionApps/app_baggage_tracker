@@ -20,7 +20,7 @@ RUN apt-get -y update && apt-get -y upgrade && \
 		curl \
 		ffmpeg \
 		unzip nginx procps v4l-utils git \
-		usbutils && \
+		usbutils udev && \
 	apt-get clean && \
 	rm -rf /var/lib/apt/lists/*
 
@@ -55,7 +55,7 @@ RUN curl -fsSL https://bun.sh/install | bash
 RUN curl -Lk 'https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-arm64' --output vscode_cli.tar.gz &&\
 	tar -xf vscode_cli.tar.gz
 
-COPY web/dist /app/web
+COPY web /app/web
 COPY backend /app/backend
 COPY entrypoint.sh env-template.yml port-template.yml /app/
 COPY janus/* /usr/local/etc/janus/

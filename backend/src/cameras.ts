@@ -1,29 +1,31 @@
-// import v4l2camera from 'v4l2camera';
+
+
 
 import type { BunFile, Subprocess } from "bun";
 import type { Context } from "elysia";
 
 const streams = new Map()
+const ports = new Map()
 let streamSetup: any = {}
-const streamSetupFile: BunFile = Bun.file("streamSetup.json");
+const streamSetupFile: BunFile = Bun.file("/data/streamSetup.json");
 
 async function initStreams() {
     const exists = await streamSetupFile.exists();
+    const camList = await getCameras()
     if (!exists) {
-        const camList = getCameras()
         if (!camList.length) {
             console.log('NO CAMERA DETECTED')
             return
         }
         const firstCam = camList[0]
-        await startVideoStream(firstCam.path, 'frontCam')
+        startVideoStream(firstCam.path, 'frontCam')
 
     } 
     streamSetup = await streamSetupFile.json();
 
     console.log('StreamSetup', streamSetup)
     for (const [cam, dev] of Object.entries(streamSetup)) {
-        await startVideoStream(dev as string, cam as string)
+        startVideoStream(dev as string, cam as string)
     }
 }
 
@@ -35,53 +37,10 @@ export function getStreamSetup(ctx: Context): any {
     return {"device": streamSetup[params.cam]}
 }
 
-export const getCameras = (): any[] => {
-    console.log('getting cameras')
-    const cameraList = [];
-
-    // // Iterate over video devices (assumed to be cameras)
-    // for (let i = 0; i < 10; i++) {
-    //   const devicePath = `/dev/video${i}`;
-    //   const camera = new v4l2camera.Camera(devicePath);
-  
-    //   // Try to open the camera
-    //   if (camera.open()) {
-    //     // Get camera information
-    //     const cameraInfo = {
-    //       path: devicePath,
-    //       name: camera.configGet().name,
-    //     };
-  
-    //     // Add camera information to the list
-    //     cameraList.push(cameraInfo);
-  
-    //     // Close the camera
-    //     camera.close();
-    //   }
-    // }
-
-    return [
-        {
-          path: '/dev/video0',
-          name: 'Logitech HD Webcam',
-        },
-        {
-          path: '/dev/video1',
-          name: 'Canon EOS 5D Mark IV',
-        },
-        {
-          path: '/dev/video2',
-          name: 'Microsoft LifeCam HD-3000',
-        },
-      ]
-
-    return cameraList
-}
-
 export const selectCamera = async (ctx: Context) => {
     
     const {device, cam}: {device: string, cam: string} = JSON.parse(ctx.body as any)
-    console.log('selected camera', {device, cam})
+    console.log('selected camera', {device, cam}, [...streams.keys()], [...ports.keys()])
 
     streamSetup[cam] = device
     await Bun.write(streamSetupFile, JSON.stringify(streamSetup));
@@ -89,22 +48,71 @@ export const selectCamera = async (ctx: Context) => {
     const proc: Subprocess = streams.get(device)
 
     if (proc) {
+        console.log('killing device process', proc)
         proc.kill()
         await proc.exited
+        streams.delete(device)
+    }
+
+    const pproc: Subprocess = ports.get(cam)
+
+    if (pproc) {
+        console.log('killing cam process', pproc)
+        pproc.kill()
+        await pproc.exited
+        ports.delete(cam)
     }
 
     startVideoStream(device, cam)
 }
 
 async function startVideoStream(device: string, cam: string) {
-    const proc = Bun.spawn(["python", "-u", "index.py", device, cam], {
+    const proc = Bun.spawn(["python3", "-u", "index.py", device, cam], {
         cwd: "src", // specify a working directory
         env: { ...process.env}, // specify environment variables
         onExit(proc, exitCode, signalCode, error) {
-          console.log('Failed to run python video stream', error)
-          streams.delete(device)
+          console.log('Python video stream exited', error)
+        },
+    });
+
+    streams.set(device, proc)
+    ports.set(cam, proc)
+
+    const decoder = new TextDecoder();
+    for await (const chunk of proc.stdout) {
+        console.log('VIDEOSTREAM:', decoder.decode(chunk))
+    }
+      
+}
+
+export async function getCameras() {
+
+  const proc = Bun.spawn(["python3", "-u", "listCameras.py"], {
+        cwd: "src", // specify a working directory
+        env: { ...process.env}, // specify environment variables
+        onExit(proc, exitCode, signalCode, error) {
+          if (error)
+            console.log('Failed to get Camera Lists', error)
         },
       });
-      
-      streams.set(device, proc)
+
+  const text = await new Response(proc.stdout).text();
+  const cameraList: any[] = JSON.parse(text);
+  console.log('CAMLIST', cameraList)
+  
+  return cameraList;
+  // return [
+  //     {
+  //       path: '/dev/video0',
+  //       name: 'Logitech HD Webcam',
+  //     },
+  //     {
+  //       path: '/dev/video1',
+  //       name: 'Canon EOS 5D Mark IV',
+  //     },
+  //     {
+  //       path: '/dev/video2',
+  //       name: 'Microsoft LifeCam HD-3000',
+  //     },
+  //   ]
 }

@@ -7,7 +7,7 @@ import { getStatus } from './MIRcontroller.js'
 
 const app = new Elysia();
 app.use(staticPlugin({
-  assets: "../web/dist/",
+  assets: "../web/dist",
   prefix: "/"
 }))
 app.use(html())

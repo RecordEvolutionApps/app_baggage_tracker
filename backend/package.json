@@ -10,7 +10,7 @@
     "@elysiajs/html": "^0.7.3",
     "@elysiajs/static": "^0.7.1",
     "elysia": "latest",
-    "v4l2camera": "^1.0.4"
+    "usb": "^2.11.0"
   },
   "devDependencies": {
     "bun-types": "latest"

@@ -2,7 +2,7 @@
 general: {
         #admin_key = "supersecret"              # If set, mountpoints can be created via API
                                                                         # only if this key is provided in the request
-        rtp_port_range = "1400-1400" # Range of ports to use for RTP/RTCP when '0' is
+        rtp_port_range = "1400-1500" # Range of ports to use for RTP/RTCP when '0' is
                                                                         # passed as port for a mountpoint (default=10000-60000)
         #events = false                                 # Whether events should be sent to event
                                                                         # handlers (default=true)
@@ -50,8 +50,8 @@ general: {
 multistream: {
 	type = "rtp"
 	id = 123
-	description = "Multistream test (2 video)"
-	metadata = "This is an example of a multistream mountpoint: you'll get two video feeds"
+	description = "Multistream"
+	metadata = "Showing all four cameras as a multistream"
 	media = (
 		{
 			type = "video"
@@ -59,7 +59,8 @@ multistream: {
 			label = "Video stream Front"
 			port = 5004
 			pt = 126
-			codec = "h264"
+			codec = "vp8"
+			# codec = "h264"
 		},
 		{
 			type = "video"
@@ -67,7 +68,7 @@ multistream: {
 			label = "Video stream Left"
 			port = 5005
 			pt = 126
-			codec = "h264"
+			codec = "vp8"
 		},
 		{
 			type = "video"
@@ -75,7 +76,7 @@ multistream: {
 			label = "Video stream Right"
 			port = 5006
 			pt = 126
-			codec = "h264"
+			codec = "vp8"
 		},
 		{
 			type = "video"
@@ -83,7 +84,7 @@ multistream: {
 			label = "Video stream Back"
 			port = 5007
 			pt = 126
-			codec = "h264"
+			codec = "vp8"
 			# rtpmap = "H264/90000"
 			# fmtp = "profile-level-id=42e01f;packetization-mode=1"
 		}

@@ -2,7 +2,8 @@ declare global {
   interface Window {
       Janus: any,
       bootbox: any,
-      streamsList: any
+      streamsList: any,
+      initializing: boolean
   }
 }
 
@@ -44,6 +45,8 @@ const iceServers = [
 // Initialize Janus
 window.window.Janus.debug = true
 function initJanus(videoPlayer: any) {
+  if (window.initializing) return
+  window.initializing = true
   window.Janus.init({
     debug: "all",
     callback: function () {

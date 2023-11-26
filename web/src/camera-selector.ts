@@ -11,25 +11,19 @@ export class CameraSelector extends LitElement {
 
   @state()
   private camList: any[] = [];
-
+  basepath: string
   selector?: MdOutlinedSelect
   constructor() {
     super()
+    this.basepath = window.location.protocol + '//' + window.location.host 
   }
   async firstUpdated() {
-
+      
       this.selector = this.shadowRoot?.getElementById('selector') as MdOutlinedSelect
-      this.camList = await fetch('http://localhost:1100/cameras', {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json'
-        }
-      }).then(res => res.json())
 
-      console.log('CAMLIST', this.camList)
-      await this.updateComplete
+      await this.getCameras()
 
-      const selected = await fetch(`http://localhost:1100/cameras/setup?cam=${this.id}`, {
+      const selected = await fetch(`${this.basepath}/cameras/setup?cam=${this.id}`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json'
@@ -39,6 +33,17 @@ export class CameraSelector extends LitElement {
       this.selector.select(selected.device)
   }
 
+async getCameras() {
+      this.camList = await fetch(`${this.basepath}/cameras`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      }).then(res => res.json())
+
+      console.log('CAMLIST', this.camList)
+      await this.updateComplete
+}
   async selectCamera() {
     const value = this.selector?.value
     console.log('selected', value, this.id)
@@ -46,7 +51,7 @@ export class CameraSelector extends LitElement {
       device: value,
       cam: this.id
     }
-    await fetch('http://localhost:1100/cameras/select', {
+    await fetch(`${this.basepath}/cameras/select`, {
       method: 'POST',
       headers: {
         'Accept': 'application/json'
@@ -74,10 +79,10 @@ export class CameraSelector extends LitElement {
 
   render() {
     return html`
-      <md-outlined-select id="selector" @change=${() => this.selectCamera()}>
+      <md-outlined-select id="selector" @change=${this.selectCamera} @opening=${this.getCameras}>
         ${repeat(this.camList, c => c.path, c => html`
         <md-select-option value="${c.path}">
-          <div slot="headline">${c.name}</div>
+          <div slot="headline">${c.path}</div>
         </md-select-option>
         `)}
       </md-outlined-select>

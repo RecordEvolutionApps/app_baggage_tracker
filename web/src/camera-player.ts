@@ -13,6 +13,7 @@ export class CameraPlayer extends LitElement {
 
   protected firstUpdated(): void {
       this.videoElement = this.shadowRoot?.getElementById('video') as HTMLVideoElement
+      this.dispatchEvent(new CustomEvent('video-ready'))
   }
 
   static styles = css`
