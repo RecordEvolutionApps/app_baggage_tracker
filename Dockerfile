@@ -52,18 +52,26 @@ COPY requirements.txt /app/requirements.txt
 RUN python3 -m pip install -r requirements.txt
 
 RUN curl -fsSL https://bun.sh/install | bash
-RUN curl -Lk 'https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-arm64' --output vscode_cli.tar.gz &&\
-	tar -xf vscode_cli.tar.gz
+ENV PATH="/root/.bun/bin:${PATH}"
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash \
+	&& . /root/.bashrc && nvm install 18.0.0
+
+# For live developing code in your running container install the vscode cli and start a tunnel with `./code tunnel` in the /app folder
+# RUN curl -Lk 'https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-arm64' --output vscode_cli.tar.gz &&\
+# 	tar -xf vscode_cli.tar.gz
+
+COPY backend /app/backend
+RUN cd backend && bun i --frozen-lockfile --production && bun run build
 
 COPY web /app/web
-COPY backend /app/backend
-COPY entrypoint.sh env-template.yml port-template.yml /app/
-COPY janus/* /usr/local/etc/janus/
+RUN cd web && . /root/.bashrc && bun i && bun run build
 
+COPY janus/* /usr/local/etc/janus/
+COPY entrypoint.sh env-template.yml port-template.yml /app/
 # CMD ["/usr/local/bin/janus"]
 
 # COPY nginx.conf /etc/nginx/nginx.conf
-COPY web /web
+
 
 # CMD ["python3", "-u", "index.py"]
 # CMD ["sleep", "infinity"]

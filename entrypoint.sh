@@ -9,8 +9,8 @@ v4l2-ctl --list-formats-ext -d $CAM_PATH
 # CAM=$(v4l2-ctl --list-devices | grep -m 1 -o '/dev/video[0-9]*')
 # echo $CAM
 
-echo "NVIDIA GPU Present?"
 nvgpu_out=$(lsmod | grep nvgpu)
+echo "NVIDIA GPU Present?" $nvgpu_out
 
 # if [ -n "$nvgpu_out" ]; then
     # echo "NVIDIA GPU available!"
@@ -45,6 +45,6 @@ nvgpu_out=$(lsmod | grep nvgpu)
 # sleep infinity
 # exec python3 -u /app/backend/src/index.py
 cd backend
-exec /root/.bun/bin/bun src/index.ts
+exec ./videoserve
 
 
