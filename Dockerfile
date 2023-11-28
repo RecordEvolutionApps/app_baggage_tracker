@@ -68,11 +68,5 @@ RUN cd web && . /root/.bashrc && bun i && bun run build
 
 COPY janus/* /usr/local/etc/janus/
 COPY entrypoint.sh env-template.yml port-template.yml /app/
-# CMD ["/usr/local/bin/janus"]
 
-# COPY nginx.conf /etc/nginx/nginx.conf
-
-
-# CMD ["python3", "-u", "index.py"]
-# CMD ["sleep", "infinity"]
 CMD ["./entrypoint.sh"]
