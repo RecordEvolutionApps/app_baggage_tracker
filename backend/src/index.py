@@ -34,15 +34,13 @@ cap.set(4, RESOLUTION_Y)
 # model
 model = YOLO("./yolov8n.pt")
 
-framerate = 25.0
-
-outputFormat = "videoconvert ! vp8enc deadline=2 threads=2 keyframe-max-dist=60 ! video/x-vp8 ! rtpvp8pay"
+outputFormat = "videoconvert ! vp8enc deadline=2 threads=2 keyframe-max-dist=10 ! video/x-vp8 ! rtpvp8pay"
 # outputFormat = "nvvidconv ! nvv4l2h264enc maxperf-enable=1 insert-sps-pps=true insert-vui=true ! h264parse ! rtph264pay"
 
 writerStream = "appsrc ! " + outputFormat + " ! udpsink host=127.0.0.1 port=" + str(portMap[args.cam])
 print(writerStream)
 
-out = cv2.VideoWriter(writerStream, 0, framerate, (RESOLUTION_X, RESOLUTION_Y))
+out = cv2.VideoWriter(writerStream, 0, FRAMERATE, (RESOLUTION_X, RESOLUTION_Y))
 
 while True:
     success, img = cap.read()
@@ -51,8 +49,8 @@ while True:
     # coordinates
     for r in results:
         annotated_frame = r.plot(line_width=1, probs=False, font_size=14)
-        boxes = r.boxes.xywh.cpu()
- 
+        # boxes = r.boxes.xywh.cpu()
+    
     out.write(annotated_frame)
     if cv2.waitKey(1) == ord('q'):
         break

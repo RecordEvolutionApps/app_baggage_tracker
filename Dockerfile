@@ -12,7 +12,8 @@ RUN apt-get -y update && apt-get -y upgrade && \
 		## libusrsctp1 \
 		libwebsockets-dev \
 		# libnanomsg5 \
-		libnice-dev \
+		meson \
+		# libnice-dev \
 		##  libsrtp2-dev \
 		# libnss3-dev \
 		# extras
@@ -36,6 +37,14 @@ RUN cd /tmp && \
 
 WORKDIR /usr/local/src
 
+RUN cd /tmp && \
+	git clone https://gitlab.freedesktop.org/libnice/libnice && \
+	cd libnice && \
+	git checkout 0.1.21 && \
+	meson builddir && \
+  	ninja -C builddir && \
+	ninja -C builddir install
+
 RUN git clone --depth=1 https://github.com/meetecho/janus-gateway.git && \
     cd /usr/local/src/janus-gateway && \
 	sh autogen.sh && \
@@ -57,8 +66,8 @@ RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | b
 	&& . /root/.bashrc && nvm install 18.0.0
 
 # For live developing code in your running container install the vscode cli and start a tunnel with `./code tunnel` in the /app folder
-# RUN curl -Lk 'https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-arm64' --output vscode_cli.tar.gz &&\
-# 	tar -xf vscode_cli.tar.gz
+RUN curl -Lk 'https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-arm64' --output vscode_cli.tar.gz &&\
+	tar -xf vscode_cli.tar.gz
 
 COPY backend /app/backend
 RUN cd backend && bun i --frozen-lockfile --production && bun run build
