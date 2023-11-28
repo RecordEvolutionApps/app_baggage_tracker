@@ -55,7 +55,11 @@ RUN git clone --depth=1 https://github.com/meetecho/janus-gateway.git && \
 
 WORKDIR /app
 
-RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt 
+# RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt -O yolov8.pt
+RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8s.pt -O yolov8.pt 
+# RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8m.pt -O yolov8.pt 
+# RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8l.pt -O yolov8.pt 
+# RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt -O yolov8.pt 
 
 COPY requirements.txt /app/requirements.txt
 RUN python3 -m pip install -r requirements.txt

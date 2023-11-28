@@ -17,7 +17,7 @@
 FRAMERATE:
     label: Framerate
     type: numeric
-    defaultValue: 10
+    defaultValue: 9
     description: The Frame rate provided in the output video. (Should be a realistic estimate.)
     unit: frames per second
     max: 200
@@ -25,7 +25,7 @@ FRAMERATE:
 RESOLUTION_X:
     label: Width
     type: numeric
-    defaultValue: 1920
+    defaultValue: 1280
     description: Horizontal Resolution
     unit: pixel
     min: 1
@@ -33,7 +33,7 @@ RESOLUTION_X:
 RESOLUTION_Y:
     label: Height
     type: numeric
-    defaultValue: 1080
+    defaultValue: 720
     description: Vertical Resolution
     unit: pixel
     min: 1

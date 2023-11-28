@@ -58,7 +58,7 @@ multistream: {
 			mid = "frontCam"
 			label = "Video stream Front"
 			port = 5004
-			pt = 126
+			pt = 96
 			codec = "vp8"
 			# codec = "h264"
 		},
@@ -67,7 +67,7 @@ multistream: {
 			mid = "leftCam"
 			label = "Video stream Left"
 			port = 5005
-			pt = 126
+			pt = 96
 			codec = "vp8"
 		},
 		{
@@ -75,7 +75,7 @@ multistream: {
 			mid = "rightCam"
 			label = "Video stream Right"
 			port = 5006
-			pt = 126
+			pt = 96
 			codec = "vp8"
 		},
 		{
@@ -83,7 +83,7 @@ multistream: {
 			mid = "backCam"
 			label = "Video stream Back"
 			port = 5007
-			pt = 126
+			pt = 96
 			codec = "vp8"
 			# rtpmap = "H264/90000"
 			# fmtp = "profile-level-id=42e01f;packetization-mode=1"
