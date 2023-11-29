@@ -49,7 +49,7 @@ frame_count = 0
 fps = 0
 
 # Function to display frame rate and timestamp on the frame
-def overlay_text(frame, text, position=(10, 30), font_scale=1, color=(255, 255, 255), thickness=2):
+def overlay_text(frame, text, position=(10, 30), font_scale=1, color=(0, 255, 0), thickness=2):
     cv2.putText(frame, text, position, cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, thickness, cv2.LINE_AA)
 
 while True:
