@@ -78,6 +78,46 @@ widgets:
                 value: count
                 pivot: category
     layout_id: 3
+  - version: 1.0.11
+    package_name: widget-table
+    chartdata:
+      settings:
+        headerFontSize: $str:16px
+        headerBackground: $str:#fcfcfc
+        rowHeight: $str:40px
+        title: null
+        subTitle: null
+        rowBorder: null
+      columns:
+        - header: $str:Camera Name
+          type: $str:string
+          precision: null
+          width: null
+          fontSize: null
+          fontWeight: null
+          color: null
+          border: null
+          stateMap: null
+          values:
+            tableRef:
+              tablename: device_agg
+              bufferSize: 500
+              format: devname
+        - header: $str:Live Video Stream
+          type: $str:button
+          precision: null
+          width: null
+          fontSize: null
+          fontWeight: null
+          color: null
+          border: null
+          stateMap: null
+          values:
+            tableRef:
+              tablename: device_agg
+              bufferSize: 500
+              format: videolink
+    layout_id: 4
 layout:
   - w: 4
     h: 4
@@ -89,8 +129,13 @@ layout:
     x: 4
     y: 0
     id: 1
-  - w: 12
+  - w: 4
     h: 4
     x: 0
+    y: 4
+    id: 4
+  - w: 8
+    h: 4
+    x: 4
     y: 4
     id: 2

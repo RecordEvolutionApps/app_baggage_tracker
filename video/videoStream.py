@@ -15,6 +15,9 @@ import polars as pl
 from pprint import pprint
 rw = Reswarm()
 
+DEVICE_KEY = os.environ.get('DEVICE_KEY')
+APP_KEY = os.environ.get('APP_KEY')
+
 parser = argparse.ArgumentParser(description='Start a Video Stream for the given Camera Device')
 
 parser.add_argument('device', type=str, help='A device path like e.g. /dev/video0')
@@ -109,6 +112,7 @@ async def publishClassCount(result):
     # pprint('sennding')
     for d in payload:
         d["tsp"] = now
+        d["videolink"] = f"https://{DEVICE_KEY}-traffic-{APP_KEY}.app.record-evolution.com"
         pprint(d)
         await rw.publish_to_table('detections', d)
 

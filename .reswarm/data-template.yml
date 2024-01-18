@@ -22,26 +22,31 @@ data:
           description: Name of Device
           path: kwargs.DEVICE_NAME
           dataType: string
-
-
-  # transforms:
-  #   - tablename: myagg # -> crossbar topic from data servcie: transformed.swarm_key.app_key.tablename
-  #     materialize: true
-  #     schedule: "* * * * *"
-  #     # frequency: 1 day
-  #     # crontab: * * * 3
-  #     # trigger: onCall /
-  #     sql: "select max(temp1) as max_temp, avg(temp1) as avg_temp, min(temp1) as min_temp from sensordata"
-  #     columns:
-  #       - id: max_temp
-  #         name: Maximum Temperature
-  #         description: Maximum Temperature of DHT11 Sensor in Celcius
-  #         dataType: numeric # ?? may be data type for storing values: numeric, boolean, timestamp? ....
-  #       - id: avg_temp
-  #         name: Average Temperature
-  #         description: Average Temperature of DHT11 Sensor in Celcius
-  #         dataType: numeric # ?? may be data type for storing values: numeric, boolean, timestamp? ....
-  #       - id: min_temp
-  #         name: Minimum Temperature
-  #         description: Minimum Temperature of DHT11 Sensor in Celcius
-  #         dataType: numeric # ?? may be data type for storing values: numeric, boolean, timestamp? ....
+        - id: videolink
+          name: Video Link
+          description: Link to the live video stream
+          path: args[0].videolink
+          dataType: string
+  transforms:
+    - tablename: device_agg
+      materialize: true
+      schedule: "* * * * *" # crontab interface: Minute(1-60) Hour(1-24) MonthDay(1-31) Month(1-12) WeekDay(1-7)
+      sql: |
+        SELECT
+          devname,
+          max(videolink) AS videolink
+        FROM 
+          detections
+        WHERE 
+          tsp > now() - INTERVAL '1 days'
+        GROUP BY
+          devname
+      columns:
+        - id: devname
+          name: Device Name
+          description: Device Name
+          dataType: string # (string, numeric, boolean, timestamp)
+        - id: videolink
+          name: Video Link
+          description: Link to live video stream of camera
+          dataType: string
