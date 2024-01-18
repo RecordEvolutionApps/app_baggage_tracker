@@ -1,4 +1,4 @@
-FROM ultralytics/ultralytics:8.0.211-jetson
+FROM ultralytics/ultralytics:8.1.2-jetson
 
 RUN apt-get -y update && apt-get -y upgrade && \
 	apt-get install -y \
@@ -73,13 +73,17 @@ RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | b
 RUN curl -Lk 'https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-arm64' --output vscode_cli.tar.gz &&\
 	tar -xf vscode_cli.tar.gz
 
-COPY backend /app/backend
-RUN cd backend && bun i --frozen-lockfile --production && bun run build
-
 COPY web /app/web
 RUN cd web && . /root/.bashrc && bun i && bun run build
 
+COPY backend /app/backend
+RUN cd backend && bun i --frozen-lockfile --production && bun run build
+
+RUN rm -rf /usr/src/ultralytics/ultralytics/assets/*
+
 COPY janus/* /usr/local/etc/janus/
-COPY entrypoint.sh env-template.yml port-template.yml /app/
+COPY entrypoint.sh .reswarm/env-template.yml .reswarm/port-template.yml /app/
+
+COPY video /app/video
 
 CMD ["./entrypoint.sh"]

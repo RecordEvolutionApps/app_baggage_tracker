@@ -8,5 +8,5 @@ The results are filtered to cars only.
 
 ## Requirements
 
-This app currently only runs on Jetson Xavier systems.
+This app currently only runs on Jetson Xavier and Orin systems.
 

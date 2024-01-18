@@ -1,0 +1,96 @@
+name: Traffic
+widgets:
+  - version: 1.4.15
+    package_name: widget-linechart
+    chartdata:
+      settings:
+        timeseries: true
+        xAxisLabel: Time
+        yAxisLabel: $str:Count
+        columnLayout: null
+        title: null
+        subTitle: null
+      dataseries:
+        - label: $str:Count
+          order: null
+          chartName: $str:#pivot#
+          type: $str:line
+          radius: null
+          pointStyle: null
+          backgroundColor: $str:#cd0a0a
+          borderColor: $str:#e23c3c
+          borderWidth: $num:2
+          borderDash: null
+          data:
+            tableRef:
+              tablename: detections
+              bufferSize: 500
+              format:
+                x: tsp
+                y: count
+                r: null
+                pivot: category
+          fill: null
+    layout_id: 1
+  - version: 1.5.32
+    package_name: widget-gauge
+    chartdata:
+      settings:
+        title: null
+        subTitle: null
+      dataseries:
+        - label: $str:Detect
+          unit: "$str:"
+          valueColor: $str:green
+          averageLatest: $num:1
+          data:
+            tableRef:
+              tablename: detections
+              bufferSize: 500
+              format:
+                tsp: tsp
+                value: count
+                pivot: category
+          sections: []
+          backgroundColors: []
+          maxLatency: null
+    layout_id: 2
+  - version: 1.0.25
+    package_name: widget-value
+    chartdata:
+      settings:
+        title: null
+        subTitle: null
+      dataseries:
+        - label: $str:#
+          unit: null
+          precision: null
+          labelColor: null
+          valueColor: null
+          averageLatest: $num:4
+          maxLatency: null
+          data:
+            tableRef:
+              tablename: detections
+              bufferSize: "200"
+              format:
+                tsp: tsp
+                value: count
+                pivot: category
+    layout_id: 3
+layout:
+  - w: 4
+    h: 4
+    x: 0
+    y: 0
+    id: 3
+  - w: 8
+    h: 4
+    x: 4
+    y: 0
+    id: 1
+  - w: 12
+    h: 4
+    x: 0
+    y: 4
+    id: 2

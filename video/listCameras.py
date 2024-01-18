@@ -26,13 +26,14 @@ for device in context.list_devices(subsystem='video4linux'):
         usb_device_name = device.get('ID_MODEL', 'Unknown')
         usb_serial_number = device.get('ID_SERIAL_SHORT', 'Unknown')
     
-    result.append({
-        "path": device_path,
-        "name": usb_device_name,
-        "serial": usb_serial_number,
-        "width": width,
-        "height": height
-    })
+    if width > 0:
+        result.append({
+            "path": device_path,
+            "name": usb_device_name,
+            "serial": usb_serial_number,
+            "width": width,
+            "height": height
+        })
     #
     cap.release()
 

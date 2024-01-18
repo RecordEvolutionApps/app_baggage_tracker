@@ -1,0 +1,47 @@
+data:
+  tables:
+    - tablename: detections
+      columns:
+        - id: tsp
+          name: Timestamp
+          description: Timestamp of Detection
+          path: args[0].tsp
+          dataType: timestamp
+        - id: category
+          name: Category
+          description: Detection Category
+          path: args[0].class
+          dataType: string
+        - id: count
+          name: Count
+          description: Number of detected objects of that category
+          path: args[0].count
+          dataType: numeric
+        - id: devname
+          name: Device Name
+          description: Name of Device
+          path: kwargs.DEVICE_NAME
+          dataType: string
+
+
+  # transforms:
+  #   - tablename: myagg # -> crossbar topic from data servcie: transformed.swarm_key.app_key.tablename
+  #     materialize: true
+  #     schedule: "* * * * *"
+  #     # frequency: 1 day
+  #     # crontab: * * * 3
+  #     # trigger: onCall /
+  #     sql: "select max(temp1) as max_temp, avg(temp1) as avg_temp, min(temp1) as min_temp from sensordata"
+  #     columns:
+  #       - id: max_temp
+  #         name: Maximum Temperature
+  #         description: Maximum Temperature of DHT11 Sensor in Celcius
+  #         dataType: numeric # ?? may be data type for storing values: numeric, boolean, timestamp? ....
+  #       - id: avg_temp
+  #         name: Average Temperature
+  #         description: Average Temperature of DHT11 Sensor in Celcius
+  #         dataType: numeric # ?? may be data type for storing values: numeric, boolean, timestamp? ....
+  #       - id: min_temp
+  #         name: Minimum Temperature
+  #         description: Minimum Temperature of DHT11 Sensor in Celcius
+  #         dataType: numeric # ?? may be data type for storing values: numeric, boolean, timestamp? ....
