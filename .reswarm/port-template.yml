@@ -13,7 +13,7 @@ ports:
   - name: Web interface       # Label of the port in the device's app settings
     port: 1100               # Port under which a web server provides a user interface
     main: true                # This is the port used for the quick-access icon on a device's app list
+    remote_port_environment: TUNNEL_PORT # Defines the environment variable name in which the remote port will be stored (TCP and UDP only)
   - name: Video Stream        # The Janus Web endpoint
     port: 1200
     protocol: http             # Possible values: "http" | "tcp" | "udp" (default: "http")
-    remote_port_environment: EXAMPLE_ENV # Defines the environment variable name in which the remote port will be stored (TCP and UDP only)

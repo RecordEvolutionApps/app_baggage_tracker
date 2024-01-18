@@ -16,7 +16,7 @@ from pprint import pprint
 rw = Reswarm()
 
 DEVICE_KEY = os.environ.get('DEVICE_KEY')
-APP_KEY = os.environ.get('APP_KEY')
+TUNNEL_PORT = os.environ.get('TUNNEL_PORT')
 
 parser = argparse.ArgumentParser(description='Start a Video Stream for the given Camera Device')
 
@@ -112,7 +112,7 @@ async def publishClassCount(result):
     # pprint('sennding')
     for d in payload:
         d["tsp"] = now
-        d["videolink"] = f"https://{DEVICE_KEY}-traffic-{APP_KEY}.app.record-evolution.com"
+        d["videolink"] = f"https://{DEVICE_KEY}-traffic-{TUNNEL_PORT}.app.record-evolution.com"
         pprint(d)
         await rw.publish_to_table('detections', d)
 
