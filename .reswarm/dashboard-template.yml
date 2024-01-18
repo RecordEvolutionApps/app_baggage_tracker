@@ -8,7 +8,7 @@ widgets:
         xAxisLabel: Time
         yAxisLabel: $str:Count
         columnLayout: null
-        title: null
+        title: $str:Parking Occupation History
         subTitle: null
       dataseries:
         - label: $str:Count
@@ -17,14 +17,14 @@ widgets:
           type: $str:line
           radius: null
           pointStyle: null
-          backgroundColor: $str:#cd0a0a
-          borderColor: $str:#e23c3c
+          backgroundColor: $str:#0a10cd
+          borderColor: $str:#3c6ee2
           borderWidth: $num:2
           borderDash: null
           data:
             tableRef:
               tablename: detections
-              bufferSize: 500
+              bufferSize: "3000"
               format:
                 x: tsp
                 y: count
@@ -59,7 +59,7 @@ widgets:
     package_name: widget-value
     chartdata:
       settings:
-        title: null
+        title: $str:Current Vehicle Counts
         subTitle: null
       dataseries:
         - label: $str:#
