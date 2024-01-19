@@ -13,7 +13,7 @@ widgets:
       dataseries:
         - label: $str:Count
           order: null
-          chartName: $str:#pivot#
+          chartName: "$str:"
           type: $str:line
           radius: null
           pointStyle: null
@@ -27,34 +27,11 @@ widgets:
               bufferSize: "3000"
               format:
                 x: tsp
-                y: count
+                y: num_cars
                 r: null
-                pivot: category
+                pivot: devname
           fill: null
     layout_id: 1
-  - version: 1.5.32
-    package_name: widget-gauge
-    chartdata:
-      settings:
-        title: null
-        subTitle: null
-      dataseries:
-        - label: $str:Detect
-          unit: "$str:"
-          valueColor: $str:green
-          averageLatest: $num:1
-          data:
-            tableRef:
-              tablename: detections
-              bufferSize: 500
-              format:
-                tsp: tsp
-                value: count
-                pivot: category
-          sections: []
-          backgroundColors: []
-          maxLatency: null
-    layout_id: 2
   - version: 1.0.25
     package_name: widget-value
     chartdata:
@@ -62,21 +39,51 @@ widgets:
         title: $str:Current Vehicle Counts
         subTitle: null
       dataseries:
-        - label: $str:#
+        - label: $str:Cars
           unit: null
           precision: null
           labelColor: null
           valueColor: null
-          averageLatest: $num:4
+          averageLatest: "$num:"
           maxLatency: null
           data:
             tableRef:
               tablename: detections
-              bufferSize: "200"
+              bufferSize: "20"
               format:
                 tsp: tsp
-                value: count
-                pivot: category
+                value: num_cars
+                pivot: devname
+        - label: $str:Buses
+          unit: null
+          precision: null
+          labelColor: null
+          valueColor: null
+          averageLatest: null
+          maxLatency: null
+          data:
+            tableRef:
+              tablename: detections
+              bufferSize: "20"
+              format:
+                tsp: tsp
+                value: num_buses
+                pivot: devname
+        - label: $str:Trucks
+          unit: null
+          precision: null
+          labelColor: null
+          valueColor: null
+          averageLatest: null
+          maxLatency: null
+          data:
+            tableRef:
+              tablename: detections
+              bufferSize: "20"
+              format:
+                tsp: tsp
+                value: num_trucks
+                pivot: devname
     layout_id: 3
   - version: 1.0.11
     package_name: widget-table
@@ -118,24 +125,117 @@ widgets:
               bufferSize: 500
               format: videolink
     layout_id: 4
+  - version: 1.0.8
+    package_name: widget-image
+    chartdata:
+      imageLink:
+        valueRef:
+          tablename: images
+          column: image
+      title:
+        text: null
+        fontSize: null
+        fontWeight: null
+        color: null
+        backgroundColor: null
+      subTitle:
+        text: null
+        fontSize: null
+        fontWeight: null
+        color: null
+    layout_id: 5
+  - version: 1.4.15
+    package_name: widget-linechart
+    chartdata:
+      settings:
+        timeseries: $bool:true
+        xAxisLabel: $str:Time
+        yAxisLabel: $str:Temperature
+        columnLayout: null
+        title: "$str:"
+        subTitle: null
+      dataseries:
+        - label: $str:Trucks
+          order: null
+          chartName: null
+          type: $str:line
+          radius: null
+          pointStyle: null
+          backgroundColor: null
+          borderColor: null
+          borderWidth: $num:2
+          borderDash: null
+          fill: null
+          data:
+            tableRef:
+              tablename: detections
+              bufferSize: 500
+              format:
+                x: tsp
+                y: num_trucks
+                r: null
+                pivot: devname
+    layout_id: 6
+  - version: 1.4.15
+    package_name: widget-linechart
+    chartdata:
+      settings:
+        timeseries: $bool:true
+        xAxisLabel: $str:Time
+        yAxisLabel: $str:Temperature
+        columnLayout: null
+        title: null
+        subTitle: null
+      dataseries:
+        - label: $str:Busses
+          order: null
+          chartName: null
+          type: $str:line
+          radius: null
+          pointStyle: null
+          backgroundColor: $str:#d84bab
+          borderColor: $str:#d73cca
+          borderWidth: $num:2
+          borderDash: null
+          fill: null
+          data:
+            tableRef:
+              tablename: detections
+              bufferSize: 500
+              format:
+                x: tsp
+                y: num_buses
+                r: null
+                pivot: devname
+    layout_id: 7
 layout:
-  - w: 4
+  - w: 5
     h: 4
     x: 0
     y: 0
-    id: 3
-  - w: 8
+    id: 5
+  - w: 4
     h: 4
-    x: 4
+    x: 5
     y: 0
+    id: 3
+  - w: 3
+    h: 4
+    x: 9
+    y: 0
+    id: 4
+  - w: 5
+    h: 4
+    x: 0
+    y: 4
     id: 1
   - w: 4
     h: 4
-    x: 0
+    x: 5
     y: 4
-    id: 4
-  - w: 8
+    id: 6
+  - w: 3
     h: 4
-    x: 4
+    x: 9
     y: 4
-    id: 2
+    id: 7

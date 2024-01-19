@@ -7,15 +7,30 @@ data:
           description: Timestamp of Detection
           path: args[0].tsp
           dataType: timestamp
-        - id: category
-          name: Category
-          description: Detection Category
-          path: args[0].class
-          dataType: string
-        - id: count
-          name: Count
-          description: Number of detected objects of that category
-          path: args[0].count
+        - id: num_cars
+          name: Number of Cars
+          description: Number of detected cars
+          path: args[0].car
+          dataType: numeric
+        - id: num_buses
+          name: Number of Buses
+          description: Number of detected buses
+          path: args[0].bus
+          dataType: numeric
+        - id: num_trucks
+          name: Number of Trucks
+          description: Number of detected trucks
+          path: args[0].truck
+          dataType: numeric
+        - id: num_motorcycles
+          name: Number of Motorcycles
+          description: Number of detected motorcycles
+          path: args[0].motorcyle
+          dataType: numeric
+        - id: num_persons
+          name: Number of Persons
+          description: Number of detected persons
+          path: args[0].person
           dataType: numeric
         - id: devname
           name: Device Name
@@ -27,6 +42,25 @@ data:
           description: Link to the live video stream
           path: args[0].videolink
           dataType: string
+        - id: devicelink
+          name: Device Link
+          description: Link to the Device Settings
+          path: args[0].devicelink
+          dataType: string
+
+    - tablename: images
+      columns:
+        - id: tsp
+          name: Timestamp
+          description: Timestamp of Detection
+          path: args[0].tsp
+          dataType: timestamp
+        - id: image
+          name: Image Frame
+          description: Image Frame from Camera
+          path: args[0].image
+          dataType: string
+
   transforms:
     - tablename: device_agg
       materialize: true

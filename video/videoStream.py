@@ -13,9 +13,11 @@ from asyncio import get_event_loop, sleep
 from datetime import datetime
 import polars as pl
 from pprint import pprint
+import base64
 rw = Reswarm()
 
 DEVICE_KEY = os.environ.get('DEVICE_KEY')
+DEVICE_URL = os.environ.get('DEVICE_URL')
 TUNNEL_PORT = os.environ.get('TUNNEL_PORT')
 
 parser = argparse.ArgumentParser(description='Start a Video Stream for the given Camera Device')
@@ -31,16 +33,14 @@ portMap = {"frontCam": 5004,
            "backCam": 5007}
 
 
-CAM_NUM = os.environ.get('CAM_NUM', 1)
-
 RESOLUTION_X = int(os.environ.get('RESOLUTION_X', 640))
 RESOLUTION_Y = int(os.environ.get('RESOLUTION_Y', 480))
 FRAMERATE = int(os.environ.get('FRAMERATE', 20))
 
 device = args.device
 gstring = f"v4l2src device={device} ! video/x-raw, width={RESOLUTION_X},height={RESOLUTION_Y} ! videoconvert ! appsink "
-print('CAMERA USED:' + gstring)
-cap = cv2.VideoCapture(gstring)
+print('CAMERA USED:' + device[-1])
+cap = cv2.VideoCapture(int(device[-1]))
 cap.set(3, RESOLUTION_X)
 cap.set(4, RESOLUTION_Y)
 
@@ -71,6 +71,9 @@ async def main():
     global pub
     while True:
         success, img = cap.read()
+        if not success:
+            await sleep(1)
+            continue
         results = model(img, stream=True, imgsz=RESOLUTION_X, conf=0.1, iou=0.7, classes=[2, 3, 5, 7])
         frame_count += 1
         elapsed_time = time.time() - start_time
@@ -79,6 +82,7 @@ async def main():
             # Update frame rate every second
             if elapsed_time >= 1.0:
                 fps = frame_count / elapsed_time
+                await publishImage(annotated_frame)
                 await publishClassCount(r)
                 start_time = time.time()
                 frame_count = 0  
@@ -87,14 +91,19 @@ async def main():
         overlay_text(annotated_frame, f'Timestamp: {current_time}', position=(10, 30))
             
         overlay_text(annotated_frame, f'FPS: {fps:.2f}', position=(10, 60))
-        sleep(2)
         out.write(annotated_frame)
         if cv2.waitKey(1) == ord('q'):
             break
-        await sleep(1)
+        await sleep(0.1)
 
     cap.release()
     cv2.destroyAllWindows()
+
+async def publishImage(frame):
+    _, encoded_frame = cv2.imencode('.jpg', frame)
+    base64_encoded_frame = base64.b64encode(encoded_frame.tobytes()).decode('utf-8')
+    now = datetime.now().astimezone().isoformat()
+    await rw.publish_to_table('images', {"tsp": now, "image": 'data:image/jpeg;base64,' + base64_encoded_frame})
 
 
 async def publishClassCount(result):
@@ -105,21 +114,20 @@ async def publishClassCount(result):
     # pprint(classes)
 
     df = pl.DataFrame({"class": classes})
-    agg = df.group_by("class").count()
-    # pprint(agg)
-    payload = agg.to_dicts()
+    agg = df.group_by("class").len()
+    pprint(agg)
     now = datetime.now().astimezone().isoformat()
-    # pprint('sennding')
-    for d in payload:
-        d["tsp"] = now
-        d["videolink"] = f"https://{DEVICE_KEY}-traffic-{TUNNEL_PORT}.app.record-evolution.com"
-        pprint(d)
-        await rw.publish_to_table('detections', d)
+    payload = {"tsp": now}
+    for row in agg.rows():
+        payload[row[0]] = row[1]
+
+    payload["videolink"] = f"https://{DEVICE_KEY}-traffic-{TUNNEL_PORT}.app.record-evolution.com"
+    payload["devicelink"] = DEVICE_URL
+    pprint(payload)
+    await rw.publish_to_table('detections', payload)
 
 if __name__ == "__main__":
     # run the main coroutine
     get_event_loop().create_task(main())
     # run the reswarm component
     rw.run()
-
-
