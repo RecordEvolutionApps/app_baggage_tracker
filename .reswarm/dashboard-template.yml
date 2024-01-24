@@ -239,8 +239,8 @@ widgets:
         fontWeight: null
         color: $str:#5a6666
       body:
-        text: $str:The Smart Camera System relies on Hardware from NVIDIA. However, the camera itself can be replaced
-          with any common IP camera model that gets power over the ethernet (PoE).
+        text: "$str:The Smart Camera System relies on Hardware from NVIDIA. Any USB or IP Camera can be used with the
+          NVIDIA PC. "
         fontSize: null
         fontWeight: null
         color: $str:#5a6666
