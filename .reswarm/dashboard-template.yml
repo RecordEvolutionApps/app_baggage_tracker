@@ -231,19 +231,19 @@ widgets:
         text: "$str:"
         fontSize: null
         fontWeight: null
-        color: $str:#2f2f39
+        color: $str:#5a6666
         backgroundColor: null
       subTitle:
         text: $str:About the Smart Camera System​
         fontSize: null
         fontWeight: null
-        color: $str:#2f2f39
+        color: $str:#5a6666
       body:
         text: $str:The Smart Camera System relies on Hardware from NVIDIA. However, the camera itself can be replaced
           with any common IP camera model that gets power over the ethernet (PoE).
         fontSize: null
         fontWeight: null
-        color: $str:#2f2f39
+        color: $str:#5a6666
         backgroundColor: null
     layout_id: 10
   - version: 1.0.12
@@ -313,5 +313,5 @@ layout:
     x: 6
     y: 7
     id: 7
-background_color: "#455763"
-text_color: "#2f2f39"
+background_color: "#d3d3d3"
+text_color: "#5a6666"
