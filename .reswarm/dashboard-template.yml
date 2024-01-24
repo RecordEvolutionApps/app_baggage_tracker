@@ -17,8 +17,8 @@ widgets:
           type: $str:line
           radius: null
           pointStyle: null
-          backgroundColor: $str:#0a10cd
-          borderColor: $str:#3c6ee2
+          backgroundColor: $str:#2b2c50
+          borderColor: $str:#1d253a
           borderWidth: $num:2
           borderDash: null
           data:
@@ -42,8 +42,8 @@ widgets:
         - label: $str:Cars
           unit: null
           precision: null
-          labelColor: null
-          valueColor: null
+          labelColor: $str:#f2b46e
+          valueColor: $str:#cb873a
           averageLatest: "$num:"
           maxLatency: null
           data:
@@ -57,8 +57,8 @@ widgets:
         - label: $str:Buses
           unit: null
           precision: null
-          labelColor: null
-          valueColor: null
+          labelColor: $str:#9cd695
+          valueColor: $str:#49983e
           averageLatest: null
           maxLatency: null
           data:
@@ -72,8 +72,8 @@ widgets:
         - label: $str:Trucks
           unit: null
           precision: null
-          labelColor: null
-          valueColor: null
+          labelColor: $str:#56a49b
+          valueColor: $str:#249487
           averageLatest: null
           maxLatency: null
           data:
@@ -90,9 +90,9 @@ widgets:
     chartdata:
       settings:
         headerFontSize: $str:16px
-        headerBackground: $str:#fcfcfc
+        headerBackground: $str:#c9c9c9
         rowHeight: $str:40px
-        title: null
+        title: "$str:"
         subTitle: null
         rowBorder: null
       columns:
@@ -102,7 +102,7 @@ widgets:
           width: null
           fontSize: null
           fontWeight: null
-          color: null
+          color: $str:#252627
           border: null
           stateMap: null
           values:
@@ -116,7 +116,7 @@ widgets:
           width: null
           fontSize: null
           fontWeight: null
-          color: null
+          color: $str:#252627
           border: null
           stateMap: null
           values:
@@ -133,13 +133,13 @@ widgets:
           tablename: images
           column: image
       title:
-        text: null
+        text: $str:Camera Feed
         fontSize: null
         fontWeight: null
         color: null
         backgroundColor: null
       subTitle:
-        text: null
+        text: "$str:Framerate: 1fps"
         fontSize: null
         fontWeight: null
         color: null
@@ -152,7 +152,7 @@ widgets:
         xAxisLabel: $str:Time
         yAxisLabel: $str:Temperature
         columnLayout: null
-        title: "$str:"
+        title: $str:Truck History
         subTitle: null
       dataseries:
         - label: $str:Trucks
@@ -161,8 +161,8 @@ widgets:
           type: $str:line
           radius: null
           pointStyle: null
-          backgroundColor: null
-          borderColor: null
+          backgroundColor: $str:#75ccc2
+          borderColor: $str:#249487
           borderWidth: $num:2
           borderDash: null
           fill: null
@@ -184,7 +184,7 @@ widgets:
         xAxisLabel: $str:Time
         yAxisLabel: $str:Temperature
         columnLayout: null
-        title: null
+        title: $str:Bus History
         subTitle: null
       dataseries:
         - label: $str:Busses
@@ -193,8 +193,8 @@ widgets:
           type: $str:line
           radius: null
           pointStyle: null
-          backgroundColor: $str:#d84bab
-          borderColor: $str:#d73cca
+          backgroundColor: $str:#6c936f
+          borderColor: $str:#377d36
           borderWidth: $num:2
           borderDash: null
           fill: null
@@ -208,34 +208,110 @@ widgets:
                 r: null
                 pivot: devname
     layout_id: 7
+  - version: 1.0.8
+    package_name: widget-image
+    chartdata:
+      imageLink: $str:https://storage.googleapis.com/reswarm-images/prod/reswarm-0-1706095631331-Cam_icon-682decf0d8.png
+      title:
+        text: null
+        fontSize: null
+        fontWeight: null
+        color: null
+        backgroundColor: null
+      subTitle:
+        text: null
+        fontSize: null
+        fontWeight: null
+        color: null
+    layout_id: 8
+  - version: 1.0.12
+    package_name: widget-textbox
+    chartdata:
+      title:
+        text: "$str:"
+        fontSize: null
+        fontWeight: null
+        color: $str:#2f2f39
+        backgroundColor: null
+      subTitle:
+        text: $str:About the Smart Camera System​
+        fontSize: null
+        fontWeight: null
+        color: $str:#2f2f39
+      body:
+        text: $str:The Smart Camera System relies on Hardware from NVIDIA. However, the camera itself can be replaced
+          with any common IP camera model that gets power over the ethernet (PoE).
+        fontSize: null
+        fontWeight: null
+        color: $str:#2f2f39
+        backgroundColor: null
+    layout_id: 10
+  - version: 1.0.12
+    package_name: widget-textbox
+    chartdata:
+      title:
+        text: $str:Revis
+        fontSize: null
+        fontWeight: null
+        color: null
+        backgroundColor: null
+      subTitle:
+        text: $str:JetsonAGXXavier & USB Camera
+        fontSize: null
+        fontWeight: null
+        color: null
+      body:
+        text: "$str:"
+        fontSize: null
+        fontWeight: null
+        color: null
+        backgroundColor: null
+    layout_id: 11
 layout:
+  - w: 2
+    h: 2
+    x: 0
+    y: 0
+    id: 8
+  - w: 2
+    h: 2
+    x: 2
+    y: 0
+    id: 11
   - w: 5
     h: 4
-    x: 0
+    x: 4
     y: 0
     id: 5
-  - w: 4
+  - w: 3
     h: 4
-    x: 5
+    x: 9
     y: 0
     id: 3
-  - w: 3
-    h: 4
-    x: 9
-    y: 0
-    id: 4
-  - w: 5
-    h: 4
+  - w: 4
+    h: 2
+    x: 0
+    y: 2
+    id: 10
+  - w: 4
+    h: 3
     x: 0
     y: 4
+    id: 4
+  - w: 8
+    h: 3
+    x: 4
+    y: 4
     id: 1
-  - w: 4
-    h: 4
-    x: 5
-    y: 4
+  - w: 6
+    h: 3
+    x: 0
+    y: 7
     id: 6
-  - w: 3
-    h: 4
-    x: 9
-    y: 4
+  - w: 6
+    h: 3
+    x: 6
+    y: 7
     id: 7
+background_color: "#455763"
+text_color: "#2f2f39"
