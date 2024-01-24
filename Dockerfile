@@ -56,10 +56,11 @@ RUN git clone --depth=1 https://github.com/meetecho/janus-gateway.git && \
 WORKDIR /app
 
 # RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt -O yolov8.pt
-RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8s.pt -O yolov8.pt 
+RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8s-obb.pt -O yolov8s-obb.pt 
+RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8s.pt -O yolov8s.pt 
 # RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8m.pt -O yolov8.pt 
 # RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8l.pt -O yolov8.pt 
-# RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt -O yolov8.pt 
+RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt -O yolov8x.pt 
 
 COPY requirements.txt /app/requirements.txt
 RUN python3 -m pip install -r requirements.txt
@@ -70,14 +71,14 @@ RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | b
 	&& . /root/.bashrc && nvm install 18.0.0
 
 # For live developing code in your running container install the vscode cli and start a tunnel with `./code tunnel` in the /app folder
-RUN curl -Lk 'https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-arm64' --output vscode_cli.tar.gz &&\
-	tar -xf vscode_cli.tar.gz
+# RUN curl -Lk 'https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-arm64' --output vscode_cli.tar.gz &&\
+# 	tar -xf vscode_cli.tar.gz
 
 COPY web /app/web
 RUN cd web && . /root/.bashrc && bun i && bun run build
 
-COPY backend /app/backend
-RUN cd backend && bun i --frozen-lockfile --production && bun run build
+# COPY backend /app/backend
+# RUN cd backend && bun i --frozen-lockfile --production && bun run build
 
 RUN rm -rf /usr/src/ultralytics/ultralytics/assets/*
 

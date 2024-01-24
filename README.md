@@ -2,7 +2,7 @@
 
 Simple Object Detection example with Ultralytics YOLOv8
 
-The results are filtered to cars only.
+The results are filtered to cars, buses, trucks and motorcycles.
 
 <img src="https://storage.googleapis.com/reswarm-images/PastedGraphic-1.png" width="600px">
 

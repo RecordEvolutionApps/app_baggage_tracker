@@ -44,7 +44,7 @@ echo "NVIDIA GPU Present?" $nvgpu_out
 
 # sleep infinity
 # exec python3 -u /app/backend/src/index.py
-cd backend
-exec ./videoserve
+
+exec python3 -u video/index.py
 
 

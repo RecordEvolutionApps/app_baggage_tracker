@@ -1,0 +1,52 @@
+from aiohttp import web
+import asyncio
+import aiohttp_cors
+from camera_handler import get_cameras, get_stream_setup, select_camera, init_streams
+from reswarm import Reswarm
+
+async def index(request):
+    return web.FileResponse('web/dist/index.html')
+
+app = web.Application()
+
+# Setup CORS
+cors = aiohttp_cors.setup(app, defaults={
+    "*": aiohttp_cors.ResourceOptions(
+        allow_credentials=True,
+        expose_headers="*",
+        allow_headers="*",
+    ),
+})
+
+# Define routes
+app.router.add_get('/cameras', get_cameras)
+app.router.add_get('/cameras/setup', get_stream_setup)
+app.router.add_post('/cameras/select', select_camera)
+# app.router.add_post('/mir/status', get_status)
+app.router.add_get('/', index)
+app.router.add_static('/', path='./web/dist')
+
+# Configure CORS on all routes
+for route in list(app.router.routes()):
+    cors.add(route)
+
+
+async def main():
+    # add stuff to the loop, e.g. using asyncio.create_task()
+    # Start the application
+    rw = Reswarm()
+    rw._component.start()
+
+    runner = web.AppRunner(app, host="127.0.0.1", port=1100)
+    await runner.setup()
+    site = web.TCPSite(runner)    
+    await site.start()
+
+    # add more stuff to the loop, if needed
+
+    asyncio.create_task(init_streams())
+
+    # wait forever
+    await asyncio.Event().wait()
+
+asyncio.run(main())

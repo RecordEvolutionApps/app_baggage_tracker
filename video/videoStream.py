@@ -45,7 +45,7 @@ cap.set(3, RESOLUTION_X)
 cap.set(4, RESOLUTION_Y)
 
 # model
-model = YOLO("/app/yolov8.pt")
+model = YOLO("/app/yolov8x.pt")
 model.fuse()
 pprint('----------Model Device -----------')
 pprint(model.device)
@@ -109,7 +109,8 @@ async def publishImage(frame):
 async def publishClassCount(result):
     classes = []
     boxes = result.boxes
-    # pprint(boxes.cls)
+    # pprint(boxes)
+    if not boxes: return
     classes = [result.names[int(cls)] for cls in boxes.cls]
     # pprint(classes)
 
