@@ -37,10 +37,11 @@ async def main():
     rw = Reswarm()
     rw._component.start()
 
-    runner = web.AppRunner(app, host="0.0.0.0", port=1100)
+    runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner)    
+    site = web.TCPSite(runner, host="0.0.0.0", port=1100)    
     await site.start()
+    print('WEB SERVER STARTED on PORT 1100')
 
     # add more stuff to the loop, if needed
 
