@@ -37,7 +37,7 @@ async def main():
     rw = Reswarm()
     rw._component.start()
 
-    runner = web.AppRunner(app, host="127.0.0.1", port=1100)
+    runner = web.AppRunner(app, host="0.0.0.0", port=1100)
     await runner.setup()
     site = web.TCPSite(runner)    
     await site.start()
