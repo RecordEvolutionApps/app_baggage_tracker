@@ -85,7 +85,7 @@ widgets:
                 value: num_trucks
                 pivot: devname
     layout_id: 3
-  - version: 1.0.11
+  - version: 1.0.12
     package_name: widget-table
     chartdata:
       settings:
