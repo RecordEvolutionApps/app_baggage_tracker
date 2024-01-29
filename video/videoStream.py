@@ -122,7 +122,7 @@ async def publishClassCount(result):
     for row in agg.rows():
         payload[row[0]] = row[1]
 
-    payload["videolink"] = f"https://{DEVICE_KEY}-traffic-{TUNNEL_PORT}.app.record-evolution.com"
+    payload["videolink"] = f"https://{DEVICE_KEY}-traffic-1100.app.record-evolution.com"
     payload["devicelink"] = DEVICE_URL
     pprint(payload)
     await rw.publish_to_table('detections', payload)
