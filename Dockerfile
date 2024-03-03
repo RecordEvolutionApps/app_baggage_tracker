@@ -55,20 +55,22 @@ RUN git clone --depth=1 https://github.com/meetecho/janus-gateway.git && \
 
 WORKDIR /app
 
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:${PATH}"
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash \
+	&& . /root/.bashrc && nvm install 18.0.0
+
 # RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt -O yolov8.pt
 RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8s-obb.pt -O yolov8s-obb.pt 
 RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8s.pt -O yolov8s.pt 
 # RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8m.pt -O yolov8.pt 
 # RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8l.pt -O yolov8.pt 
-RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt -O yolov8x.pt 
+RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt -O yolov8x.pt
+RUN wget https://github.com/WongKinYiu/yolov9/releases/download/v0.1/yolov9-c-converted.pt -O yolov9-c.pt
 
 COPY requirements.txt /app/requirements.txt
 RUN python3 -m pip install -r requirements.txt
 
-RUN curl -fsSL https://bun.sh/install | bash
-ENV PATH="/root/.bun/bin:${PATH}"
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash \
-	&& . /root/.bashrc && nvm install 18.0.0
 
 # For live developing code in your running container install the vscode cli and start a tunnel with `./code tunnel` in the /app folder
 # RUN curl -Lk 'https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-arm64' --output vscode_cli.tar.gz &&\

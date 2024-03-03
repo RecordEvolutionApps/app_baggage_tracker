@@ -14,6 +14,7 @@ from datetime import datetime
 import polars as pl
 from pprint import pprint
 import base64
+import torch
 rw = Reswarm()
 
 DEVICE_KEY = os.environ.get('DEVICE_KEY')
@@ -44,8 +45,10 @@ cap = cv2.VideoCapture(int(device[-1]))
 cap.set(3, RESOLUTION_X)
 cap.set(4, RESOLUTION_Y)
 
+print("CUDA available:", torch.cuda.is_available(), 'GPUs', torch.cuda.device_count())
 # model
-model = YOLO("/app/yolov8x.pt")
+model = YOLO("/app/yolov8s.pt")
+# model = torch.load("/app/yolov9-c.pt")
 model.fuse()
 pprint('----------Model Device -----------')
 pprint(model.device)
