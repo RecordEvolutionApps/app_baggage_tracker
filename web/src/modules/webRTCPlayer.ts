@@ -53,6 +53,7 @@ function initJanus(videoPlayer: any) {
       const janus = new window.Janus({
         server: janusServerUrl,
         iceServers: iceServers,
+        withCredentials: true,
         success: function () {
           console.log("Janus connection successful!");
 

@@ -63,7 +63,7 @@ admin: {
 # it to browsers, you can set 'enforce_cors' to 'true' to have Janus
 # return a '403 Forbidden' for all requests that don't comply.
 cors: {
-        #allow_origin = "http://foo.example"
+        allow_origin = "https://replaced.by.tunnel"
         #enforce_cors = true
 }
 
