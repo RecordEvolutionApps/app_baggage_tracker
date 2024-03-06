@@ -12,7 +12,7 @@ ports = {}
 stream_setup = {}
 stream_setup_file_path = "/data/streamSetup.json"
 
-async def get_cameras(req):
+async def get_cameras():
 
     context = pyudev.Context()
 
