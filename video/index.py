@@ -10,7 +10,7 @@ async def index(request):
 app = web.Application()
 
 # Define routes
-app.router.add_get('/cameras', get_cameras)
+app.router.add_get('/cameras', lambda x: get_cameras())
 app.router.add_get('/cameras/setup', get_stream_setup)
 app.router.add_post('/cameras/select', select_camera)
 # app.router.add_post('/mir/status', get_status)
