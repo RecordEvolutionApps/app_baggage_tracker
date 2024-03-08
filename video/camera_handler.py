@@ -102,13 +102,13 @@ async def select_camera(request):
         print('killing device process', proc)
         proc.terminate()
         await proc.communicate()
-    del streams[device]
+    if device in streams: del streams[device]
 
     pproc = ports.get(cam)
     if pproc and proc != pproc:
         print('killing cam process', pproc)
         pproc.terminate()
         await pproc.communicate()
-    del ports[cam]
+    if cam in ports: del ports[cam]
 
     await start_video_stream(device, cam)
