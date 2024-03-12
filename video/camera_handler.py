@@ -61,13 +61,16 @@ async def init_streams():
             print('NO CAMERA DETECTED')
             return
         first_cam = cam_list[0]
+        await kill_stream(dev, cam)
         await start_video_stream(first_cam['path'], 'frontCam')
 
     print('StreamSetup', stream_setup)
     for cam, dev in stream_setup.items():
+        await kill_stream(dev, cam)
         await start_video_stream(dev, cam)
 
 async def start_video_stream(device, cam):
+    print('Starting video stream on ', device, cam)
     proc = await asyncio.create_subprocess_exec(
         "python3", "-u", "videoStream.py", device, cam,
         cwd="/app/video", stdout=asyncio.subprocess.PIPE, env=dict(**os.environ)
@@ -81,6 +84,24 @@ async def start_video_stream(device, cam):
         if not chunk:
             break
         print('VIDEOSTREAM:', chunk.decode())
+
+
+async def kill_stream(device, cam):
+    print('Killing video stream (if exists) on ', device, cam)
+
+    proc = streams.get(device)
+    if proc:
+        print('killing device process', proc)
+        proc.terminate()
+        await proc.wait()
+    if device in streams: del streams[device]
+
+    pproc = ports.get(cam)
+    if pproc and proc != pproc:
+        print('killing cam process', pproc)
+        pproc.terminate()
+        await pproc.wait()
+    if cam in ports: del ports[cam]
 
 # Exported functions
 async def get_stream_setup(request):
@@ -97,18 +118,6 @@ async def select_camera(request):
     with open(stream_setup_file_path, 'w') as file:
         json.dump(stream_setup, file)
 
-    proc = streams.get(device)
-    if proc:
-        print('killing device process', proc)
-        proc.terminate()
-        await proc.wait()
-    if device in streams: del streams[device]
-
-    pproc = ports.get(cam)
-    if pproc and proc != pproc:
-        print('killing cam process', pproc)
-        pproc.terminate()
-        await pproc.wait()
-    if cam in ports: del ports[cam]
+    await kill_stream(device, cam)
 
     await start_video_stream(device, cam)

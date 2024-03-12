@@ -1,4 +1,4 @@
-FROM ultralytics/ultralytics:8.1.2-jetson
+FROM ultralytics/ultralytics:8.1.26-jetson
 
 RUN apt-get -y update && apt-get -y upgrade && \
 	apt-get install -y \
@@ -66,7 +66,7 @@ RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8s.
 # RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8m.pt -O yolov8.pt 
 # RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8l.pt -O yolov8.pt 
 RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt -O yolov8x.pt
-RUN wget https://github.com/WongKinYiu/yolov9/releases/download/v0.1/yolov9-c-converted.pt -O yolov9-c.pt
+RUN wget https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov9c.pt -O yolov9c.pt
 
 COPY requirements.txt /app/requirements.txt
 RUN python3 -m pip install -r requirements.txt

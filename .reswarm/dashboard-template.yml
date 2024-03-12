@@ -32,8 +32,7 @@ widgets:
                 pivot: devname
           fill: null
     layout_id: 1
-  - version: 1.0.25
-    package_name: widget-value
+  - package_name: widget-value
     chartdata:
       settings:
         title: $str:Current Vehicle Counts
@@ -49,7 +48,7 @@ widgets:
           data:
             tableRef:
               tablename: detections
-              bufferSize: "20"
+              bufferSize: 1
               format:
                 tsp: tsp
                 value: num_cars
@@ -64,7 +63,7 @@ widgets:
           data:
             tableRef:
               tablename: detections
-              bufferSize: "20"
+              bufferSize: 1
               format:
                 tsp: tsp
                 value: num_buses
@@ -79,11 +78,12 @@ widgets:
           data:
             tableRef:
               tablename: detections
-              bufferSize: "20"
+              bufferSize: 1
               format:
                 tsp: tsp
                 value: num_trucks
                 pivot: devname
+    version: 1.0.25
     layout_id: 3
   - version: 1.0.12
     package_name: widget-table

@@ -47,7 +47,7 @@ cap.set(4, RESOLUTION_Y)
 
 print("CUDA available:", torch.cuda.is_available(), 'GPUs', torch.cuda.device_count())
 # model
-model = YOLO("/app/yolov8s.pt")
+model = YOLO("/app/yolov9c.pt")
 # model = torch.load("/app/yolov9-c.pt")
 model.fuse()
 pprint('----------Model Device -----------')
