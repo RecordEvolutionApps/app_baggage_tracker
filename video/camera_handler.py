@@ -37,17 +37,17 @@ async def get_cameras():
             usb_device_name = device.get('ID_MODEL', 'Unknown')
             usb_serial_number = device.get('ID_SERIAL_SHORT', 'Unknown')
         
-        if width > 0:
-            result.append({
-                "path": device_path,
-                "name": usb_device_name,
-                "serial": usb_serial_number,
-                "width": width,
-                "height": height
-            })
+        # if width > 0:
+        result.append({
+            "path": device_path,
+            "name": usb_device_name,
+            "serial": usb_serial_number,
+            "width": width,
+            "height": height
+        })
         #
         cap.release()
-
+    result = [{"path": '/dev/video0'}, {"path": '/dev/video1'}, {"path": '/dev/video2'}, {"path": '/dev/video3'}]
     print('CAMLIST', result)
     return web.json_response(result)
 
@@ -61,50 +61,76 @@ async def init_streams():
             print('NO CAMERA DETECTED')
             return
         first_cam = cam_list[0]
-        await kill_stream(dev, cam)
-        await start_video_stream(first_cam['path'], 'frontCam')
+        kill_stream(dev, cam)
+        asyncio.create_task(start_video_stream(first_cam['path'], 'frontCam'))
 
     print('StreamSetup', stream_setup)
     for cam, dev in stream_setup.items():
-        await kill_stream(dev, cam)
-        await start_video_stream(dev, cam)
+        kill_stream(dev, cam)
+        asyncio.create_task(start_video_stream(dev, cam))
 
 async def start_video_stream(device, cam):
-    print('Starting video stream on ', device, cam)
-    proc = await asyncio.create_subprocess_exec(
-        "python3", "-u", "videoStream.py", device, cam,
-        cwd="/app/video", stdout=asyncio.subprocess.PIPE, env=dict(**os.environ)
-    )
+    try:
+        print('Starting video stream on ', device, cam)
+        proc = await asyncio.create_subprocess_exec(
+            "python3", "-u", "videoStream.py", device, cam,
+            cwd="/app/video", 
+            stdout=asyncio.subprocess.PIPE, 
+            stderr=asyncio.subprocess.PIPE, 
+            env=dict(**os.environ)
+        )
 
-    streams[device] = proc
-    ports[cam] = proc
+        streams[device] = proc
+        ports[cam] = proc
 
-    while True:
-        chunk = await proc.stdout.read(4096)
-        if not chunk:
-            break
-        print('VIDEOSTREAM:', chunk.decode())
+        while True:
+            if proc.returncode is not None:
+                print('VIDEOSTREAM Exited with code', proc.returncode)
+                break
+            chunk = await proc.stdout.readline()
+            error = await proc.stderr.readline()
+            if chunk:
+                print('VIDEOSTREAM:', chunk.decode())
+            if error:
+                print('VIDEOSTREAM ERROR:', error.decode())
+            await asyncio.sleep(1)
+        print('############### exiting stream', device, cam)
+    except Exception as err:
+        print('################ Failed video process ##################################', device, cam)
+        print(err)
 
-
-async def kill_stream(device, cam):
+def kill_stream(device, cam):
     print('Killing video stream (if exists) on ', device, cam)
 
     proc = streams.get(device)
     if proc:
-        print('killing device process', proc)
-        proc.terminate()
-        await proc.wait()
+        print('killing device process', proc, device)
+        try:
+            proc.kill()
+        except:
+            print('device kill failed', device , proc.pid)
+        print('device process killed', device, proc.pid)
+        # await asyncio.sleep(2)
+        # proc._transport.close()
+        # print('device process killed finally', device)
     if device in streams: del streams[device]
 
     pproc = ports.get(cam)
     if pproc and proc != pproc:
-        print('killing cam process', pproc)
-        pproc.terminate()
-        await pproc.wait()
+        print('killing cam process', pproc, cam)
+        try:
+            pproc.kill()
+        except:
+            print('cam kill failed', cam , pproc.pid)
+        print('cam process killed', cam, pproc.pid)
+        # await asyncio.sleep(2)
+        # pproc._transport.close()
+        # print('cam process killed finally', cam)
     if cam in ports: del ports[cam]
+    print('kill_stream done')
 
 # Exported functions
-async def get_stream_setup(request):
+def get_stream_setup(request):
     params = request.query
     print('getStreamSetup', params)
     return web.json_response({"device": stream_setup.get(params['cam'])})
@@ -118,6 +144,6 @@ async def select_camera(request):
     with open(stream_setup_file_path, 'w') as file:
         json.dump(stream_setup, file)
 
-    await kill_stream(device, cam)
+    kill_stream(device, cam)
 
-    await start_video_stream(device, cam)
+    asyncio.create_task(start_video_stream(device, cam))

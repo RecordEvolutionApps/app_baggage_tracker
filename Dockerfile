@@ -1,4 +1,4 @@
-FROM ultralytics/ultralytics:8.1.26-jetson
+FROM ultralytics/ultralytics:8.1.29-jetson
 
 RUN apt-get -y update && apt-get -y upgrade && \
 	apt-get install -y \
@@ -79,8 +79,8 @@ RUN python3 -m pip install -r requirements.txt
 COPY web /app/web
 RUN cd web && . /root/.bashrc && bun i && bun run build
 
-# COPY backend /app/backend
-# RUN cd backend && bun i --frozen-lockfile --production && bun run build
+COPY backend /app/backend
+RUN cd backend && bun i --frozen-lockfile --production && bun run build
 
 RUN rm -rf /usr/src/ultralytics/ultralytics/assets/*
 

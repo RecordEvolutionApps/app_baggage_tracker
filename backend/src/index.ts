@@ -4,10 +4,10 @@ import { html } from '@elysiajs/html'
 import { cors } from '@elysiajs/cors'
 import { getCameras, getStreamSetup, selectCamera } from './cameras.js'
 import { getStatus } from './MIRcontroller.js'
-
+console.log('CURRENT', process.cwd())
 const app = new Elysia();
 app.use(staticPlugin({
-  assets: "../web/dist",
+  assets: "web/dist",
   prefix: "/"
 }))
 app.use(html())
@@ -17,7 +17,7 @@ app.get('/cameras/setup', getStreamSetup)
 app.post('/cameras/select', selectCamera)
 app.post('/mir/status', getStatus)
 app.get('/', async () => {
-  return Bun.file('../web/dist/index.html')
+  return Bun.file('web/dist/index.html')
 })
 app.listen(1100);
 

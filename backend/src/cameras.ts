@@ -67,8 +67,7 @@ export const selectCamera = async (ctx: Context) => {
 }
 
 async function startVideoStream(device: string, cam: string) {
-    const proc = Bun.spawn(["python3", "-u", "../../video/videoStream.py", device, cam], {
-        cwd: "src", // specify a working directory
+    const proc = Bun.spawn(["python3", "-u", "video/videoStream.py", device, cam], {
         env: { ...process.env}, // specify environment variables
         onExit(proc, exitCode, signalCode, error) {
           console.log('Python video stream exited', error)
@@ -87,8 +86,7 @@ async function startVideoStream(device: string, cam: string) {
 
 export async function getCameras() {
 
-  const proc = Bun.spawn(["python3", "-u", "../../video/listCameras.py"], {
-        cwd: "src", // specify a working directory
+  const proc = Bun.spawn(["python3", "-u", "video/listCameras.py"], {
         env: { ...process.env}, // specify environment variables
         onExit(proc, exitCode, signalCode, error) {
           if (error)

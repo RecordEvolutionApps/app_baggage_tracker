@@ -3,11 +3,21 @@ import asyncio
 import aiohttp_cors
 from camera_handler import get_cameras, get_stream_setup, select_camera, init_streams
 from reswarm import Reswarm
+import functools
+print = functools.partial(print, flush=True)
 
 async def index(request):
     return web.FileResponse('web/dist/index.html')
 
-app = web.Application()
+@web.middleware
+async def middleware(request: web.Request, handler):
+
+    print(f"Received request: {request.method} {request.path}")
+
+    resp = await handler(request)
+    return resp
+
+app = web.Application(middlewares=[middleware])
 
 # Define routes
 app.router.add_get('/cameras', lambda x: get_cameras())
@@ -32,7 +42,6 @@ for route in list(app.router.routes()):
 
 
 async def main():
-    # add stuff to the loop, e.g. using asyncio.create_task()
     # Start the application
     rw = Reswarm(mainFunc=init_streams)
     rw._component.start()
@@ -43,11 +52,6 @@ async def main():
     await site.start()
     print('WEB SERVER STARTED on PORT 1100')
 
-    # add more stuff to the loop, if needed
-
-    # asyncio.create_task(init_streams())
-
-    # wait forever
     await asyncio.Event().wait()
 
 asyncio.run(main())

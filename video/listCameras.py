@@ -37,5 +37,7 @@ for device in context.list_devices(subsystem='video4linux'):
     #
     cap.release()
 
+result = [{"path": '/dev/video0'}, {"path": '/dev/video1'}, {"path": '/dev/video2'}, {"path": '/dev/video3'}]
+
 # Print the result as JSON
 print(json.dumps(result))

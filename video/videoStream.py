@@ -1,3 +1,4 @@
+from asyncio import get_event_loop, sleep
 from ultralytics import YOLO
 import cv2
 import numpy as np
@@ -7,16 +8,18 @@ import argparse
 import time
 from datetime import datetime
 from reswarm import Reswarm
-from asyncio import sleep
 from collections import Counter
-from asyncio import get_event_loop, sleep
 from datetime import datetime
 import polars as pl
 from pprint import pprint
 import base64
 import torch
-rw = Reswarm()
+import functools
+print = functools.partial(print, flush=True)
 
+# time.sleep(100)
+# print('exiting now')
+# exit(0)
 DEVICE_KEY = os.environ.get('DEVICE_KEY')
 DEVICE_URL = os.environ.get('DEVICE_URL')
 TUNNEL_PORT = os.environ.get('TUNNEL_PORT')
@@ -50,8 +53,8 @@ print("CUDA available:", torch.cuda.is_available(), 'GPUs', torch.cuda.device_co
 model = YOLO("/app/yolov9c.pt")
 # model = torch.load("/app/yolov9-c.pt")
 model.fuse()
-pprint('----------Model Device -----------')
-pprint(model.device)
+print('----------Model Device -----------')
+print(model.device)
 
 outputFormat = " videoconvert ! vp8enc deadline=2 threads=4 keyframe-max-dist=6 ! video/x-vp8 ! rtpvp8pay pt=96"
 # outputFormat = "nvvidconv ! nvv4l2h264enc maxperf-enable=1 insert-sps-pps=true insert-vui=true ! h264parse ! rtph264pay"
@@ -119,7 +122,7 @@ async def publishClassCount(result):
 
     df = pl.DataFrame({"class": classes})
     agg = df.group_by("class").len()
-    pprint(agg)
+    print(agg)
     now = datetime.now().astimezone().isoformat()
     payload = {"tsp": now}
     for row in agg.rows():
@@ -127,11 +130,13 @@ async def publishClassCount(result):
 
     payload["videolink"] = f"https://{DEVICE_KEY}-traffic-1100.app.record-evolution.com"
     payload["devicelink"] = DEVICE_URL
-    pprint(payload)
+    print(payload)
     await rw.publish_to_table('detections', payload)
+
+rw = Reswarm(mainFunc=main)
 
 if __name__ == "__main__":
     # run the main coroutine
-    get_event_loop().create_task(main())
+    # get_event_loop().create_task(main())
     # run the reswarm component
     rw.run()
