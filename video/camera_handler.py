@@ -62,12 +62,19 @@ async def init_streams():
             return
         first_cam = cam_list[0]
         kill_stream(dev, cam)
-        asyncio.create_task(start_video_stream(first_cam['path'], 'frontCam'))
+        asyncio.create_task(run_video_streamer(first_cam['path'], 'frontCam'))
 
     print('StreamSetup', stream_setup)
     for cam, dev in stream_setup.items():
         kill_stream(dev, cam)
-        asyncio.create_task(start_video_stream(dev, cam))
+        asyncio.create_task(run_video_streamer(dev, cam))
+
+async def run_video_streamer(device, cam):
+    while streams.get(device) or ports.get(cam):
+        try:
+            await start_video_stream(device, cam)
+        except:
+            print('Video stream broke, restarting...')
 
 async def start_video_stream(device, cam):
     try:
@@ -85,7 +92,8 @@ async def start_video_stream(device, cam):
 
         while True:
             if proc.returncode is not None:
-                print('VIDEOSTREAM Exited with code', proc.returncode)
+                print('VIDEOSTREAM exited with code', proc.returncode)
+                raise Exception('Video stream exited')
                 break
             chunk = await proc.stdout.readline()
             error = await proc.stderr.readline()
@@ -97,7 +105,8 @@ async def start_video_stream(device, cam):
         print('############### exiting stream', device, cam)
     except Exception as err:
         print('################ Failed video process ##################################', device, cam)
-        print(err)
+        raise Exception('Video stream exited 2')
+
 
 def kill_stream(device, cam):
     print('Killing video stream (if exists) on ', device, cam)
@@ -105,6 +114,7 @@ def kill_stream(device, cam):
     proc = streams.get(device)
     if proc:
         print('killing device process', proc, device)
+        if device in streams: del streams[device]
         try:
             proc.kill()
         except:
@@ -113,11 +123,11 @@ def kill_stream(device, cam):
         # await asyncio.sleep(2)
         # proc._transport.close()
         # print('device process killed finally', device)
-    if device in streams: del streams[device]
 
     pproc = ports.get(cam)
     if pproc and proc != pproc:
         print('killing cam process', pproc, cam)
+        if cam in ports: del ports[cam]
         try:
             pproc.kill()
         except:
@@ -126,7 +136,6 @@ def kill_stream(device, cam):
         # await asyncio.sleep(2)
         # pproc._transport.close()
         # print('cam process killed finally', cam)
-    if cam in ports: del ports[cam]
     print('kill_stream done')
 
 # Exported functions
@@ -146,4 +155,4 @@ async def select_camera(request):
 
     kill_stream(device, cam)
 
-    asyncio.create_task(start_video_stream(device, cam))
+    asyncio.create_task(run_video_streamer(device, cam))

@@ -79,8 +79,10 @@ RUN python3 -m pip install -r requirements.txt
 COPY web /app/web
 RUN cd web && . /root/.bashrc && bun i && bun run build
 
-COPY backend /app/backend
-RUN cd backend && bun i --frozen-lockfile --production && bun run build
+COPY backend/package.json /app/backend/
+RUN cd /app/backend && bun i
+
+COPY backend/* /app/backend/
 
 RUN rm -rf /usr/src/ultralytics/ultralytics/assets/*
 

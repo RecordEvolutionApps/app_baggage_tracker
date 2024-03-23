@@ -70,40 +70,46 @@ def overlay_text(frame, text, position=(10, 30), font_scale=1, color=(0, 255, 0)
 
 
 async def main():
-    start_time = time.time()
-    frame_count = 0
-    fps = 0
-    global out
-    global pub
-    while True:
-        success, img = cap.read()
-        if not success:
-            await sleep(1)
-            continue
-        results = model(img, stream=True, imgsz=RESOLUTION_X, conf=0.1, iou=0.7, classes=[2, 3, 5, 7])
-        frame_count += 1
-        elapsed_time = time.time() - start_time
-        for r in results:
-            annotated_frame = r.plot(line_width=1, probs=False, font_size=14)
-            # Update frame rate every second
-            if elapsed_time >= 1.0:
-                fps = frame_count / elapsed_time
-                await publishImage(annotated_frame)
-                await publishClassCount(r)
-                start_time = time.time()
-                frame_count = 0  
+    try:
+        print('starting main video loop...')
+        start_time = time.time()
+        frame_count = 0
+        fps = 0
+        global out
+        global pub
+        while True:
+            success, img = cap.read()
+            if not success:
+                await sleep(1)
+                continue
+            results = model(img, stream=True, imgsz=RESOLUTION_X, conf=0.1, iou=0.7, classes=[2, 3, 5, 7])
+            frame_count += 1
+            elapsed_time = time.time() - start_time
+            for r in results:
+                annotated_frame = r.plot(line_width=1, probs=False, font_size=14)
+                # Update frame rate every second
+                if elapsed_time >= 1.0:
+                    fps = frame_count / elapsed_time
+                    await publishImage(annotated_frame)
+                    await publishClassCount(r)
+                    start_time = time.time()
+                    frame_count = 0  
 
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        overlay_text(annotated_frame, f'Timestamp: {current_time}', position=(10, 30))
-            
-        overlay_text(annotated_frame, f'FPS: {fps:.2f}', position=(10, 60))
-        out.write(annotated_frame)
-        if cv2.waitKey(1) == ord('q'):
-            break
-        await sleep(0.1)
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+            overlay_text(annotated_frame, f'Timestamp: {current_time}', position=(10, 30))
+                
+            overlay_text(annotated_frame, f'FPS: {fps:.2f}', position=(10, 60))
+            out.write(annotated_frame)
+            if cv2.waitKey(1) == ord('q'):
+                break
+            await sleep(0.1)
 
-    cap.release()
-    cv2.destroyAllWindows()
+        cap.release()
+        cv2.destroyAllWindows()
+    except Exception as e:
+        print('error in the video loop, exiting', e)
+        import sys
+        sys.exit(1)
 
 async def publishImage(frame):
     _, encoded_frame = cv2.imencode('.jpg', frame)
@@ -133,10 +139,10 @@ async def publishClassCount(result):
     print(payload)
     await rw.publish_to_table('detections', payload)
 
-rw = Reswarm(mainFunc=main)
+rw = Reswarm()
 
 if __name__ == "__main__":
     # run the main coroutine
-    # get_event_loop().create_task(main())
+    task = get_event_loop().create_task(main())
     # run the reswarm component
     rw.run()

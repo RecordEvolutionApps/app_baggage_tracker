@@ -7,14 +7,14 @@
     "build": "bun build src/index.ts --compile --outfile videoserve"
   },
   "dependencies": {
-    "@elysiajs/cors": "^0.7.2",
-    "@elysiajs/html": "^0.7.3",
-    "@elysiajs/static": "^0.7.1",
-    "elysia": "latest",
-    "usb": "^2.11.0"
+    "@elysiajs/cors": "^1.0.2",
+    "@elysiajs/html": "^1.0.2",
+    "@elysiajs/static": "^1.0.2",
+    "elysia": "^1.0.7",
+    "usb": "^2.12.1"
   },
   "devDependencies": {
-    "bun-types": "latest"
+    "@types/bun": "^1.0.10"
   },
   "module": "src/index.js"
 }
