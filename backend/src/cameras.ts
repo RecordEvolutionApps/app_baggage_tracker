@@ -1,7 +1,7 @@
 
 
 
-import type { BunFile, Subprocess } from "bun";
+import { BunFile, Subprocess } from "bun";
 import type { Context } from "elysia";
 
 const streams = new Map()
@@ -10,18 +10,25 @@ let streamSetup: any = {}
 const streamSetupFile: BunFile = Bun.file("/data/streamSetup.json");
 
 async function initStreams() {
-    const exists = await streamSetupFile.exists();
     const camList = await getCameras()
+    if (!camList.length) {
+        console.log('NO CAMERA DETECTED')
+        return
+    }
+    const firstCam = camList[0]
+    
+    const exists: boolean = await streamSetupFile.exists();
     if (!exists) {
-        if (!camList.length) {
-            console.log('NO CAMERA DETECTED')
-            return
-        }
-        const firstCam = camList[0]
-        runVideoStream(firstCam.path, 'frontCam')
-
-    } 
-    streamSetup = await streamSetupFile.json();
+        Bun.write(streamSetupFile, JSON.stringify({frontCam: firstCam.path}))
+    }
+    
+    try {
+        streamSetup = await streamSetupFile.json()
+    } catch(err) {
+        console.error('errrrrr', err)
+        Bun.write(streamSetupFile, JSON.stringify({frontCam: firstCam.path}))
+        streamSetup = await streamSetupFile.json()
+    }
 
     console.log('StreamSetup', streamSetup)
     for (const [cam, dev] of Object.entries(streamSetup)) {
@@ -99,31 +106,31 @@ async function killVideoStream(device: string, cam: string) {
 
 export async function getCameras() {
 
-  const proc = Bun.spawn(["python3", "-u", "video/listCameras.py"], {
-        env: { ...process.env}, // specify environment variables
-        onExit(proc, exitCode, signalCode, error) {
-          if (error)
-            console.log('Failed to get Camera Lists', error)
-        },
-      });
+const proc = Bun.spawn(["python3", "-u", "video/listCameras.py"], {
+env: { ...process.env}, // specify environment variables
+onExit(proc, exitCode, signalCode, error) {
+if (error)
+console.log('Failed to get Camera Lists', error)
+},
+});
 
-  const text = await new Response(proc.stdout).text();
-  const cameraList: any[] = JSON.parse(text);
-  console.log('CAMLIST', cameraList)
+const text = await new Response(proc.stdout).text();
+const cameraList: any[] = JSON.parse(text);
+console.log('CAMLIST', cameraList)
   
-  return cameraList;
+return cameraList;
   // return [
-  //     {
+      //     {
   //       path: '/dev/video0',
-  //       name: 'Logitech HD Webcam',
-  //     },
-  //     {
+        //       name: 'Logitech HD Webcam',
+      //     },
+      //     {
   //       path: '/dev/video1',
-  //       name: 'Canon EOS 5D Mark IV',
-  //     },
-  //     {
+        //       name: 'Canon EOS 5D Mark IV',
+      //     },
+      //     {
   //       path: '/dev/video2',
-  //       name: 'Microsoft LifeCam HD-3000',
-  //     },
-  //   ]
+        //       name: 'Microsoft LifeCam HD-3000',
+      //     },
+    //   ]
 }
