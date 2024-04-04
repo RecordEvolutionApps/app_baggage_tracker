@@ -82,7 +82,7 @@ async def main():
             if not success:
                 await sleep(1)
                 continue
-            results = model(img, stream=True, imgsz=RESOLUTION_X, conf=0.1, iou=0.7, classes=[2, 3, 5, 7])
+            results = model(img, stream=True, imgsz=RESOLUTION_X, conf=0.1, iou=0.7) #, classes=[2, 3, 5, 7])
             frame_count += 1
             elapsed_time = time.time() - start_time
             for r in results:
