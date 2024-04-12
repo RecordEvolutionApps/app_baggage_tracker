@@ -82,7 +82,7 @@ async getCameras() {
       <md-outlined-select id="selector" @change=${this.selectCamera} @opening=${this.getCameras}>
         ${repeat(this.camList, c => c.path, c => html`
         <md-select-option value="${c.path}">
-          <div slot="headline">${c.path}</div>
+          <div slot="headline">${c.name} - ${c.id}</div>
         </md-select-option>
         `)}
       </md-outlined-select>
