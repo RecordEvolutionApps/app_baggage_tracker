@@ -2,7 +2,6 @@
 
 
 import { BunFile, Subprocess } from "bun";
-import type { BunFile, Subprocess } from "bun";
 import { $ } from "bun";
 import type { Context } from "elysia";
 
@@ -13,7 +12,7 @@ const streamSetupFile: BunFile = Bun.file("/data/streamSetup.json");
 
 async function initStreams() {
     const camList = await getCameras()
-    console.log({ camList })
+    console.log("CAMERA LIST", { camList })
 
     if (!camList.length) {
         console.log('NO CAMERA DETECTED')
@@ -22,21 +21,22 @@ async function initStreams() {
     const firstCam = camList[0]
     
     const exists: boolean = await streamSetupFile.exists();
+    console.log("setup file exists: ", exists)
     if (!exists) {
-        Bun.write(streamSetupFile, JSON.stringify({frontCam: firstCam.id}))
+        await Bun.write(streamSetupFile, JSON.stringify({ frontCam: firstCam }))
     }
     
     try {
         streamSetup = await streamSetupFile.json()
     } catch(err) {
         console.error('errrrrr', err)
-        Bun.write(streamSetupFile, JSON.stringify({frontCam: firstCam.id}))
+        await Bun.write(streamSetupFile, JSON.stringify({ frontCam: firstCam }))
         streamSetup = await streamSetupFile.json()
     }
 
     console.log('StreamSetup', streamSetup)
-    for (const [cam, dev] of Object.entries(streamSetup)) {
-        runVideoStream(dev as string, cam as string)
+    for (const [camName, { id }] of Object.entries(streamSetup)) {
+        runVideoStream(id, camName)
     }
 }
 
@@ -49,59 +49,72 @@ export function getStreamSetup(ctx: Context): any {
 }
 
 export const selectCamera = async (ctx: Context) => {
-    const { device, cam }: { device: string, cam: string } = JSON.parse(ctx.body as any)
-    console.log('selected camera', { device, cam }, [...streams.keys()], [...ports.keys()])
+    const { id, deviceName }: { id: string, deviceName: string } = JSON.parse(ctx.body as any)
+    console.log('selected camera', { id, deviceName })
 
-    streamSetup[cam] = device
+    const camList = await getCameras()
+    const cameraDev = camList.find((c) => c.id === id)
+
+    streamSetup[deviceName] = cameraDev
     await Bun.write(streamSetupFile, JSON.stringify(streamSetup));
 
-    await killVideoStream(device, cam)
+    await killVideoStream(id, deviceName)
 
-    runVideoStream(device, cam)
+    runVideoStream(id, deviceName)
 }
 
-async function runVideoStream(device: string, cam: string) {
-    console.log('running video stream for ', device, cam)
-    streams.set(device, 'starting')
-    ports.set(cam, 'starting')
-    while(streams.get(device) || ports.get(cam)) {
-        await startVideoStream(device, cam)
+async function runVideoStream(deviceId: string, camName: string) {
+    console.log('running video stream for ', deviceId, camName)
+
+    await startVideoStream(deviceId, camName)
+}
+
+async function startVideoStream(deviceId: string, camName: string) {
+    const camList = await getCameras()
+    const cameraDev = camList.find((c: any) => c.id === deviceId)
+
+    if (!cameraDev) {
+        console.log("Unable to find Device path for ID", deviceId)
+        return
     }
-}
 
-async function startVideoStream(device: string, cam: string) {
-    const proc = Bun.spawn(["python3", "-u", "video/videoStream.py", device, cam], {
-        env: { ...process.env},
+    const proc = Bun.spawn(["python3", "-u", "video/videoStream.py", cameraDev.path, camName], {
+        env: { ...process.env },
+        onExit: async (proc, exitCode, signalCode, error) => {
+            console.log("Proccess exited with", { exitCode, signalCode, error })
+            if (exitCode > 0) {
+                await startVideoStream(deviceId, camName)
+            }
+        },
         stderr: "inherit",
         stdout: "inherit"
     });
 
-    streams.set(device, proc)
-    ports.set(cam, proc)
-   
+    streams.set(deviceId, proc)
+    ports.set(camName, proc)
+
     await proc.exited
 
     console.error('Python video stream exited', proc.exitCode, proc.signalCode)
-
 }
 
-async function killVideoStream(device: string, cam: string) {
-    console.log('Killing video stream (if exists) on ', device, cam)
+async function killVideoStream(deviceId: string, deviceName: string) {
+    console.log('Killing video stream (if exists) on ', deviceId, deviceName)
 
-    const proc: Subprocess = streams.get(device)
+    const proc: Subprocess = streams.get(deviceId)
 
     if (proc) {
         console.log('killing device process', proc)
-        streams.delete(device)
+        streams.delete(deviceId)
         proc.kill()
         await proc.exited
     }
 
-    const pproc: Subprocess = ports.get(cam)
+    const pproc: Subprocess = ports.get(deviceName)
 
     if (pproc) {
         console.log('killing cam process', pproc)
-        ports.delete(cam)
+        ports.delete(deviceName)
         pproc.kill()
         await pproc.exited
     }
@@ -111,7 +124,7 @@ export async function getCameras() {
     const camerasOutput = await $`video/list-cameras.sh`.text()
     return camerasOutput.split("\n").slice(0, -1).map((v: any) => {
         const [path, name, DEVPATH] = v.split(":")
-        const id = DEVPATH.replace("/devices/platform/", "").split("/video4linux")
+        const [id] = DEVPATH.replace("/devices/platform/", "").split("/video4linux") ?? []
         return { path, name, id }
     })
 }

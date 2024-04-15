@@ -29,8 +29,10 @@ export class CameraSelector extends LitElement {
           'Accept': 'application/json'
         }
       }).then(res => res.json())
+
       console.log('selected', selected)
-      this.selector.select(selected.device)
+
+      this.selector.select(selected.device.id)
   }
 
 async getCameras() {
@@ -42,15 +44,17 @@ async getCameras() {
       }).then(res => res.json())
 
       console.log('CAMLIST', this.camList)
+
       await this.updateComplete
 }
   async selectCamera() {
     const value = this.selector?.value
     console.log('selected', value, this.id)
     const payload = {
-      device: value,
-      cam: this.id
+      id: value,
+      deviceName: this.id
     }
+  
     await fetch(`${this.basepath}/cameras/select`, {
       method: 'POST',
       headers: {
@@ -79,10 +83,10 @@ async getCameras() {
 
   render() {
     return html`
-      <md-outlined-select id="selector" @change=${this.selectCamera} @opening=${this.getCameras}>
-        ${repeat(this.camList, c => c.path, c => html`
-        <md-select-option value="${c.path}">
-          <div slot="headline">${c.name} - ${c.id}</div>
+      <md-outlined-select id="selector" @change=${this.selectCamera}>
+        ${repeat(this.camList, c => c.id, c => html`
+        <md-select-option value="${c.id}">
+          <div slot="headline">${c.name} (${c.id})</div>
         </md-select-option>
         `)}
       </md-outlined-select>
