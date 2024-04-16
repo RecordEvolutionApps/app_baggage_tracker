@@ -132,8 +132,9 @@ async def main():
                 # Update frame rate every second
                 if elapsed_time >= 1.0:
                     fps = frame_count / elapsed_time
-                    # await publishImage(annotated_frame)
-                    # await publishClassCount(r)
+                    publishImage(annotated_frame)
+                    publishClassCount(r)
+
                     start_time = time.time()
                     frame_count = 0  
 
