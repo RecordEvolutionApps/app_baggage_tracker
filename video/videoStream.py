@@ -145,7 +145,7 @@ async def main():
             if cv2.waitKey(1) == ord('q'):
                 break
 
-            await sleep(0.1)
+            await sleep(0)
 
         cap.release()
         cv2.destroyAllWindows()
