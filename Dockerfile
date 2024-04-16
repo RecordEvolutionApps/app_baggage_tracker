@@ -60,14 +60,6 @@ ENV PATH="/root/.bun/bin:${PATH}"
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash \
 	&& . /root/.bashrc && nvm install 18.0.0
 
-# RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt -O yolov8.pt
-RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8s-obb.pt -O yolov8s-obb.pt 
-RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8s.pt -O yolov8s.pt 
-# RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8m.pt -O yolov8.pt 
-# RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8l.pt -O yolov8.pt 
-RUN wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt -O yolov8x.pt
-RUN wget https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov9c.pt -O yolov9c.pt
-
 COPY requirements.txt /app/requirements.txt
 RUN python3 -m pip install -r requirements.txt
 
@@ -90,5 +82,7 @@ COPY janus/* /usr/local/etc/janus/
 COPY entrypoint.sh .reswarm/env-template.yml .reswarm/port-template.yml /app/
 
 COPY video /app/video
+
+RUN mkdir -p /app/download
 
 CMD ["./entrypoint.sh"]

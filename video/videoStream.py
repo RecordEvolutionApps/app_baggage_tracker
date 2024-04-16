@@ -11,15 +11,62 @@ from reswarm import Reswarm
 from collections import Counter
 from datetime import datetime
 import polars as pl
+import shutil
+from pathlib import Path
 from pprint import pprint
 import base64
 import torch
 import functools
+import urllib.request
 print = functools.partial(print, flush=True)
 
-# time.sleep(100)
-# print('exiting now')
-# exit(0)
+def downloadModel(model_name, model_path):
+    print(f'Downloading Pytorch model {model_name}...')
+    urllib.request.urlretrieve(f'https://github.com/ultralytics/assets/releases/download/v0.0.0/{model_name}.pt', model_path)
+    print(f'Download complete!')
+
+def getModel(model_name):
+    pytorch_model_path = f'/app/{model_name}.pt'
+    tensorrt_initial_model_path = f'/app/{model_name}.engine'
+
+    stored_pytorch_model_path = f'/data/{model_name}.pt'
+    stored_tensorrt_model_path = f'/data/{model_name}-{RESOLUTION_X}.engine'
+    model_download_path = f'/app/download/{model_name}.pt'
+
+    stored_tensorrt_file = Path(stored_tensorrt_model_path)
+    if stored_tensorrt_file.is_file():
+        print(f'Found existing TensorRT Model for {model_name}')
+        return YOLO(stored_tensorrt_model_path)
+
+    pytorch_model_file = Path(stored_pytorch_model_path)
+    if not pytorch_model_file.is_file():
+        print('Original Pytorch model was not found, will download model')
+
+        downloadModel(model_name, model_download_path)
+
+        print('Copying downloaded Pytorch model to /app directory')
+        # Move to /app directory to then export it, in case the export fails we don't have any bad data in the /data folder
+        shutil.copy(model_download_path, pytorch_model_path)
+
+        print('Moving downloaded Pytorch model to /data directory')
+        shutil.move(model_download_path, stored_pytorch_model_path)
+    else:
+        print('Original Pytorch model was found, copying to main directory to avoid corrupted items in /data')
+
+        print('Copying existing Pytorch model to /app directory')
+        # Copy to /app directory to then export it, in case the export fails we don't have any bad data in the /data folder
+        shutil.copyfile(stored_pytorch_model_path, pytorch_model_path)
+    
+    print("Exporting Pytorch model from /app directory into TensorRT....")
+    pytorch_model = YOLO(pytorch_model_path)
+    pytorch_model.export(format='engine', imgsz=RESOLUTION_X)
+    print("Model exported!")
+
+    print(f'Moving exported TensorRT model {model_name} to data folder...')
+    shutil.move(tensorrt_initial_model_path, stored_tensorrt_model_path)
+
+    return YOLO(stored_tensorrt_model_path)
+
 DEVICE_KEY = os.environ.get('DEVICE_KEY')
 DEVICE_URL = os.environ.get('DEVICE_URL')
 TUNNEL_PORT = os.environ.get('TUNNEL_PORT')
@@ -36,7 +83,7 @@ portMap = {"frontCam": 5004,
            "rightCam": 5006,
            "backCam": 5007}
 
-
+OBJECT_MODEL = os.environ.get('OBJECT_MODEL')
 RESOLUTION_X = int(os.environ.get('RESOLUTION_X', 640))
 RESOLUTION_Y = int(os.environ.get('RESOLUTION_Y', 480))
 FRAMERATE = int(os.environ.get('FRAMERATE', 20))
@@ -49,12 +96,7 @@ cap.set(3, RESOLUTION_X)
 cap.set(4, RESOLUTION_Y)
 
 print("CUDA available:", torch.cuda.is_available(), 'GPUs', torch.cuda.device_count())
-# model
-model = YOLO("/app/yolov9c.pt")
-# model = torch.load("/app/yolov9-c.pt")
-model.fuse()
-print('----------Model Device -----------')
-print(model.device)
+model = getModel(OBJECT_MODEL)
 
 outputFormat = " videoconvert ! vp8enc deadline=2 threads=4 keyframe-max-dist=6 ! video/x-vp8 ! rtpvp8pay pt=96"
 # outputFormat = "nvvidconv ! nvv4l2h264enc maxperf-enable=1 insert-sps-pps=true insert-vui=true ! h264parse ! rtph264pay"
@@ -68,7 +110,6 @@ out = cv2.VideoWriter(writerStream, 0, FRAMERATE, (RESOLUTION_X, RESOLUTION_Y))
 def overlay_text(frame, text, position=(10, 30), font_scale=1, color=(0, 255, 0), thickness=2):
     cv2.putText(frame, text, position, cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, thickness, cv2.LINE_AA)
 
-
 async def main():
     try:
         print('starting main video loop...')
@@ -77,12 +118,14 @@ async def main():
         fps = 0
         global out
         global pub
-        while True:
+        while cap.isOpened():
             success, img = cap.read()
+            print("Read Cap")
             if not success:
-                await sleep(1)
+                print("Cap not successful..")
                 continue
-            results = model(img, stream=True, imgsz=RESOLUTION_X, conf=0.1, iou=0.7) #, classes=[2, 3, 5, 7])
+
+            results = model(img, imgsz=RESOLUTION_X, stream=True, conf=0.1, iou=0.7) #, classes=[2, 3, 5, 7])
             frame_count += 1
             elapsed_time = time.time() - start_time
             for r in results:
@@ -102,7 +145,6 @@ async def main():
             out.write(annotated_frame)
             if cv2.waitKey(1) == ord('q'):
                 break
-            await sleep(0.1)
 
         cap.release()
         cv2.destroyAllWindows()
