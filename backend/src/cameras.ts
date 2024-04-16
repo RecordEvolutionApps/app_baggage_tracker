@@ -45,7 +45,7 @@ initStreams()
 export function getStreamSetup(ctx: Context): any {
     const params = ctx.query as any
     console.log('getStreamSetup', params)
-    return { "device": streamSetup[params.cam] }
+    return { "device": streamSetup[params.cam], "width": process.env.RESOLUTION_X, "height": process.env.RESOLUTION_Y }
 }
 
 export const selectCamera = async (ctx: Context) => {

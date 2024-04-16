@@ -86,23 +86,24 @@ portMap = {"frontCam": 5004,
 OBJECT_MODEL = os.environ.get('OBJECT_MODEL')
 RESOLUTION_X = int(os.environ.get('RESOLUTION_X', 640))
 RESOLUTION_Y = int(os.environ.get('RESOLUTION_Y', 480))
-FRAMERATE = int(os.environ.get('FRAMERATE', 20))
+FRAMERATE = int(os.environ.get('FRAMERATE', 30))
 
 device = args.device
-gstring = f"v4l2src device={device} ! video/x-raw, width={RESOLUTION_X},height={RESOLUTION_Y} ! videoconvert ! appsink "
-print('CAMERA USED:' + device[-1])
+
+model = getModel(OBJECT_MODEL)
+
+print('CAMERA USED:' + device)
 cap = cv2.VideoCapture(int(device[-1]))
 cap.set(3, RESOLUTION_X)
 cap.set(4, RESOLUTION_Y)
 
-print("CUDA available:", torch.cuda.is_available(), 'GPUs', torch.cuda.device_count())
-model = getModel(OBJECT_MODEL)
+# print("CUDA available:", torch.cuda.is_available(), 'GPUs', torch.cuda.device_count())
 
 outputFormat = " videoconvert ! vp8enc deadline=2 threads=4 keyframe-max-dist=6 ! video/x-vp8 ! rtpvp8pay pt=96"
 # outputFormat = "nvvidconv ! nvv4l2h264enc maxperf-enable=1 insert-sps-pps=true insert-vui=true ! h264parse ! rtph264pay"
 
 writerStream = "appsrc do-timestamp=true ! " + outputFormat + " ! udpsink host=127.0.0.1 port=" + str(portMap[args.cam])
-print(writerStream)
+# print(writerStream)
 
 out = cv2.VideoWriter(writerStream, 0, FRAMERATE, (RESOLUTION_X, RESOLUTION_Y))
 
@@ -120,12 +121,10 @@ async def main():
         global pub
         while cap.isOpened():
             success, img = cap.read()
-            print("Read Cap")
             if not success:
-                print("Cap not successful..")
                 continue
 
-            results = model(img, imgsz=RESOLUTION_X, stream=True, conf=0.1, iou=0.7) #, classes=[2, 3, 5, 7])
+            results = model(img, imgsz=RESOLUTION_X, stream=True, conf=0.1, iou=0.7, verbose=False) #, classes=[2, 3, 5, 7])
             frame_count += 1
             elapsed_time = time.time() - start_time
             for r in results:
@@ -133,8 +132,8 @@ async def main():
                 # Update frame rate every second
                 if elapsed_time >= 1.0:
                     fps = frame_count / elapsed_time
-                    await publishImage(annotated_frame)
-                    await publishClassCount(r)
+                    # await publishImage(annotated_frame)
+                    # await publishClassCount(r)
                     start_time = time.time()
                     frame_count = 0  
 

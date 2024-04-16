@@ -13,11 +13,10 @@
 #     description: The device path number of the camera. (e.g. in case the camera is attached to /dev/video0 then the number would be 0)
 #     min: 0
 
-
 FRAMERATE:
     label: Framerate
     type: numeric
-    defaultValue: 9
+    defaultValue: 10
     description: The Frame rate provided in the output video. (Should be a realistic estimate.)
     unit: frames per second
     max: 200
@@ -25,13 +24,13 @@ FRAMERATE:
 OBJECT_MODEL:
     label: Model
     type: text
-    defaultValue: "yolov8m"
+    defaultValue: "yolov8s"
     description: YOLO Object Detection Model 
     valueList: ["yolov8n", "yolov8s", "yolov8m", "yolov8l", "yolov8x"]  # Renders a dropdown field allowing the selection from a list of values.  (number[] | string[])
 RESOLUTION_X:
     label: Width
     type: numeric
-    defaultValue: 640
+    defaultValue: 1280
     description: Horizontal Resolution
     unit: pixel
     min: 1

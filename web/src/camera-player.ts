@@ -8,12 +8,39 @@ export class CameraPlayer extends LitElement {
   
   @property({ type: String }) label = 'Front';
   @property({ type: String }) id = 'frontCam';
+  basepath: string
 
+  width: string
+  height: string
   videoElement?: HTMLVideoElement
 
-  protected firstUpdated(): void {
-      this.videoElement = this.shadowRoot?.getElementById('video') as HTMLVideoElement
-      this.dispatchEvent(new CustomEvent('video-ready'))
+  constructor() {
+    super()
+    this.basepath = window.location.protocol + '//' + window.location.host
+    this.width = "1920"
+    this.height = "1080"
+  }
+
+  protected async firstUpdated() {
+    this.videoElement = this.shadowRoot?.getElementById('video') as HTMLVideoElement
+    
+    try {
+      const { width, height } = await fetch(`${this.basepath}/cameras/setup?cam=${this.id}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      }).then(res => res.json())
+
+      this.width = width
+      this.height = height
+    } catch (error) {
+      console.error("Failed to get cameras", error)
+    } finally {
+      this.requestUpdate()
+    }
+
+    this.dispatchEvent(new CustomEvent('video-ready'))
   }
 
   static styles = css`
@@ -23,11 +50,6 @@ export class CameraPlayer extends LitElement {
       align-items: center;
       flex: 1;
       position: relative;
-    }
-
-    video {
-        width: 100%;
-        height: auto;
     }
 
     nav {
@@ -49,7 +71,7 @@ export class CameraPlayer extends LitElement {
         <div>${this.label}</div>
         <camera-selector .id=${this.id} label="Choose Camera"></camera-selector>
       </nav>
-      <video id="video" autoplay controls muted playsinline width="1920" height="1080"></video>
+      <video id="video" autoplay controls muted playsinline width="${this.width}" height="${this.height}"></video>
     `;
   }
 }
