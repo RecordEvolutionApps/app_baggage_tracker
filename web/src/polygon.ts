@@ -1,6 +1,6 @@
 let polygonID = 0
 
-class Polygon {
+export class Polygon {
     public id: number
     public label: string = ""
     public points: { x: number, y: number }[] = []
@@ -54,7 +54,7 @@ class Polygon {
     }
 }
 
-class PolygonManager {
+export class PolygonManager {
 
     polygons: Polygon[] = []
 

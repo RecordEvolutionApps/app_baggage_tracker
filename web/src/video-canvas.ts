@@ -1,6 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { property, customElement } from 'lit/decorators.js';
-import './polygon.js'
+import { PolygonManager, Polygon } from './polygon.js'
 
 @customElement('video-canvas')
 export class VideoCanvas extends LitElement {
@@ -45,13 +45,26 @@ export class VideoCanvas extends LitElement {
     // Draw Polygons
     const { polygons } = this.polygonManager
     for (const polygon of polygons) {
-      const polygonPoints = this.polygon.getPoints()
-      for (const { x, y } of polygonPoints) {
-        context.beginPath();
-        context.moveTo(x, y);
-        context.lineTo(x, y);
-        context.stroke();
+      const polygonPoints = polygon.getPoints()
+
+      if (polygonPoints.length < 2) continue
+
+      // Set line width
+      context.lineWidth = 10;
+
+      // Start drawing
+      context.beginPath();
+
+      // Move to the first point
+      context.moveTo(polygonPoints[0].x, polygonPoints[0].y);
+
+      // Connect each point with a line
+      for (var i = 1; i < polygonPoints.length; i++) {
+        context.lineTo(polygonPoints[i].x, polygonPoints[i].y);
       }
+
+      // Draw the line
+      context.stroke();
     }
 
     this.animationFrameId = window.requestAnimationFrame(this.step.bind(this))
