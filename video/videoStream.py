@@ -171,7 +171,7 @@ async def publishClassCount(result):
 
     df = pl.DataFrame({"class": classes})
     agg = df.group_by("class").len()
-    print(agg)
+    # print(agg)
     now = datetime.now().astimezone().isoformat()
     payload = {"tsp": now}
     for row in agg.rows():
@@ -179,7 +179,7 @@ async def publishClassCount(result):
 
     payload["videolink"] = f"https://{DEVICE_KEY}-traffic-1100.app.record-evolution.com"
     payload["devicelink"] = DEVICE_URL
-    print(payload)
+    # print(payload)
     await rw.publish_to_table('detections', payload)
 
 rw = Reswarm()

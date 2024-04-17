@@ -1,44 +1,55 @@
 import { LitElement, html, css } from 'lit';
-import { property, customElement } from 'lit/decorators.js';
-import './camera-player.js'
+import { property, customElement, state } from 'lit/decorators.js';
 import './camera-selector.js'
+import './video-canvas.js'
 
 @customElement('camera-player')
 export class CameraPlayer extends LitElement {
-  
+
   @property({ type: String }) label = 'Front';
   @property({ type: String }) id = 'frontCam';
   basepath: string
 
-  width: string
-  height: string
+  @state()
+  camera: any;
+
+  animation_handle: any;
+  width: number
+  height: number
   videoElement?: HTMLVideoElement
+  canvasElement?: HTMLCanvasElement;
 
   constructor() {
     super()
     this.basepath = window.location.protocol + '//' + window.location.host
-    this.width = "1920"
-    this.height = "1080"
+    this.width = 1920
+    this.height = 1080
   }
 
-  protected async firstUpdated() {
-    this.videoElement = this.shadowRoot?.getElementById('video') as HTMLVideoElement
-    
+  async getCameraMetadata() {
     try {
-      const { width, height } = await fetch(`${this.basepath}/cameras/setup?cam=${this.id}`, {
+      const selected = await fetch(`${this.basepath}/cameras/setup?cam=${this.id}`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json'
         }
       }).then(res => res.json())
 
-      this.width = width
-      this.height = height
+      this.width = selected.width
+      this.height = selected.height
+      this.camera = selected
+
     } catch (error) {
       console.error("Failed to get cameras", error)
     } finally {
       this.requestUpdate()
     }
+  }
+
+  protected async firstUpdated() {
+    this.videoElement = this.shadowRoot?.getElementById('video') as HTMLVideoElement
+
+    this.getCameraMetadata()
 
     this.dispatchEvent(new CustomEvent('video-ready'))
   }
@@ -69,9 +80,10 @@ export class CameraPlayer extends LitElement {
     return html`
       <nav>
         <div>${this.label}</div>
-        <camera-selector .id=${this.id} label="Choose Camera"></camera-selector>
+        <camera-selector .camera=${this.camera} .id=${this.id} label="Choose Camera"></camera-selector>
       </nav>
-      <video id="video" autoplay controls muted playsinline width="${this.width}" height="${this.height}"></video>
+      <video-canvas .video=${this.videoElement} .width=${this.width} .height=${this.height}></video-canvas>
+      <video id="video" autoplay controls muted playsinline hidden></video>
     `;
   }
 }

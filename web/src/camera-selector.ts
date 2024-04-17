@@ -1,6 +1,6 @@
 import { LitElement, html, css } from 'lit';
-import { state, customElement } from 'lit/decorators.js';
-import {repeat} from 'lit/directives/repeat.js';
+import { state, property, customElement } from 'lit/decorators.js';
+import { repeat } from 'lit/directives/repeat.js';
 
 import '@material/web/select/outlined-select.js'
 import '@material/web/select/select-option.js'
@@ -9,44 +9,37 @@ import { MdOutlinedSelect } from '@material/web/select/outlined-select.js';
 @customElement('camera-selector')
 export class CameraSelector extends LitElement {
 
+  @property({ type: Object }) camera: any;
+
   @state()
   private camList: any[] = [];
   basepath: string
   selector?: MdOutlinedSelect
   constructor() {
     super()
-    this.basepath = window.location.protocol + '//' + window.location.host 
+    this.basepath = window.location.protocol + '//' + window.location.host
   }
+
   async firstUpdated() {
-      
-      this.selector = this.shadowRoot?.getElementById('selector') as MdOutlinedSelect
+    this.selector = this.shadowRoot?.getElementById('selector') as MdOutlinedSelect
 
-      await this.getCameras()
+    await this.getCameras()
 
-      const selected = await fetch(`${this.basepath}/cameras/setup?cam=${this.id}`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json'
-        }
-      }).then(res => res.json())
-
-      console.log('selected', selected)
-
-      this.selector.select(selected.device.id)
+    this.selector.select(this.camera?.device?.id)
   }
 
-async getCameras() {
-      this.camList = await fetch(`${this.basepath}/cameras`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json'
-        }
-      }).then(res => res.json())
+  async getCameras() {
+    this.camList = await fetch(`${this.basepath}/cameras`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json'
+      }
+    }).then(res => res.json())
 
-      console.log('CAMLIST', this.camList)
+    console.log('CAMLIST', this.camList)
 
-      await this.updateComplete
-}
+    await this.updateComplete
+  }
   async selectCamera() {
     const value = this.selector?.value
     console.log('selected', value, this.id)
@@ -54,13 +47,13 @@ async getCameras() {
       id: value,
       deviceName: this.id
     }
-  
+
     await fetch(`${this.basepath}/cameras/select`, {
       method: 'POST',
       headers: {
         'Accept': 'application/json'
       },
-      body: JSON.stringify(payload), 
+      body: JSON.stringify(payload),
     })
   }
 
