@@ -145,7 +145,7 @@ async def main():
             if cv2.waitKey(1) == ord('q'):
                 break
 
-            await sleep(0) # to avoid blocking event loop
+            await sleep(0) # Give other ask time to run, not a hack: https://superfastpython.com/what-is-asyncio-sleep-zero/#:~:text=You%20can%20force%20the%20current,before%20resuming%20the%20current%20task.
 
         cap.release()
         cv2.destroyAllWindows()
