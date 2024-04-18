@@ -4,6 +4,11 @@ import { PolygonManager, Polygon } from './polygon.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { classMap } from 'lit/directives/class-map.js';
 
+import '@material/web/list/list-item.js';
+import '@material/web/list/list.js';
+import '@material/web/icon/icon.js';
+import { mainStyles } from './utils.js';
+
 @customElement('polygon-list')
 export class PolygonList extends LitElement {
   @property({ type: Object })
@@ -18,26 +23,40 @@ export class PolygonList extends LitElement {
   @state()
   selectedPolygon: Polygon | null = null;
 
-  static styles = css`
-    :host {
-      width: 128px;
-      border: 1px solid black;
-      margin-left: 24px;
-    }
+  static styles = [
+    mainStyles,
+    css`
+      :host {
+        margin-left: 24px;
+      }
 
-    ul {
-      list-style-type: none;
-      margin-block-start: 0;
-      margin-block-end: 0;
-      margin-inline-start: 0px;
-      margin-inline-end: 0px;
-      padding-inline-start: 0;
-    }
+      ul {
+        list-style-type: none;
+        margin-block-start: 0;
+        margin-block-end: 0;
+        margin-inline-start: 0px;
+        margin-inline-end: 0px;
+        padding-inline-start: 0;
+      }
 
-    .selected {
-      background-color: lightgray;
-    }
-  `;
+      .selected {
+        background-color: lightgray;
+      }
+
+      md-list-item:hover {
+        cursor: pointer;
+        background-color: #e1e1e1;
+      }
+
+      md-icon {
+        --md-icon-size: 12px;
+      }
+
+      md-icon:hover {
+        cursor: pointer;
+      }
+    `,
+  ];
 
   protected firstUpdated(
     _changedProperties: PropertyValueMap<any> | Map<PropertyKey, unknown>,
@@ -53,13 +72,14 @@ export class PolygonList extends LitElement {
     });
 
     this.polygons = this.polygonManager?.getAll();
-
-    console.log(this.polygons);
+    this.requestUpdate();
   }
 
   selectPolygon(id: number) {
     return (ev: Event) => {
       ev.preventDefault();
+      ev.stopPropagation();
+
       this.polygonManager?.select(id);
     };
   }
@@ -67,13 +87,14 @@ export class PolygonList extends LitElement {
   deletePolygon(id: number) {
     return (ev: Event) => {
       ev.preventDefault();
+      ev.stopPropagation();
       this.polygonManager?.remove(id);
     };
   }
 
   render() {
     return html`<div>
-      <ul>
+      <md-list>
         ${repeat(
           this.polygons,
           c => c.id,
@@ -81,13 +102,19 @@ export class PolygonList extends LitElement {
             const selected = this.polygonManager?.selectedPolygon?.id === c.id;
             const classes = { selected: selected };
 
-            return html`<li class=${classMap(classes)}>
-              <a href="#" @click=${this.selectPolygon(c.id)}>${c.label}</a>
-              <a href="#" @click=${this.deletePolygon(c.id)}>Delete</a>
-            </li>`;
+            return html`<md-list-item @click=${this.selectPolygon(
+              c.id,
+            )} class=${classMap(classes)}>
+              <div slot="headline">${c.label}</a>
+              </div>
+              <div slot="supporting-text">Points: ${c.points.length}</div>
+              <md-icon slot="end" @click=${this.deletePolygon(c.id)}
+                >delete</md-icon
+              >
+            </md-list-item>`;
           },
         )}
-      </ul>
+      </md-list>
     </div>`;
   }
 }

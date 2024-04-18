@@ -1,6 +1,13 @@
 import { LitElement, html, css, PropertyValueMap } from 'lit';
 import { property, customElement, state } from 'lit/decorators.js';
 import { PolygonManager, Polygon } from './polygon.js';
+import { mainStyles } from './utils.js';
+
+import '@material/web/button/elevated-button.js';
+import '@material/web/button/text-button.js';
+import '@material/web/textfield/outlined-text-field.js';
+import '@material/web/dialog/dialog.js';
+import { MdDialog } from '@material/web/dialog/dialog.js';
 
 @customElement('canvas-toolbox')
 export class CanvasToolbox extends LitElement {
@@ -16,29 +23,45 @@ export class CanvasToolbox extends LitElement {
   @state()
   selectedPolygon: Polygon | null = null;
 
+  @state()
+  maskName = '';
+
+  dialog?: MdDialog;
+
   initialized = false;
 
-  static styles = css`
-    :host {
-      min-width: 64px;
-      border: 1px solid black;
-      margin-right: 24px;
-    }
+  static styles = [
+    mainStyles,
+    css`
+      :host {
+        min-width: 64px;
+      }
 
-    ul {
-      list-style-type: none;
-      margin-block-start: 0;
-      margin-block-end: 0;
-      margin-inline-start: 0px;
-      margin-inline-end: 0px;
-      padding-inline-start: 0;
-    }
-  `;
+      ul {
+        list-style-type: none;
+        margin-block-start: 0;
+        margin-block-end: 0;
+        margin-inline-start: 0px;
+        margin-inline-end: 0px;
+        padding-inline-start: 0;
+      }
+
+      md-elevated-button {
+        width: 100%;
+      }
+
+      li {
+        margin-bottom: 16px;
+      }
+    `,
+  ];
 
   protected firstUpdated(
     _changedProperties: PropertyValueMap<any> | Map<PropertyKey, unknown>,
   ): void {
     if (!this.polygonManager) throw new Error('polygon manager not defined');
+
+    this.dialog = this.shadowRoot?.getElementById('dialog') as MdDialog;
 
     this.polygonManager.addEventListener('update', (ev: any) => {
       const { polygons, selectedPolygon } = ev.detail;
@@ -52,8 +75,29 @@ export class CanvasToolbox extends LitElement {
     this.requestUpdate();
   }
 
+  handleMaskNameInput(ev: { target: { value: string } }) {
+    if (ev.target) {
+      this.maskName = ev.target.value;
+    }
+  }
+
+  handleNameInputKeypress(ev: any) {
+    if (ev.key === 'Enter') {
+      this.dialog?.close('create');
+    }
+  }
+
   createPolygon() {
-    this.polygonManager?.create();
+    if (this.dialog?.returnValue === 'create') {
+      this.polygonManager?.create(this.maskName);
+    }
+
+    this.maskName = '';
+  }
+
+  onCreateClick() {
+    this.dialog?.show();
+    // this.polygonManager?.create();
   }
 
   undoLastLine() {
@@ -76,20 +120,59 @@ export class CanvasToolbox extends LitElement {
 
   render() {
     return html`<div>
-      <ul>
-        <li>
-          <button @click=${this.createPolygon}>Create Polygon +</button>
-        </li>
-        <li><button @click=${this.undoLastLine}>Undo</button></li>
-        <li>
-          <button
-            .disabled=${this.selectedPolygon?.committed}
-            @click=${this.commitPolygon}
+        <ul>
+          <li>
+            <md-elevated-button @click=${this.onCreateClick}>
+              Create
+              <md-icon slot="icon">add_circle</md-icon>
+            </md-elevated-button>
+          </li>
+          <li>
+            <md-elevated-button @click=${this.undoLastLine}>
+              Undo
+              <md-icon slot="icon">undo</md-icon>
+            </md-elevated-button>
+          </li>
+          <li>
+            <md-elevated-button
+              .disabled=${this.selectedPolygon?.committed ||
+              !this.selectedPolygon?.isCommitable}
+              @click=${this.commitPolygon}
+            >
+              Commit
+              <md-icon slot="icon">save</md-icon>
+            </md-elevated-button>
+          </li>
+        </ul>
+      </div>
+
+      <md-dialog @close=${this.createPolygon} id="dialog">
+        <div slot="headline">Mask name</div>
+        <form slot="content" id="create-mask-form" method="dialog">
+          <div style="display: flex; flex-direction: column;">
+            <p>Enter a name for your mask</p>
+            <md-outlined-text-field
+              label="Name"
+              @keyup=${this.handleNameInputKeypress}
+              @input=${this.handleMaskNameInput}
+              .value=${this.maskName}
+              required
+            >
+            </md-outlined-text-field>
+          </div>
+        </form>
+        <div slot="actions">
+          <md-text-button form="create-mask-form" value="cancel"
+            >Cancel</md-text-button
           >
-            Commit
-          </button>
-        </li>
-      </ul>
-    </div>`;
+          <md-text-button
+            form="create-mask-form"
+            type="submit"
+            .disabled=${this.maskName.length === 0}
+            value="create"
+            >Create</md-text-button
+          >
+        </div>
+      </md-dialog> `;
   }
 }

@@ -1,3 +1,91 @@
+import { css } from 'lit';
+
+export const mainStyles = css`
+  md-outlined-select,
+  md-outlined-text-field,
+  md-list-item,
+  md-list,
+  md-dialog,
+  md-text-button,
+  md-elevated-button {
+    --my-brand-font: sans-serif;
+    --md-ref-typeface-brand: var(--my-brand-font);
+    --md-ref-typeface-plain: var(--my-brand-font);
+    --md-outlined-text-field-input-text-font: sans-serif;
+    --md-sys-typescale-body-font: var(--my-brand-font);
+    --md-sys-typescale-display-font: var(--my-brand-font);
+    --md-sys-typescale-headline-font: var(--my-brand-font);
+    --my-sys-typescale-label-font: var(--my-brand-font);
+    --md-sys-typescale-title-font: var(--my-brand-font);
+  }
+
+  md-outlined-select::part(menu) {
+    --md-menu-container-color: #dde5eb;
+  }
+
+  md-outlined-select {
+    --md-sys-color-secondary: #78889496;
+    --md-sys-color-on-secondary: #78889496;
+    --md-sys-color-secondary-container: #78889496;
+    --md-sys-color-on-secondary-container: #78889496;
+    --md-ripple-hover-color: #788894;
+    --md-menu-item-hover-state-layer-color: #788894;
+    --md-sys-color-on-surface: #788894;
+    --md-ripple-pressed-color: #788894;
+    --md-menu-item-pressed-state-layer-color: #788894;
+    --md-outlined-select-text-field-focus-trailing-icon-color: #788894;
+    --md-outlined-field-focus-label-text-color: #334d5c;
+    --md-outlined-field-focus-outline-color: #788894;
+    --md-outlined-select-text-field-input-text-placeholder-color: #788894;
+    --md-outlined-select-text-field-outline-color: #788894;
+    --md-outlined-select-text-field-supporting-text-color: #788894;
+    --md-outlined-select-text-field-label-text-color: #334d5c;
+    --md-outlined-select-text-field-input-text-color: #334d5c;
+    --md-outlined-select-text-field-hover-supporting-text-color: #334d5c;
+    --md-outlined-select-text-field-hover-outline-color: #788894;
+    --md-outlined-select-text-field-hover-label-text-color: #334d5c;
+    --md-outlined-select-text-field-hover-input-text-color: #334d5c;
+    --md-outlined-select-text-field-focus-supporting-text-color: #334d5c;
+    --md-outlined-select-text-field-focus-outline-color: #788894;
+    --md-outlined-select-text-field-focus-label-text-color: #334d5c;
+    --md-outlined-select-text-field-focus-input-text-color: #334d5c;
+    --md-outlined-select-text-field-error-supporting-text-color: #334d5c;
+    --md-outlined-select-text-field-error-outline-color: #788894;
+    --md-outlined-select-text-field-error-label-text-color: #334d5c;
+    --md-outlined-select-text-field-error-input-text-color: #334d5c;
+    --md-outlined-select-text-field-error-hover-supporting-text-color: #334d5c;
+    --md-outlined-select-text-field-error-hover-outline-color: #788894;
+    --md-outlined-select-text-field-error-hover-label-text-color: #334d5c;
+    --md-outlined-select-text-field-error-hover-input-text-color: #334d5c;
+    --md-outlined-select-text-field-error-focus-supporting-text-color: #334d5c;
+    --md-outlined-select-text-field-error-focus-outline-color: #788894;
+    --md-outlined-select-text-field-error-focus-input-text-color: #334d5c;
+    --md-outlined-select-text-field-error-focus-label-text-color: #334d5c;
+    --md-outlined-select-text-field-disabled-supporting-text-color: #334d5c;
+    --md-outlined-select-text-field-disabled-outline-color: #788894;
+    --md-outlined-select-text-field-disabled-leading-icon-color: #788894;
+    --md-outlined-select-text-field-disabled-label-text-color: #334d5c;
+    --md-outlined-select-text-field-disabled-input-text-color: #334d5c;
+    --md-menu-item-selected-label-text-color: #334d5c;
+  }
+
+  md-outlined-text-field {
+    --md-sys-color-primary: rgb(149, 149, 149);
+    --md-outlined-text-field-label-text-color: #788894;
+    --md-outlined-text-field-input-text-placeholder-color: #788894;
+    --md-outlined-text-field-input-text-color: #243542;
+    --md-outlined-text-field-error-input-text-color: #b3261e;
+    --md-outlined-text-field-hover-label-text-color: #788894;
+    --md-outlined-text-field-hover-supporting-text-color: #334d5c;
+    --md-outlined-text-field-hover-outline-color: #788894;
+    --md-outlined-text-field-hover-input-text-color: #334d5c;
+    --md-outlined-text-field-focus-supporting-text-color: #334d5c;
+    --md-outlined-text-field-focus-outline-color: #788894;
+    --md-outlined-text-field-focus-label-text-color: #334d5c;
+    --md-outlined-text-field-focus-input-text-color: #334d5c;
+  }
+`;
+
 export function getRandomColor() {
   // Generate random values for red, green, and blue channels
   const red = Math.floor(Math.random() * 256);

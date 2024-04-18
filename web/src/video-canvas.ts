@@ -2,8 +2,10 @@ import { LitElement, html, css } from 'lit';
 import { property, customElement } from 'lit/decorators.js';
 import { PolygonManager, Polygon } from './polygon.js';
 
+import '@material/web/elevation/elevation.js';
 import './canvas-toolbox.js';
 import './polygon-list.js';
+import { mainStyles } from './utils.js';
 @customElement('video-canvas')
 export class VideoCanvas extends LitElement {
   canvasElement!: HTMLCanvasElement;
@@ -42,7 +44,7 @@ export class VideoCanvas extends LitElement {
       context.fillRect(0, 0, this.width, this.height);
 
       this.drawPolygons(context);
-    }, 1000 / 60);
+    }, 1000 / 30);
   }
 
   drawPolygons(context: CanvasRenderingContext2D) {
@@ -110,6 +112,8 @@ export class VideoCanvas extends LitElement {
 
     const selectedPolygon = this.polygonManager.getSelected();
     selectedPolygon?.add(x, y);
+
+    this.polygonManager.update();
   }
 
   update(changedProps: any) {
@@ -130,28 +134,42 @@ export class VideoCanvas extends LitElement {
     }
   }
 
-  static styles = css`
-    .container {
-      height: 100%;
-      display: flex;
-    }
+  static styles = [
+    mainStyles,
+    css`
+      .container {
+        display: flex;
+      }
 
-    canvas {
-      border: 1px solid black;
-    }
-  `;
+      .sidebar {
+        min-width: 132px;
+        margin-right: 24px;
+      }
+
+      .surface {
+        display: flex;
+        position: relative;
+        --md-elevation-level: 1;
+      }
+    `,
+  ];
 
   render() {
     return html`<div class="container">
-      <canvas-toolbox
-        .canvas=${this.canvasElement}
-        .polygonManager=${this.polygonManager}
-      ></canvas-toolbox>
-      <canvas id="canvas"></canvas>
-      <polygon-list
-        .canvas=${this.canvasElement}
-        .polygonManager=${this.polygonManager}
-      ></polygon-list>
+      <div class="sidebar">
+        <canvas-toolbox
+          .canvas=${this.canvasElement}
+          .polygonManager=${this.polygonManager}
+        ></canvas-toolbox>
+        <polygon-list
+          .canvas=${this.canvasElement}
+          .polygonManager=${this.polygonManager}
+        ></polygon-list>
+      </div>
+      <div class="surface">
+        <md-elevation></md-elevation>
+        <canvas id="canvas"></canvas>
+      </div>
     </div>`;
   }
 }

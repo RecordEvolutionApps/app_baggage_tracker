@@ -39,6 +39,10 @@ export class Polygon extends EventTarget {
     return this.points;
   }
 
+  get isCommitable() {
+    return this.points.length >= 3;
+  }
+
   computeCenterPoint() {
     let sumX = 0;
     let sumY = 0;
@@ -89,7 +93,7 @@ export class Polygon extends EventTarget {
   }
 
   commit() {
-    if (this.points.length >= 3) {
+    if (this.isCommitable) {
       const { x, y } = this.points[0];
       this.add(x, y);
 
@@ -117,9 +121,13 @@ export class PolygonManager extends EventTarget {
   polygons: Polygon[] = [];
   selectedPolygon: Polygon | null = null;
 
-  create() {
+  create(label?: string) {
     const polygon = new Polygon();
     this.polygons.push(polygon);
+
+    if (label) {
+      polygon.setLabel(label);
+    }
 
     this.selectedPolygon = polygon;
 
