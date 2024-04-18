@@ -81,7 +81,11 @@ export class CameraSelector extends LitElement {
 
   render() {
     return html`
-      <md-outlined-select id="selector" @change=${this.selectCamera}>
+      <md-outlined-select
+        id="selector"
+        label="Select your device"
+        @change=${this.selectCamera}
+      >
         ${repeat(
           this.camList,
           c => c.id,

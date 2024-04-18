@@ -75,6 +75,7 @@ export class CameraPlayer extends LitElement {
         justify-content: space-between;
         gap: 24px;
         width: 100%;
+        margin-bottom: 48px;
         padding: 8px 16px;
         box-sizing: border-box;
         font-weight: 600;
@@ -86,11 +87,10 @@ export class CameraPlayer extends LitElement {
   render() {
     return html`
       <nav>
-        <div>${this.label}</div>
+        <div>Traffic detector</div>
         <camera-selector
           .camera=${this.camera}
           .id=${this.id}
-          label="Choose Camera"
         ></camera-selector>
       </nav>
       <video-canvas
