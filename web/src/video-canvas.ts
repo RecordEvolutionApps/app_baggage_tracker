@@ -34,6 +34,7 @@ export class VideoCanvas extends LitElement {
       'canvas',
     ) as HTMLCanvasElement;
 
+    // TODO: remove for production
     setInterval(() => {
       const context = this.canvasElement?.getContext('2d', { alpha: false })!;
 
