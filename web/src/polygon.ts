@@ -39,6 +39,34 @@ export class Polygon extends EventTarget {
     return this.points;
   }
 
+  computeCenterPoint() {
+    let sumX = 0;
+    let sumY = 0;
+    let signedArea = 0;
+
+    for (let i = 0; i < this.points.length; i++) {
+      let vertex1 = this.points[i];
+      let vertex2 = this.points[(i + 1) % this.points.length];
+
+      let x0 = vertex1.x;
+      let y0 = vertex1.y;
+      let x1 = vertex2.x;
+      let y1 = vertex2.y;
+
+      let crossProduct = x0 * y1 - x1 * y0;
+      signedArea += crossProduct;
+      sumX += (x0 + x1) * crossProduct;
+      sumY += (y0 + y1) * crossProduct;
+    }
+
+    signedArea *= 0.5;
+
+    let centerX = sumX / (6 * signedArea);
+    let centerY = sumY / (6 * signedArea);
+
+    return { x: centerX, y: centerY };
+  }
+
   toJSON() {
     return {
       id: this.id,

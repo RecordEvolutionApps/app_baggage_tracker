@@ -76,6 +76,12 @@ export class VideoCanvas extends LitElement {
       if (polygon.committed) {
         context.closePath();
         context.fill();
+
+        const centroid = polygon.computeCenterPoint();
+        context.textAlign = 'center';
+        context.font = '32px serif';
+        context.fillStyle = 'black';
+        context.fillText(polygon.label, centroid.x, centroid.y);
       }
     }
   }
