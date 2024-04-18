@@ -43,6 +43,10 @@ export class PolygonList extends LitElement {
         background-color: lightgray;
       }
 
+      md-list {
+        width: 232px;
+      }
+
       md-list-item:hover {
         cursor: pointer;
         background-color: #e1e1e1;
@@ -93,28 +97,31 @@ export class PolygonList extends LitElement {
   }
 
   render() {
-    return html`<div>
-      <md-list>
-        ${repeat(
-          this.polygons,
-          c => c.id,
-          c => {
-            const selected = this.polygonManager?.selectedPolygon?.id === c.id;
-            const classes = { selected: selected };
+    return html` <md-list>
+      ${repeat(
+        this.polygons,
+        c => c.id,
+        c => {
+          const selected = this.polygonManager?.selectedPolygon?.id === c.id;
+          const classes = { selected: selected };
 
-            return html`<md-list-item @click=${this.selectPolygon(
-              c.id,
-            )} class=${classMap(classes)}>
-              <div slot="headline">${c.label}</a>
-              </div>
-              <div slot="supporting-text">Points: ${c.points.length}</div>
-              <md-icon slot="end" @click=${this.deletePolygon(c.id)}
-                >delete</md-icon
-              >
-            </md-list-item>`;
-          },
-        )}
-      </md-list>
-    </div>`;
+          return html`<md-list-item
+            @click=${this.selectPolygon(c.id)}
+            class=${classMap(classes)}
+          >
+            <div slot="headline">
+              <div
+                style="display: inline-block; margin-right: 4px; width: 10px; height: 10px; background-color: ${c.lineColor}; border: 1px solid black;"
+              ></div>
+              ${c.label}
+            </div>
+            <div slot="supporting-text">Points: ${c.points.length}</div>
+            <md-icon slot="end" @click=${this.deletePolygon(c.id)}
+              >delete</md-icon
+            >
+          </md-list-item>`;
+        },
+      )}
+    </md-list>`;
   }
 }

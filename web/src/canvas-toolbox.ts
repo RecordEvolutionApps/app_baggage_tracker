@@ -24,7 +24,7 @@ export class CanvasToolbox extends LitElement {
   selectedPolygon: Polygon | null = null;
 
   @state()
-  maskName = '';
+  mask_name = '';
 
   dialog?: MdDialog;
 
@@ -77,27 +77,33 @@ export class CanvasToolbox extends LitElement {
 
   handleMaskNameInput(ev: { target: { value: string } }) {
     if (ev.target) {
-      this.maskName = ev.target.value;
+      this.mask_name = ev.target.value;
     }
   }
 
   handleNameInputKeypress(ev: any) {
-    if (ev.key === 'Enter') {
+    if (ev.key === 'Enter' && this.mask_name.length) {
       this.dialog?.close('create');
     }
   }
 
   createPolygon() {
+    console.log(this.dialog?.returnValue);
     if (this.dialog?.returnValue === 'create') {
-      this.polygonManager?.create(this.maskName);
+      this.polygonManager?.create(this.mask_name);
     }
 
-    this.maskName = '';
+    this.mask_name = '';
   }
 
   onCreateClick() {
     this.dialog?.show();
-    // this.polygonManager?.create();
+  }
+
+  onDialogCancel() {
+    if (this.dialog) {
+      this.dialog.returnValue = 'cancel';
+    }
   }
 
   undoLastLine() {
@@ -146,29 +152,32 @@ export class CanvasToolbox extends LitElement {
         </ul>
       </div>
 
-      <md-dialog @close=${this.createPolygon} id="dialog">
+      <md-dialog
+        @cancel=${this.onDialogCancel}
+        @close=${this.createPolygon}
+        id="dialog"
+      >
         <div slot="headline">Mask name</div>
         <form slot="content" id="create-mask-form" method="dialog">
           <div style="display: flex; flex-direction: column;">
             <p>Enter a name for your mask</p>
             <md-outlined-text-field
               label="Name"
+              autofocus
+              maxlength="18"
               @keyup=${this.handleNameInputKeypress}
               @input=${this.handleMaskNameInput}
-              .value=${this.maskName}
+              .value=${this.mask_name}
               required
             >
             </md-outlined-text-field>
           </div>
         </form>
         <div slot="actions">
-          <md-text-button form="create-mask-form" value="cancel"
-            >Cancel</md-text-button
-          >
+          <md-text-button @click=${() => this.dialog?.close('cancel')}>Cancel</md-text-button>
           <md-text-button
             form="create-mask-form"
-            type="submit"
-            .disabled=${this.maskName.length === 0}
+            .disabled=${this.mask_name.length === 0}
             value="create"
             >Create</md-text-button
           >
