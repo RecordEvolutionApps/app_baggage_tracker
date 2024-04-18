@@ -15,6 +15,9 @@ export default {
     format: 'es',
     dir: 'dist',
   },
+  watch: {
+    include: 'src/**/*'
+  },
   preserveEntrySignatures: false,
 
   plugins: [

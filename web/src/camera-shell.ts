@@ -35,9 +35,6 @@ export class CameraShell extends LitElement {
       justify-content: flex-start;
     }
 
-    camera-player {
-      border: 2px solid #fff;
-    }
     .cam-container {
       display: flex;
       width: 100%;

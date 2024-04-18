@@ -22,8 +22,8 @@ export class CameraPlayer extends LitElement {
   constructor() {
     super()
     this.basepath = window.location.protocol + '//' + window.location.host
-    this.width = 1920
-    this.height = 1080
+    this.width = 1280
+    this.height = 720
   }
 
   async getCameraMetadata() {
