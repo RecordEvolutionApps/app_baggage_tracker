@@ -22,7 +22,7 @@ export const updateStreamsWithMask = () => {
         if (stream.stdin) {
             const stdin = stream.stdin as FileSink
             const masks = currentMaskData.polygons.map(({ label, points, lineColor: color }) => {
-                const transformedPoints = points.map((point) => [point.x, point.y])
+                const transformedPoints = points.map((point) => [Math.ceil(point.x), Math.ceil(point.y)])
                 // Remove last point
                 transformedPoints.pop()
 
