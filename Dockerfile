@@ -63,10 +63,8 @@ RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | b
 COPY requirements.txt /app/requirements.txt
 RUN python3 -m pip install -r requirements.txt
 
-
-# For live developing code in your running container install the vscode cli and start a tunnel with `./code tunnel` in the /app folder
-RUN curl -Lk 'https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-arm64' --output vscode_cli.tar.gz &&\
-	tar -xf vscode_cli.tar.gz
+# needs to be done seperately cus you can't install with no deps in requirements.txt
+RUN python3 -m pip install supervision --no-deps
 
 COPY web /app/web
 RUN cd web && . /root/.bashrc && bun i && bun run build
@@ -80,6 +78,7 @@ RUN rm -rf /usr/src/ultralytics/ultralytics/assets/*
 
 COPY janus/* /usr/local/etc/janus/
 COPY entrypoint.sh .reswarm/env-template.yml .reswarm/port-template.yml /app/
+COPY patch/polygon_zone.py /usr/local/lib/python3.8/dist-packages/supervision/detection/tools/polygon_zone.py
 
 COPY video /app/video
 

@@ -5,7 +5,7 @@ import { BunFile, Subprocess } from "bun";
 import { $ } from "bun";
 import type { Context } from "elysia";
 
-const streams = new Map()
+export const streams: Map<string, Subprocess<"ignore", "pipe", "inherit">> = new Map()
 const ports = new Map()
 let streamSetup: any = {}
 const streamSetupFile: BunFile = Bun.file("/data/streamSetup.json");
@@ -19,16 +19,16 @@ async function initStreams() {
         return
     }
     const firstCam = camList[0]
-    
+
     const exists: boolean = await streamSetupFile.exists();
     console.log("setup file exists: ", exists)
     if (!exists) {
         await Bun.write(streamSetupFile, JSON.stringify({ frontCam: firstCam }))
     }
-    
+
     try {
         streamSetup = await streamSetupFile.json()
-    } catch(err) {
+    } catch (err) {
         console.error('errrrrr', err)
         await Bun.write(streamSetupFile, JSON.stringify({ frontCam: firstCam }))
         streamSetup = await streamSetupFile.json()
@@ -87,7 +87,8 @@ async function startVideoStream(deviceId: string, camName: string) {
             }
         },
         stderr: "inherit",
-        stdout: "inherit"
+        stdout: "inherit",
+        stdin: "pipe",
     });
 
     streams.set(deviceId, proc)

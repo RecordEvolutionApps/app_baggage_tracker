@@ -119,3 +119,15 @@ export function hexToTransparent(hex: string, opacity: number) {
 
   return rgba;
 }
+
+export type PolygonState = {
+  selectedPolygonId: number | undefined;
+  polygons: {
+    id: number;
+    label: string;
+    lineColor: string;
+    fillColor: string;
+    committed: boolean;
+    points: { x: number; y: number }[];
+  }[];
+}

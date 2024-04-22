@@ -142,11 +142,11 @@ export class CanvasToolbox extends LitElement {
           <li>
             <md-elevated-button
               .disabled=${this.selectedPolygon?.committed ||
-              !this.selectedPolygon?.isCommitable}
+      !this.selectedPolygon?.isCommitable}
               @click=${this.commitPolygon}
             >
               Commit
-              <md-icon slot="icon">save</md-icon>
+              <md-icon slot="icon">close_fullscreen</md-icon>
             </md-elevated-button>
           </li>
         </ul>

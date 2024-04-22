@@ -1,5 +1,6 @@
-import { getRandomColor, hexToTransparent } from './utils';
+import { PolygonState, getRandomColor, hexToTransparent } from './utils';
 
+const basepath = window.location.protocol + '//' + window.location.host;
 let polygonID = 0;
 
 export class Polygon extends EventTarget {
@@ -14,7 +15,7 @@ export class Polygon extends EventTarget {
     super();
     this.id = polygonID++;
     this.lineColor = getRandomColor();
-    this.fillColor = hexToTransparent(this.lineColor, 0.1);
+    this.fillColor = hexToTransparent(this.lineColor, 0.3);
 
     this.label = String(this.id);
   }
@@ -76,20 +77,10 @@ export class Polygon extends EventTarget {
       id: this.id,
       label: this.label,
       committed: this.committed,
+      lineColor: this.lineColor,
+      fillColor: this.fillColor,
       points: this.points,
     };
-  }
-
-  setLabel(label: string) {
-    this.label = label;
-  }
-
-  setID(id: number) {
-    this.id = id;
-  }
-
-  setPoints(points: { x: number; y: number }[]) {
-    this.points = points;
   }
 
   commit() {
@@ -102,16 +93,28 @@ export class Polygon extends EventTarget {
   }
 
   static revive({
+    id,
     points,
+    committed,
+    lineColor,
+    fillColor,
     label,
   }: {
+    id: number,
     label: string;
+    lineColor: string;
+    fillColor: string;
+    committed: boolean;
     points: { x: number; y: number }[];
   }) {
-    const polygon = new Polygon();
 
-    polygon.setPoints(points);
-    polygon.setLabel(label);
+    const polygon = new Polygon();
+    polygon.id = id
+    polygon.points = points;
+    polygon.label = label;
+    polygon.committed = committed;
+    polygon.lineColor = lineColor;
+    polygon.fillColor = fillColor;
 
     return polygon;
   }
@@ -121,12 +124,42 @@ export class PolygonManager extends EventTarget {
   polygons: Polygon[] = [];
   selectedPolygon: Polygon | null = null;
 
+  constructor() {
+    super()
+    this.importFromRemote()
+  }
+
+  async importFromRemote() {
+    try {
+      const result = await fetch(`${basepath}/mask`, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+        },
+      }).then(res => res.json());
+
+      this.import(result)
+    } catch (error) {
+      console.error('Failed to load polygons from remote', error)
+    }
+  }
+
+  updateRemote(data: PolygonState) {
+    return fetch(`${basepath}/mask/save`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+  }
+
   create(label?: string) {
     const polygon = new Polygon();
     this.polygons.push(polygon);
 
     if (label) {
-      polygon.setLabel(label);
+      polygon.label = label;
     }
 
     this.selectedPolygon = polygon;
@@ -169,6 +202,10 @@ export class PolygonManager extends EventTarget {
         },
       }),
     );
+
+    // only save committed polygons
+    const { polygons, selectedPolygonId } = this.export()
+    this.updateRemote({ polygons: polygons.filter((p) => p.committed), selectedPolygonId })
   }
 
   getSelected() {
@@ -179,9 +216,13 @@ export class PolygonManager extends EventTarget {
     return this.polygons;
   }
 
-  export() {
-    return this.polygons.map(p => p.toJSON());
+  export(): PolygonState {
+    return {
+      selectedPolygonId: this.selectedPolygon?.id,
+      polygons: this.polygons.map(p => p.toJSON())
+    };
   }
+
 
   select(id: number) {
     const polygon = this.polygons.find(p => p.id === id);
@@ -191,11 +232,15 @@ export class PolygonManager extends EventTarget {
   }
 
   import(
-    data: {
-      label: string;
-      points: { x: number; y: number }[];
-    }[],
+    data: PolygonState
   ) {
-    this.polygons = data.map(p => Polygon.revive(p));
+    this.polygons = data.polygons.map(p => Polygon.revive(p));
+    const selectedPolygon = this.polygons.find((p) => p.id === data.selectedPolygonId)
+    this.selectedPolygon = selectedPolygon ?? null
+
+    // To ensure that IDs don't conflict for new polygons after import
+    polygonID = Math.max(...this.polygons.map((p) => p.id)) + 1
+
+    this.update()
   }
 }

@@ -36,15 +36,15 @@ export class VideoCanvas extends LitElement {
       'canvas',
     ) as HTMLCanvasElement;
 
-    // TODO: remove for production
-    setInterval(() => {
-      const context = this.canvasElement?.getContext('2d', { alpha: false })!;
+    // // TODO: remove for production
+    // setInterval(() => {
+    //   const context = this.canvasElement?.getContext('2d', { alpha: false })!;
 
-      context.fillStyle = 'white';
-      context.fillRect(0, 0, this.width, this.height);
+    //   context.fillStyle = 'white';
+    //   context.fillRect(0, 0, this.width, this.height);
 
-      this.drawPolygons(context);
-    }, 1000 / 30);
+    //   this.drawPolygons(context);
+    // }, 1000 / 30);
   }
 
   drawPolygons(context: CanvasRenderingContext2D) {
@@ -80,11 +80,11 @@ export class VideoCanvas extends LitElement {
         context.closePath();
         context.fill();
 
-        const centroid = polygon.computeCenterPoint();
-        context.textAlign = 'center';
-        context.font = '32px serif';
-        context.fillStyle = 'black';
-        context.fillText(polygon.label, centroid.x, centroid.y);
+        // const centroid = polygon.computeCenterPoint();
+        // context.textAlign = 'center';
+        // context.font = '32px serif';
+        // context.fillStyle = 'black';
+        // context.fillText(polygon.label, centroid.x, centroid.y);
       }
     }
   }

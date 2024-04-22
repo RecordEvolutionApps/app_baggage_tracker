@@ -4,6 +4,7 @@ import { html } from '@elysiajs/html'
 import { cors } from '@elysiajs/cors'
 import { getCameras, getStreamSetup, selectCamera } from './cameras.js'
 import { getStatus } from './MIRcontroller.js'
+import { getMask, saveMask } from "./mask.js";
 console.log('CURRENT', process.cwd())
 const app = new Elysia();
 app.use(staticPlugin({
@@ -12,6 +13,8 @@ app.use(staticPlugin({
 }))
 app.use(html())
 app.use(cors())
+app.get('/mask', getMask)
+app.post('/mask/save', saveMask)
 app.get('/cameras', getCameras)
 app.get('/cameras/setup', getStreamSetup)
 app.post('/cameras/select', selectCamera)
