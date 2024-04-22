@@ -52,7 +52,7 @@ widgets:
               format:
                 tsp: tsp
                 value: num_cars
-                pivot: devname
+                pivot: zonename
         - label: $str:Buses
           unit: null
           precision: null
@@ -67,7 +67,7 @@ widgets:
               format:
                 tsp: tsp
                 value: num_buses
-                pivot: devname
+                pivot: zonename
         - label: $str:Trucks
           unit: null
           precision: null
@@ -82,7 +82,7 @@ widgets:
               format:
                 tsp: tsp
                 value: num_trucks
-                pivot: devname
+                pivot: zonename
     version: 1.0.25
     layout_id: 3
   - version: 1.0.12
