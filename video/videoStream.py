@@ -73,6 +73,7 @@ def getModel(model_name):
     return YOLO(stored_tensorrt_model_path)
 
 DEVICE_KEY = os.environ.get('DEVICE_KEY')
+DEVICE_NAME = os.environ.get('DEVICE_NAME')
 DEVICE_URL = os.environ.get('DEVICE_URL')
 TUNNEL_PORT = os.environ.get('TUNNEL_PORT')
 
@@ -118,30 +119,51 @@ out = cv2.VideoWriter(writerStream, 0, FRAMERATE, (RESOLUTION_X, RESOLUTION_Y))
 def overlay_text(frame, text, position=(10, 30), font_scale=1, color=(0, 255, 0), thickness=2):
     cv2.putText(frame, text, position, cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, thickness, cv2.LINE_AA)
 
-class_name = {
-    0: "person",
+class_ids = [0, 2, 3, 5, 7]
+class_id_topic = {
+    0: "persons",
     2: "car",
-    3: "motorcycle",
+    3: "motorcyle",
     5: "bus",
     7: "truck"
 }
+
+def count_polygon_zone(zone):
+    count_dict = {}
+    for class_id in class_ids:
+        count = zone.class_in_current_count.get(class_id, 0)
+        count_dict[class_id] = count
+    return count_dict
+
+def count_detections(detections):
+    count_dict = {}
+    for xyxy, mask, conf, class_id, tracker_id, data in detections:
+        if class_id in count_dict:
+            count_dict[class_id] += 1
+        else:
+            count_dict[class_id] = 1
+    return count_dict
 
 async def main():
     try:
         print('starting main video loop...')
         fps_monitor = sv.FPSMonitor()
+        start_time = time.time()
         global out
         global pub
         global saved_masks
 
         while cap.isOpened():
+            elapsed_time = time.time() - start_time
             fps_monitor.tick()
+
             success, frame = cap.read()
             if not success:
                 continue
 
-            results = model(frame, imgsz=RESOLUTION_X, verbose=False, classes=[0, 2, 3, 5, 7])
+            results = model(frame, imgsz=RESOLUTION_X, verbose=False, classes=class_ids)
             detections = sv.Detections.from_ultralytics(results[0])
+            counts = []
 
             for saved_mask in saved_masks:
                 zone = saved_mask['zone']
@@ -159,25 +181,32 @@ async def main():
                     color=sv.Color.from_hex(color),
                 )
 
-                result_dict = {}
-                for key in class_name:
-                    name = class_name[key]
-                    count = zone.class_in_current_count.get(key, 0)
-                    result_dict[name] = count
+                count_dict = count_polygon_zone(zone)
+                counts.append({'label': saved_mask['label'], 'count': count_dict})
 
                 frame = bounding_box_annotator.annotate(scene=frame, detections=filtered_detections)
                 frame = label_annotator.annotate(scene=frame, detections=filtered_detections)
                 frame = zone_annotator.annotate(scene=frame, label=label)
+
 
             # Annotate all detections if no masks are defined
             if len(saved_masks) == 0:
                 frame = bounding_box_annotator.annotate(scene=frame, detections=detections)
                 frame = label_annotator.annotate(scene=frame, detections=detections)
 
+                count_dict = count_detections(detections)
+                counts.append({'label': DEVICE_NAME + "_" + "default", 'count': count_dict})
+
             # Draw FPS and Timestamp
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
             overlay_text(frame, f'Timestamp: {current_time}', position=(10, 30))
             overlay_text(frame, f'FPS: {fps_monitor.fps:.2f}', position=(10, 60))
+
+            if elapsed_time >= 1.0:
+                for item in counts:
+                    publishImage(frame)
+                    publishClassCount(item["count"], item["label"])
+                    start_time = time.time()
 
             out.write(frame)
 
@@ -193,33 +222,26 @@ async def main():
         import sys
         sys.exit(1)
 
-async def publishImage(frame):
+def publishImage(frame):
     _, encoded_frame = cv2.imencode('.jpg', frame)
     base64_encoded_frame = base64.b64encode(encoded_frame.tobytes()).decode('utf-8')
     now = datetime.now().astimezone().isoformat()
-    await rw.publish_to_table('images', {"tsp": now, "image": 'data:image/jpeg;base64,' + base64_encoded_frame})
 
+    get_event_loop().create_task(rw.publish_to_table('images', {"tsp": now, "image": 'data:image/jpeg;base64,' + base64_encoded_frame}))
 
-async def publishClassCount(result):
-    classes = []
-    boxes = result.boxes
-    # pprint(boxes)
-    if not boxes: return
-    classes = [result.names[int(cls)] for cls in boxes.cls]
-    # pprint(classes)
-
-    df = pl.DataFrame({"class": classes})
-    agg = df.group_by("class").len()
-    # print(agg)
+def publishClassCount(result, zone_name):
     now = datetime.now().astimezone().isoformat()
     payload = {"tsp": now}
-    for row in agg.rows():
-        payload[row[0]] = row[1]
-
     payload["videolink"] = f"https://{DEVICE_KEY}-traffic-1100.app.record-evolution.com"
     payload["devicelink"] = DEVICE_URL
-    # print(payload)
-    await rw.publish_to_table('detections', payload)
+    payload["zone_name"] = zone_name
+
+    for class_id in class_id_topic:
+        payload[class_id_topic[class_id]] = result.get(class_id, 0)
+
+    print(payload)
+
+    get_event_loop().create_task(rw.publish_to_table('detections', payload))
 
 rw = Reswarm()
 
@@ -230,7 +252,7 @@ async def readMasksFromStdin():
         try:
             masksJSON = await get_event_loop().run_in_executor(None, sys.stdin.readline)
 
-            print("Got Masks from stdin:", masksJSON)
+            print("Got masks from stdin:", masksJSON)
 
             stdin_masks = json.loads(masksJSON)
 

@@ -32,6 +32,11 @@ data:
           description: Number of detected persons
           path: args[0].person
           dataType: numeric
+        - id: zonename
+          name: Zone Name
+          description: Name of zone
+          path: args[0].zone_name
+          dataType: string
         - id: devname
           name: Device Name
           description: Name of Device
