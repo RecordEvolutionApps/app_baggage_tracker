@@ -116,8 +116,9 @@ portMap = {"frontCam": 5004,
 device = args.device
 
 model = getModel(OBJECT_MODEL)
-bounding_box_annotator = sv.BoundingBoxAnnotator()
-label_annotator = sv.LabelAnnotator()
+# bounding_box_annotator = sv.BoundingBoxAnnotator()
+bounding_box_annotator = sv.DotAnnotator(radius=6)
+label_annotator = sv.LabelAnnotator(text_scale=0.4, text_thickness=1, text_padding=3)
 
 print('CAMERA USED:' + device)
 cap = cv2.VideoCapture(int(device[-1]))
