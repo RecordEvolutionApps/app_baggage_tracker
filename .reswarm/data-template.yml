@@ -1,6 +1,8 @@
 data:
   tables:
     - tablename: detections
+      chunkTimeInterval: 1 day # (optional) Sets the default partition size of this table. Users of the app can adjust this in their databackends.
+      dropAfter: 30 day # (optional) All partitions older than this interval will be dropped from the table. (The system checks in a <dropAfter>/4 interval schedule.)
       columns:
         - id: tsp
           name: Timestamp
@@ -42,6 +44,21 @@ data:
           description: Name of Device
           path: kwargs.DEVICE_NAME
           dataType: string
+
+    - tablename: cameras
+      chunkTimeInterval: 1 hour # (optional) Sets the default partition size of this table. Users of the app can adjust this in their databackends.
+      dropAfter: 2 hour # (optional) All partitions older than this interval will be dropped from the table. (The system checks in a <dropAfter>/4 interval schedule.)
+      columns:
+        - id: tsp
+          name: Timestamp
+          description: Timestamp of Detection
+          path: args[0].tsp
+          dataType: timestamp
+        - id: devname
+          name: Device Name
+          description: Name of Device
+          path: kwargs.DEVICE_NAME
+          dataType: string
         - id: videolink
           name: Video Link
           description: Link to the live video stream
@@ -54,6 +71,8 @@ data:
           dataType: string
 
     - tablename: images
+      chunkTimeInterval: 1 hour # (optional) Sets the default partition size of this table. Users of the app can adjust this in their databackends.
+      dropAfter: 2 hour # (optional) All partitions older than this interval will be dropped from the table. (The system checks in a <dropAfter>/4 interval schedule.)
       columns:
         - id: tsp
           name: Timestamp
@@ -73,9 +92,10 @@ data:
       sql: |
         SELECT
           devname,
-          max(videolink) AS videolink
+          max(videolink) AS videolink,
+          max(devicelink) AS devicelink
         FROM 
-          detections
+          cameras
         WHERE 
           tsp > now() - INTERVAL '1 days'
         GROUP BY
@@ -88,4 +108,8 @@ data:
         - id: videolink
           name: Video Link
           description: Link to live video stream of camera
+          dataType: string
+        - id: devicelink
+          name: Device Link
+          description: Link to device with camera
           dataType: string

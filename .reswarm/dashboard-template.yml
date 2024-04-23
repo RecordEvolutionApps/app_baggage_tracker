@@ -1,7 +1,6 @@
 name: Traffic
 widgets:
-  - version: 1.4.15
-    package_name: widget-linechart
+  - package_name: widget-linechart
     chartdata:
       settings:
         timeseries: true
@@ -13,13 +12,13 @@ widgets:
       dataseries:
         - label: $str:Count
           order: null
-          chartName: "$str:"
+          chartName: $str:num#pivot#
           type: $str:line
           radius: null
           pointStyle: null
-          backgroundColor: $str:#2b2c50
-          borderColor: $str:#1d253a
-          borderWidth: $num:2
+          backgroundColor: $str:#db8b1a
+          borderColor: $str:#db8b1a
+          borderWidth: $num:1
           borderDash: null
           data:
             tableRef:
@@ -29,8 +28,9 @@ widgets:
                 x: tsp
                 y: num_cars
                 r: null
-                pivot: devname
+                pivot: zonename
           fill: null
+    version: 1.4.15
     layout_id: 1
   - package_name: widget-value
     chartdata:
@@ -48,7 +48,7 @@ widgets:
           data:
             tableRef:
               tablename: detections
-              bufferSize: 1
+              bufferSize: 10
               format:
                 tsp: tsp
                 value: num_cars
@@ -63,7 +63,7 @@ widgets:
           data:
             tableRef:
               tablename: detections
-              bufferSize: 1
+              bufferSize: 10
               format:
                 tsp: tsp
                 value: num_buses
@@ -78,15 +78,14 @@ widgets:
           data:
             tableRef:
               tablename: detections
-              bufferSize: 1
+              bufferSize: 10
               format:
                 tsp: tsp
                 value: num_trucks
                 pivot: zonename
-    version: 1.0.25
+    version: 1.0.27
     layout_id: 3
-  - version: 1.0.12
-    package_name: widget-table
+  - package_name: widget-table
     chartdata:
       settings:
         headerFontSize: $str:16px
@@ -96,8 +95,8 @@ widgets:
         subTitle: null
         rowBorder: null
       columns:
-        - header: $str:Camera Name
-          type: $str:string
+        - header: $str:Camera
+          type: $str:button
           precision: null
           width: null
           fontSize: null
@@ -109,8 +108,8 @@ widgets:
             tableRef:
               tablename: device_agg
               bufferSize: 500
-              format: devname
-        - header: $str:Live Video Stream
+              format: devicelink
+        - header: $str:Live Stream
           type: $str:button
           precision: null
           width: null
@@ -124,6 +123,7 @@ widgets:
               tablename: device_agg
               bufferSize: 500
               format: videolink
+    version: 1.0.12
     layout_id: 4
   - version: 1.0.8
     package_name: widget-image
@@ -144,8 +144,7 @@ widgets:
         fontWeight: null
         color: null
     layout_id: 5
-  - version: 1.4.15
-    package_name: widget-linechart
+  - package_name: widget-linechart
     chartdata:
       settings:
         timeseries: $bool:true
@@ -157,13 +156,13 @@ widgets:
       dataseries:
         - label: $str:Trucks
           order: null
-          chartName: null
+          chartName: "$str:"
           type: $str:line
           radius: null
           pointStyle: null
           backgroundColor: $str:#75ccc2
           borderColor: $str:#249487
-          borderWidth: $num:2
+          borderWidth: $num:1
           borderDash: null
           fill: null
           data:
@@ -174,10 +173,10 @@ widgets:
                 x: tsp
                 y: num_trucks
                 r: null
-                pivot: devname
+                pivot: zonename
+    version: 1.4.15
     layout_id: 6
-  - version: 1.4.15
-    package_name: widget-linechart
+  - package_name: widget-linechart
     chartdata:
       settings:
         timeseries: $bool:true
@@ -189,13 +188,13 @@ widgets:
       dataseries:
         - label: $str:Busses
           order: null
-          chartName: null
+          chartName: "$str:"
           type: $str:line
           radius: null
           pointStyle: null
           backgroundColor: $str:#6c936f
           borderColor: $str:#377d36
-          borderWidth: $num:2
+          borderWidth: $num:1
           borderDash: null
           fill: null
           data:
@@ -206,7 +205,8 @@ widgets:
                 x: tsp
                 y: num_buses
                 r: null
-                pivot: devname
+                pivot: zonename
+    version: 1.4.15
     layout_id: 7
   - version: 1.0.8
     package_name: widget-image
@@ -274,33 +274,31 @@ layout:
     y: 0
     id: 8
   - w: 2
-    h: 2
     x: 2
     y: 0
     id: 11
-  - w: 5
+  - w: 4
     h: 4
     x: 4
     y: 0
     id: 5
-  - w: 3
+  - w: 4
     h: 4
-    x: 9
+    x: 8
     y: 0
     id: 3
+  - w: 2
+    x: 2
+    y: 1
+    id: 4
   - w: 4
     h: 2
     x: 0
     y: 2
     id: 10
-  - w: 4
+  - w: 12
     h: 3
     x: 0
-    y: 4
-    id: 4
-  - w: 8
-    h: 3
-    x: 4
     y: 4
     id: 1
   - w: 6
@@ -313,5 +311,5 @@ layout:
     x: 6
     y: 7
     id: 7
-background_color: "#d3d3d3"
+background_color: "#ededed"
 text_color: "#5a6666"

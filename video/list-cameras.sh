@@ -6,3 +6,5 @@ do
     grep -qE '\[[0-9]\]' && \
     echo /dev/$dev:`cat /sys/class/video4linux/$dev/name | cut -d ":" -f 1`:`udevadm info --query=property /dev/$dev | grep DEVPATH= | awk -F '=' '{print $NF}'`
 done
+
+exit 0

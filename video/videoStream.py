@@ -208,6 +208,9 @@ async def main():
                     publishClassCount(item["count"], item["label"])
                     start_time = time.time()
 
+            if elapsed_time >= 1.0:
+                publishCameras()
+
             out.write(frame)
 
             if cv2.waitKey(1) == ord('q'):
@@ -229,11 +232,16 @@ def publishImage(frame):
 
     get_event_loop().create_task(rw.publish_to_table('images', {"tsp": now, "image": 'data:image/jpeg;base64,' + base64_encoded_frame}))
 
-def publishClassCount(result, zone_name):
+def publishCameras():
     now = datetime.now().astimezone().isoformat()
     payload = {"tsp": now}
     payload["videolink"] = f"https://{DEVICE_KEY}-traffic-1100.app.record-evolution.com"
     payload["devicelink"] = DEVICE_URL
+    get_event_loop().create_task(rw.publish_to_table('cameras', payload))
+
+def publishClassCount(result, zone_name):
+    now = datetime.now().astimezone().isoformat()
+    payload = {"tsp": now}
     payload["zone_name"] = zone_name
 
     for class_id in class_id_topic:
