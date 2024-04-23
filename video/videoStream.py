@@ -37,13 +37,17 @@ DEVICE_URL = os.environ.get('DEVICE_URL')
 TUNNEL_PORT = os.environ.get('TUNNEL_PORT')
 CONF = float(os.environ.get('CONF', '0.1'))
 IOU = float(os.environ.get('IOU', '0.8'))
-CLASS_LIST = os.environ.get('CLASS_LIST', '0, 2, 3, 5, 7')
+CLASS_LIST = os.environ.get('CLASS_LIST', '')
 CLASS_LIST = CLASS_LIST.split(',')
 try:
     CLASS_LIST = [int(num.strip()) for num in CLASS_LIST]
 except Exception as err:
     print('Invalid Class list given', CLASS_LIST)
-    CLASS_LIST = [0, 2, 3, 5, 7]
+    CLASS_LIST = []
+
+if len(CLASS_LIST) <= 1:
+    CLASS_LIST = list(class_id_topic.keys())
+    CLASS_LIST = [int(item) for item in CLASS_LIST]
 
 MODEL_RESX = (RESOLUTION_X // 32) * 32 # must be multiple of max stride 32
 MODEL_RESY = (RESOLUTION_Y // 32) * 32

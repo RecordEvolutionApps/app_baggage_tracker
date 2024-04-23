@@ -24,7 +24,7 @@ CLASS_LIST:
     label: Detection Classes
     type: text
     defaultValue: 0, 2, 3, 5, 7
-    description: A list of class ids from the COCO dataset. See https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/datasets/coco.yaml
+    description: A list of class ids from the COCO dataset. If left empty, then all classes are used. See https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/datasets/coco.yaml
 CONF:
     label: Confidence
     type: numeric
