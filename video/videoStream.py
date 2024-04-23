@@ -34,6 +34,13 @@ DEVICE_URL = os.environ.get('DEVICE_URL')
 TUNNEL_PORT = os.environ.get('TUNNEL_PORT')
 CONF = float(os.environ.get('CONF', '0.1'))
 IOU = float(os.environ.get('IOU', '0.8'))
+CLASS_LIST = os.environ.get('CLASS_LIST', '0, 2, 3, 5, 7')
+CLASS_LIST = CLASS_LIST.split(',')
+try:
+    CLASS_LIST = [int(num.strip()) for num in CLASS_LIST]
+except Exception as err:
+    print('Invalid Class list given', CLASS_LIST)
+    CLASS_LIST = [0, 2, 3, 5, 7]
 
 MODEL_RESX = (RESOLUTION_X // 32) * 32 # must be multiple of max stride 32
 MODEL_RESY = (RESOLUTION_Y // 32) * 32
@@ -124,18 +131,92 @@ out = cv2.VideoWriter(writerStream, 0, FRAMERATE, (RESOLUTION_X, RESOLUTION_Y))
 def overlay_text(frame, text, position=(10, 30), font_scale=1, color=(0, 255, 0), thickness=2):
     cv2.putText(frame, text, position, cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, thickness, cv2.LINE_AA)
 
-class_ids = [0, 2, 3, 5, 7]
 class_id_topic = {
-    0: "persons",
+    0: "person",
+    1: "bicycle",
     2: "car",
-    3: "motorcyle",
+    3: "motorcycle",
+    4: "airplane",
     5: "bus",
-    7: "truck"
+    6: "train",
+    7: "truck",
+    8: "boat",
+    9: "traffic light",
+    10: "fire hydrant",
+    11: "stop sign",
+    12: "parking meter",
+    13: "bench",
+    14: "bird",
+    15: "cat",
+    16: "dog",
+    17: "horse",
+    18: "sheep",
+    19: "cow",
+    20: "elephant",
+    21: "bear",
+    22: "zebra",
+    23: "giraffe",
+    24: "backpack",
+    25: "umbrella",
+    26: "handbag",
+    27: "tie",
+    28: "suitcase",
+    29: "frisbee",
+    30: "skis",
+    31: "snowboard",
+    32: "sports ball",
+    33: "kite",
+    34: "baseball bat",
+    35: "baseball glove",
+    36: "skateboard",
+    37: "surfboard",
+    38: "tennis racket",
+    39: "bottle",
+    40: "wine glass",
+    41: "cup",
+    42: "fork",
+    43: "knife",
+    44: "spoon",
+    45: "bowl",
+    46: "banana",
+    47: "apple",
+    48: "sandwich",
+    49: "orange",
+    50: "broccoli",
+    51: "carrot",
+    52: "hot dog",
+    53: "pizza",
+    54: "donut",
+    55: "cake",
+    56: "chair",
+    57: "couch",
+    58: "potted plant",
+    59: "bed",
+    60: "dining table",
+    61: "toilet",
+    62: "tv",
+    63: "laptop",
+    64: "mouse",
+    65: "remote",
+    66: "keyboard",
+    67: "cell phone",
+    68: "microwave",
+    69: "oven",
+    70: "toaster",
+    71: "sink",
+    72: "refrigerator",
+    73: "book",
+    74: "clock",
+    75: "vase",
+    76: "scissors",
+    77: "teddy bear",
+    78: "hair drier",
+    79: "toothbrush",
 }
 
 def count_polygon_zone(zone):
     count_dict = {}
-    for class_id in class_ids:
+    for class_id in CLASS_LIST:
         count = zone.class_in_current_count.get(class_id, 0)
         count_dict[class_id] = count
     return count_dict
@@ -167,7 +248,7 @@ async def main():
                 continue
 
 
-            results = model(frame, imgsz=(MODEL_RESY, MODEL_RESX), conf=CONF, iou=IOU, half=True, verbose=False, classes=class_ids)
+            results = model(frame, imgsz=(MODEL_RESY, MODEL_RESX), conf=CONF, iou=IOU, half=True, verbose=False, classes=CLASS_LIST)
             detections = sv.Detections.from_ultralytics(results[0])
             counts = []
 
