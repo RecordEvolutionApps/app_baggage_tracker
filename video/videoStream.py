@@ -23,6 +23,21 @@ import functools
 import urllib.request
 print = functools.partial(print, flush=True)
 
+OBJECT_MODEL = os.environ.get('OBJECT_MODEL')
+RESOLUTION_X = int(os.environ.get('RESOLUTION_X', 640))
+RESOLUTION_Y = int(os.environ.get('RESOLUTION_Y', 480))
+FRAMERATE = int(os.environ.get('FRAMERATE', 30))
+
+DEVICE_KEY = os.environ.get('DEVICE_KEY')
+DEVICE_NAME = os.environ.get('DEVICE_NAME')
+DEVICE_URL = os.environ.get('DEVICE_URL')
+TUNNEL_PORT = os.environ.get('TUNNEL_PORT')
+CONF = float(os.environ.get('CONF', '0.1'))
+IOU = float(os.environ.get('IOU', '0.8'))
+
+MODEL_RESX = (RESOLUTION_X // 32) * 32 # must be multiple of max stride 32
+MODEL_RESY = (RESOLUTION_Y // 32) * 32
+
 saved_masks = []
 
 def downloadModel(model_name, model_path):
@@ -35,7 +50,7 @@ def getModel(model_name):
     tensorrt_initial_model_path = f'/app/{model_name}.engine'
 
     stored_pytorch_model_path = f'/data/{model_name}.pt'
-    stored_tensorrt_model_path = f'/data/{model_name}-{RESOLUTION_X}.engine'
+    stored_tensorrt_model_path = f'/data/{model_name}-{MODEL_RESY}-{MODEL_RESX}.engine'
     model_download_path = f'/app/download/{model_name}.pt'
 
     stored_tensorrt_file = Path(stored_tensorrt_model_path)
@@ -64,18 +79,13 @@ def getModel(model_name):
     
     print("Exporting Pytorch model from /app directory into TensorRT....")
     pytorch_model = YOLO(pytorch_model_path)
-    pytorch_model.export(format='engine', imgsz=RESOLUTION_X)
+    pytorch_model.export(format='engine', imgsz=(MODEL_RESY, MODEL_RESX))
     print("Model exported!")
 
     print(f'Moving exported TensorRT model {model_name} to data folder...')
     shutil.move(tensorrt_initial_model_path, stored_tensorrt_model_path)
 
     return YOLO(stored_tensorrt_model_path)
-
-DEVICE_KEY = os.environ.get('DEVICE_KEY')
-DEVICE_NAME = os.environ.get('DEVICE_NAME')
-DEVICE_URL = os.environ.get('DEVICE_URL')
-TUNNEL_PORT = os.environ.get('TUNNEL_PORT')
 
 parser = argparse.ArgumentParser(description='Start a Video Stream for the given Camera Device')
 
@@ -88,11 +98,6 @@ portMap = {"frontCam": 5004,
            "leftCam": 5005,
            "rightCam": 5006,
            "backCam": 5007}
-
-OBJECT_MODEL = os.environ.get('OBJECT_MODEL')
-RESOLUTION_X = int(os.environ.get('RESOLUTION_X', 640))
-RESOLUTION_Y = int(os.environ.get('RESOLUTION_Y', 480))
-FRAMERATE = int(os.environ.get('FRAMERATE', 30))
 
 device = args.device
 
@@ -161,7 +166,8 @@ async def main():
             if not success:
                 continue
 
-            results = model(frame, imgsz=RESOLUTION_X, verbose=False, classes=class_ids)
+
+            results = model(frame, imgsz=(MODEL_RESY, MODEL_RESX), conf=CONF, iou=IOU, half=True, verbose=False, classes=class_ids)
             detections = sv.Detections.from_ultralytics(results[0])
             counts = []
 

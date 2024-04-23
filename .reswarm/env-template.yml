@@ -27,6 +27,20 @@ OBJECT_MODEL:
     defaultValue: "yolov8s"
     description: YOLO Object Detection Model 
     valueList: ["yolov8n", "yolov8s", "yolov8m", "yolov8l", "yolov8x", "yolov9c", "yolov9e"]  # Renders a dropdown field allowing the selection from a list of values.  (number[] | string[])
+CONF:
+    label: Confidence
+    type: numeric
+    defaultValue: 0.1
+    description: Sets the minimum confidence threshold for detections. Objects detected with confidence below this threshold will be disregarded. Adjusting this value can help reduce false positives.
+    max: 1
+    min: 0
+IOU:
+    label: Intersection over Union
+    type: numeric
+    defaultValue: 0.8
+    description: Intersection Over Union (IoU) threshold for Non-Maximum Suppression (NMS). Lower values result in fewer detections by eliminating overlapping boxes, useful for reducing duplicates.
+    max: 1
+    min: 0
 RESOLUTION_X:
     label: Width
     type: numeric
