@@ -212,10 +212,10 @@ async def main():
                 for item in counts:
                     publishImage(frame)
                     publishClassCount(item["count"], item["label"])
-                    start_time = time.time()
-
-            if elapsed_time >= 1.0:
+                
                 publishCameras()
+
+                start_time = time.time()
 
             out.write(frame)
 

@@ -235,11 +235,6 @@ export class PolygonManager extends EventTarget {
     data: PolygonState
   ) {
     this.polygons = data.polygons.map(p => Polygon.revive(p));
-    const selectedPolygon = this.polygons.find((p) => p.id === data.selectedPolygonId)
-    this.selectedPolygon = selectedPolygon ?? null
-
-    // To ensure that IDs don't conflict for new polygons after import
-    polygonID = Math.max(...this.polygons.map((p) => p.id)) + 1
 
     this.update()
   }
