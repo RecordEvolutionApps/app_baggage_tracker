@@ -93,14 +93,12 @@ export class Polygon extends EventTarget {
   }
 
   static revive({
-    id,
     points,
     committed,
     lineColor,
     fillColor,
     label,
   }: {
-    id: number,
     label: string;
     lineColor: string;
     fillColor: string;
@@ -109,7 +107,6 @@ export class Polygon extends EventTarget {
   }) {
 
     const polygon = new Polygon();
-    polygon.id = id
     polygon.points = points;
     polygon.label = label;
     polygon.committed = committed;
