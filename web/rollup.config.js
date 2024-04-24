@@ -21,9 +21,7 @@ export default {
   plugins: [
     /** Enable using HTML as rollup entrypoint */
     html({
-      minify: true,
-      injectServiceWorker: true,
-      serviceWorkerPath: 'dist/sw.js',
+      minify: true
     }),
     /** Resolve bare module imports */
     nodeResolve(),
