@@ -58,10 +58,6 @@ export class CameraPlayer extends LitElement {
     this.dispatchEvent(new CustomEvent('video-ready'));
   }
 
-  toggleMenu() {
-
-  }
-
   static styles = [
     mainStyles,
     css`
