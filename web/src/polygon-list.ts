@@ -27,7 +27,8 @@ export class PolygonList extends LitElement {
     mainStyles,
     css`
       :host {
-        margin-left: 24px;
+        margin: 16px 0 0 24px;
+        color: #47484c;
       }
 
       ul {
@@ -40,11 +41,21 @@ export class PolygonList extends LitElement {
       }
 
       .selected {
-        background-color: lightgray;
+        background-color: #e8e8ee;
       }
 
       md-list {
-        width: 232px;
+        padding: 0;
+        min-width: 170px;
+        border-radius: 4px;
+        --md-list-container-color: #f7faf9;
+        --md-list-item-label-text-color: #005353;
+        --md-list-item-supporting-text-color: #005353;
+        --md-list-item-trailing-supporting-text-color: #005353;
+      }
+
+      md-list-item {
+        border-radius: 4px;
       }
 
       md-list-item:hover {
@@ -53,12 +64,38 @@ export class PolygonList extends LitElement {
       }
 
       md-icon {
-        --md-icon-size: 12px;
+        position: absolute;
+        right: 2px;
       }
 
       md-icon:hover {
         cursor: pointer;
       }
+      .header {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+      }
+      .colorIcon {
+        display: inline-block;
+        margin-right: 4px;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+      }
+
+      md-icon {
+        color: #a1a1a3;
+      }
+
+      b {
+        font-size: 15px;
+        max-width: 90px;
+        text-overflow: ellipsis;
+        overflow: hidden;
+        white-space: nowrap;
+      }
+
     `,
   ];
 
@@ -109,11 +146,12 @@ export class PolygonList extends LitElement {
             @click=${this.selectPolygon(c.id)}
             class=${classMap(classes)}
           >
-            <div slot="headline">
+            <div slot="headline" class="header">
               <div
-                style="display: inline-block; margin-right: 4px; width: 10px; height: 10px; background-color: ${c.lineColor}; border: 1px solid black;"
+                class="colorIcon"
+                style="background-color: ${c.lineColor};"
               ></div>
-              ${c.label}
+              <b title="${c.label}">${c.label}</b>
             </div>
             <div slot="supporting-text">Points: ${c.points.length}</div>
             <md-icon slot="end" @click=${this.deletePolygon(c.id)}

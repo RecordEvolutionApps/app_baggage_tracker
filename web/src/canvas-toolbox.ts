@@ -35,6 +35,15 @@ export class CanvasToolbox extends LitElement {
     css`
       :host {
         min-width: 64px;
+        --md-sys-color-primary: #002e6a;
+        --md-sys-color-on-primary: #FFFFFF;
+        --md-sys-color-primary-container: #2986cc;
+        --md-sys-color-on-primary-container: #002020;
+      }
+      
+      .primary {
+        background: var(--md-sys-color-primary);
+        color: var(--md-sys-color-on-primary);
       }
 
       ul {
@@ -46,12 +55,36 @@ export class CanvasToolbox extends LitElement {
         padding-inline-start: 0;
       }
 
-      md-elevated-button {
+      md-elevated-button, md-text-button {
         width: 100%;
+        --md-elevated-button-container-color: #eceff1;
+        --md-elevated-button-label-text-color: #5e5f61;
       }
 
-      li {
+      .mb16 {
         margin-bottom: 16px;
+      }
+
+      h4 {
+        color: #5e5f61;
+        margin: 11px 0;
+      }
+
+      #dialog {
+        --md-dialog-container-color: #fff;
+        --md-dialog-headline-color: #5e5f61;
+        --md-dialog-supporting-text-color: #5e5f61;
+      }
+      h3 {
+        margin: 0;
+        color: #5e5f61;
+        font-size: 20px;
+      }
+
+      @media only screen and (max-width: 600px) {
+        h3 {
+          display: none;
+        }
       }
     `,
   ];
@@ -126,14 +159,26 @@ export class CanvasToolbox extends LitElement {
 
   render() {
     return html`<div>
+        <h3>Traffic detector</h3>
         <ul>
           <li>
+            <h4>Camera</h4>
+          </li>
+          <li>
+            <camera-selector
+              .id=${this.id}
+            ></camera-selector>
+          </li>
+          <li>
+            <h4>Detection Zone</h4>
+          </li>
+          <li class="mb16">
             <md-elevated-button @click=${this.onCreateClick}>
               Create
               <md-icon slot="icon">add_circle</md-icon>
             </md-elevated-button>
           </li>
-          <li>
+          <li class="mb16">
             <md-elevated-button @click=${this.undoLastLine}>
               Undo
               <md-icon slot="icon">undo</md-icon>

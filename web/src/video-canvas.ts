@@ -137,20 +137,54 @@ export class VideoCanvas extends LitElement {
   static styles = [
     mainStyles,
     css`
+      :host {
+        width: 100%;
+      }
+      #canvas {
+        width: 100%;
+        background: #fff;
+      }
       .container {
+        height: 100%;
         display: flex;
+        flex-direction: row;
+        align-items: start;
+        justify-content: space-between;
       }
 
       .sidebar {
-        min-width: 132px;
+        min-width: 230px;
         margin-right: 24px;
+        height: 100%;
+        padding: 10px;
+        box-sizing: border-box;
+        background: #d8dae7;
+        border-radius: 4px;
       }
 
       .surface {
         display: flex;
         position: relative;
         --md-elevation-level: 1;
+        width: 100%;
+        border-radius: 4px;
       }
+
+      @media only screen and (max-width: 600px) {
+        .container {
+          flex-direction: column-reverse;
+        }
+        .sidebar {
+          display: flex;
+          justify-content: space-between;
+          width: 100%;
+        }
+        .surface {
+          margin-bottom: 16px;
+        }
+      }
+
+
     `,
   ];
 

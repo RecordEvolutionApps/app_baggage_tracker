@@ -58,6 +58,10 @@ export class CameraPlayer extends LitElement {
     this.dispatchEvent(new CustomEvent('video-ready'));
   }
 
+  toggleMenu() {
+
+  }
+
   static styles = [
     mainStyles,
     css`
@@ -67,32 +71,32 @@ export class CameraPlayer extends LitElement {
         align-items: center;
         flex: 1;
         position: relative;
+        max-width: 1600px;
+        margin: 0 auto;
+        padding: 23px 16px;
+        box-sizing: border-box;
       }
 
-      nav {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 24px;
-        width: 100%;
-        margin-bottom: 48px;
-        padding: 8px 16px;
-        box-sizing: border-box;
-        font-weight: 600;
-        font-size: 24px;
+      h3 {
+        display: none;
+        align-self: baseline;
+        margin: 0 0 5px 0;
+      }
+
+      @media only screen and (max-width: 600px) {
+        h3 {
+          display: block;
+        }
+        :host {
+          padding: 5px 16px 0 16px;
+        }
       }
     `,
   ];
 
   render() {
     return html`
-      <nav>
-        <div>Traffic detector</div>
-        <camera-selector
-          .camera=${this.camera}
-          .id=${this.id}
-        ></camera-selector>
-      </nav>
+      <h3>Traffic detector</h3>
       <video-canvas
         .video=${this.videoElement}
         .width=${this.width}
