@@ -158,7 +158,7 @@ export class VideoCanvas extends LitElement {
         height: 100%;
         padding: 10px;
         box-sizing: border-box;
-        background: #d8dae7;
+        background: #e9eaf2;
         border-radius: 4px;
       }
 
