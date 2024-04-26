@@ -1,11 +1,11 @@
-# Automotive traffic - selective object detection
+# Vehicle counter - selective object detection for Automotive
 Interactive camera application for selective object detection. Real-time object counting is available in user-defined areas of the video image. The application can differentiate between vehicles such as trucks, cars, buses, and motorcycles.
 
 Users can interact with the live video and select areas of interest. Object detection and counting will be isolated to the detection zones specified by the user. Multiple areas can be defined, and the number of objects will be displayed for each zone.
 
 ## Dashboarding Insights
 <div style="display:flex;flex-direction:row;align-items:center;justify-content:center;">
-    <img src="https://storage.googleapis.com/reswarm-images/dashboards/dashboard_devices_camera.png" width="600px">
+    <img src="https://res.cloudinary.com/dotw7ar1m/image/upload/v1714118606/Video_app_Dashboard.png" width="800px">
 </div>
 
 Besides the user interface for interacting with the video stream, the app also provides a dashboard. Collected data, such as objects detected and the current video frame, will be displayed. A history of detections is persisted, providing a summary in different graphs.
