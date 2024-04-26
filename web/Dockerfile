@@ -1,8 +1,8 @@
 FROM oven/bun:1.1.5-alpine as base
 
-RUN apk update && apk add --no-cache openssh-client
+RUN apk update && apk add --no-cache openssh-client python3
 
-RUN mkdir -p /data/ssh
+RUN mkdir -p /data/ssh && mkdir -p ~/.ssh
 RUN ssh-keygen -t rsa -b 4096 -f /data/ssh/mykey -N "" -O exist && \
     cp -a /data/ssh/* ~/.ssh
 

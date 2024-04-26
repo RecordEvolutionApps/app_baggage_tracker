@@ -20,7 +20,7 @@ RUN apt-get -y update && apt-get -y upgrade && \
 	apt-get clean && \
 	rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /data/ssh
+RUN mkdir -p /data/ssh && mkdir -p ~/.ssh
 RUN ssh-keygen -t rsa -b 4096 -f /data/ssh/mykey -N "" -O exist && \
     cp -a /data/ssh/* ~/.ssh
 
