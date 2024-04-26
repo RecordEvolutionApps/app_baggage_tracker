@@ -38,6 +38,7 @@ export class CameraShell extends LitElement {
         flex-direction: column;
         align-items: center;
         justify-content: flex-start;
+        background-color: #fbfcff;
       }
 
       .cam-container {
