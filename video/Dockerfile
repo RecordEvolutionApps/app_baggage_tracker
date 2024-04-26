@@ -2,8 +2,19 @@ FROM ultralytics/ultralytics:8.2.2-jetson
 
 RUN apt-get -y update && apt-get -y upgrade && \
 	apt-get install -y \
+		libmicrohttpd-dev libjansson-dev \
+		libssl-dev libsofia-sip-ua-dev libglib2.0-dev \
+		libopus-dev libogg-dev libcurl4-openssl-dev liblua5.3-dev \
+		libconfig-dev pkg-config libtool automake \
+		libavutil-dev \
+		libavformat-dev \
+		libavcodec-dev \
+		libwebsockets-dev \
+		meson \
+		libgtk-3-dev \
 		curl \
 		ffmpeg \
+		openssh-server \
 		unzip nginx procps v4l-utils git \
 		usbutils udev && \
 	apt-get clean && \
@@ -29,4 +40,4 @@ COPY patch/polygon_zone.py /usr/local/lib/python3.8/dist-packages/supervision/de
 
 COPY . /app/video
 
-CMD ["sleep", "infinity"]
+CMD ["/usr/sbin/sshd", "-D"]

@@ -1,4 +1,6 @@
-FROM oven/bun:1 as base
+FROM oven/bun:1.1.5-alpine as base
+
+RUN apk update && apk add --no-cache openssh-client
 
 RUN mkdir -p /data/ssh
 RUN ssh-keygen -t rsa -b 4096 -f /data/ssh/mykey -N "" -O exist && \
