@@ -159,7 +159,7 @@ export class CanvasToolbox extends LitElement {
 
   render() {
     return html`<div>
-        <h3>Traffic detector</h3>
+        <h3>Vehicle Counter</h3>
         <ul>
           <li>
             <h4>Camera</h4>
@@ -202,10 +202,10 @@ export class CanvasToolbox extends LitElement {
         @close=${this.createPolygon}
         id="dialog"
       >
-        <div slot="headline">Mask name</div>
+        <div slot="headline">Zone name</div>
         <form slot="content" id="create-mask-form" method="dialog">
           <div style="display: flex; flex-direction: column;">
-            <p>Enter a name for your mask</p>
+            <p>Enter a name for your zone</p>
             <md-outlined-text-field
               label="Name"
               autofocus

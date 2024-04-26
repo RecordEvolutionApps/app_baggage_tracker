@@ -78,7 +78,7 @@ async function startVideoStream(deviceId: string, camName: string) {
         return
     }
 
-    const proc = Bun.spawn(["python3", "-u", "video/videoStream.py", cameraDev.path, camName], {
+    const proc = Bun.spawn(["ssh", "video", "python3 -u video/videoStream.py " + cameraDev.path + " " + camName, "2>&1"], {
         env: { ...process.env },
         onExit: async (proc, exitCode, signalCode, error) => {
             console.log("Proccess exited with", { exitCode, signalCode, error })

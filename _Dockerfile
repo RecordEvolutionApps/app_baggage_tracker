@@ -66,11 +66,11 @@ RUN python3 -m pip install -r requirements.txt
 # needs to be done seperately cus you can't install with no deps in requirements.txt
 RUN python3 -m pip install supervision --no-deps
 
-COPY web /app/web
-RUN cd web && . /root/.bashrc && bun i && bun run build
-
 COPY backend/package.json /app/backend/
-RUN cd /app/backend && bun i
+RUN cd /app/backend && bun i --production
+
+COPY web /app/web
+RUN cd web && . /root/.bashrc && bun i --production && bun run build
 
 COPY backend/* /app/backend/
 
