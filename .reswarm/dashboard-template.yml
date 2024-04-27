@@ -125,8 +125,7 @@ widgets:
               format: videolink
     version: 1.0.12
     layout_id: 4
-  - version: 1.0.8
-    package_name: widget-image
+  - package_name: widget-image
     chartdata:
       imageLink:
         valueRef:
@@ -139,10 +138,11 @@ widgets:
         color: null
         backgroundColor: null
       subTitle:
-        text: "$str:Framerate: 1fps"
+        text: "$str:"
         fontSize: null
         fontWeight: null
         color: null
+    version: 1.0.8
     layout_id: 5
   - package_name: widget-linechart
     chartdata:
@@ -208,21 +208,21 @@ widgets:
                 pivot: zonename
     version: 1.4.15
     layout_id: 7
-  - version: 1.0.8
-    package_name: widget-image
+  - package_name: widget-image
     chartdata:
       imageLink: $str:https://storage.googleapis.com/reswarm-images/prod/reswarm-0-1706095631331-Cam_icon-682decf0d8.png
       title:
-        text: null
+        text: $str:Revis
         fontSize: null
         fontWeight: null
         color: null
         backgroundColor: null
       subTitle:
-        text: null
+        text: $str:Nvidia Jetson AGX Xavier
         fontSize: null
         fontWeight: null
         color: null
+    version: 1.0.8
     layout_id: 8
   - version: 1.0.12
     package_name: widget-textbox
@@ -246,37 +246,16 @@ widgets:
         color: $str:#5a6666
         backgroundColor: null
     layout_id: 10
-  - version: 1.0.12
-    package_name: widget-textbox
-    chartdata:
-      title:
-        text: $str:Revis
-        fontSize: null
-        fontWeight: null
-        color: null
-        backgroundColor: null
-      subTitle:
-        text: $str:JetsonAGXXavier & USB Camera
-        fontSize: null
-        fontWeight: null
-        color: null
-      body:
-        text: "$str:"
-        fontSize: null
-        fontWeight: null
-        color: null
-        backgroundColor: null
-    layout_id: 11
 layout:
   - w: 2
-    h: 2
+    h: 4
     x: 0
     y: 0
     id: 8
   - w: 2
     x: 2
     y: 0
-    id: 11
+    id: 4
   - w: 4
     h: 4
     x: 4
@@ -288,13 +267,9 @@ layout:
     y: 0
     id: 3
   - w: 2
+    h: 3
     x: 2
     y: 1
-    id: 4
-  - w: 4
-    h: 2
-    x: 0
-    y: 2
     id: 10
   - w: 12
     h: 3
