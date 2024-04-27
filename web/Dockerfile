@@ -10,7 +10,7 @@ COPY backend/* /app/backend/
 COPY entrypoint.sh .
 COPY frontend /app/frontend
 RUN cd frontend && bun i 
-RUN cd frontend && bun run build
+RUN cd frontend && bun build ./src/camera-shell.ts --outdir ./dist
 
 ENTRYPOINT ["/app/entrypoint.sh"]
 

@@ -8,7 +8,7 @@ import { getMask, saveMask } from "./mask.js";
 console.log('CURRENT', process.cwd())
 const app = new Elysia();
 app.use(staticPlugin({
-  assets: "web/dist",
+  assets: "dist",
   prefix: "/"
 }))
 app.use(html())
@@ -20,7 +20,7 @@ app.get('/cameras/setup', getStreamSetup)
 app.post('/cameras/select', selectCamera)
 app.post('/mir/status', getStatus)
 app.get('/', async () => {
-  return Bun.file('web/dist/index.html')
+  return Bun.file('./index.html')
 })
 app.listen(1100);
 
