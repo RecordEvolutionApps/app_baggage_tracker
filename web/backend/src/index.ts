@@ -20,7 +20,7 @@ app.get('/cameras/setup', getStreamSetup)
 app.post('/cameras/select', selectCamera)
 app.post('/mir/status', getStatus)
 app.get('/', async () => {
-  return Bun.file('frontend/index.html')
+  return Bun.file('frontend/dist/index.html')
 })
 app.listen(1100);
 
