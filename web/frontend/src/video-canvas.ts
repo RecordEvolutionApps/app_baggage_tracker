@@ -56,8 +56,6 @@ export class VideoCanvas extends LitElement {
   drawPolygons(context: CanvasRenderingContext2D) {
     // Draw Polygons
     const { polygons } = this.polygonManager;
-    const rect = this.canvasElement.getBoundingClientRect();
-    const scaler = rect.width / this.width;
     for (const polygon of polygons) {
       const polygonPoints = polygon.getPoints();
 
@@ -75,7 +73,6 @@ export class VideoCanvas extends LitElement {
       const firstPoint = polygonPoints[0];
       context.arc(firstPoint.x, firstPoint.y, 1, 0, 2 * Math.PI);
       context.moveTo(firstPoint.x, firstPoint.y);
-      // console.log('Draw scaler', rect.width, this.width, scaler, rect.left, rect.top, firstPoint.x, firstPoint.y)
 
       // Connect each point with a line
       for (var i = 1; i < polygonPoints.length; i++) {
@@ -120,9 +117,9 @@ export class VideoCanvas extends LitElement {
 
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
-    console.log('Click scaler', rect.width, this.width, scaler, rect.left, rect.top, x, y)
+
     const selectedPolygon = this.polygonManager.getSelected();
-    selectedPolygon?.add(x , y );
+    selectedPolygon?.add(x * scaler , y * scaler);
 
     this.polygonManager.update();
   }
