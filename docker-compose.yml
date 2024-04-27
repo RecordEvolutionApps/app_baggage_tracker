@@ -8,6 +8,8 @@ services:
         build: ./video
         volumes:
             - data:/data
+        depends_on:
+            - janus
         # entrypoint: "sleep infinity"
     web:
         build: ./web
@@ -15,6 +17,8 @@ services:
             - 1100:1100
         volumes:
             - data:/data
+        depends_on: 
+            - video
         # entrypoint: "sleep infinity"
 volumes:
     data:
