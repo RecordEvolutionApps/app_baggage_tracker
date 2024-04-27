@@ -23,7 +23,7 @@ import functools
 import urllib.request
 print = functools.partial(print, flush=True)
 
-with open('video/coco_classes.json', 'r') as f:
+with open('/app/video/coco_classes.json', 'r') as f:
   class_id_topic = json.load(f)
 
 OBJECT_MODEL = os.environ.get('OBJECT_MODEL')
@@ -104,7 +104,7 @@ def getModel(model_name):
 parser = argparse.ArgumentParser(description='Start a Video Stream for the given Camera Device')
 
 parser.add_argument('device', type=str, help='A device path like e.g. /dev/video0')
-parser.add_argument('cam', type=str, help='One of frontCam, leftCam, rightCam, backCam')
+parser.add_argument('camStream', type=str, help='One of frontCam, leftCam, rightCam, backCam')
 
 args = parser.parse_args()
 
@@ -130,7 +130,7 @@ cap.set(4, RESOLUTION_Y)
 outputFormat = " videoconvert ! vp8enc deadline=2 threads=4 keyframe-max-dist=6 ! video/x-vp8 ! rtpvp8pay pt=96"
 # outputFormat = "nvvidconv ! nvv4l2h264enc maxperf-enable=1 insert-sps-pps=true insert-vui=true ! h264parse ! rtph264pay"
 
-writerStream = "appsrc do-timestamp=true ! " + outputFormat + " ! udpsink host=127.0.0.1 port=" + str(portMap[args.cam])
+writerStream = "appsrc do-timestamp=true ! " + outputFormat + " ! udpsink host=janus port=" + str(portMap[args.camStream])
 # print(writerStream)
 
 out = cv2.VideoWriter(writerStream, 0, FRAMERATE, (RESOLUTION_X, RESOLUTION_Y))

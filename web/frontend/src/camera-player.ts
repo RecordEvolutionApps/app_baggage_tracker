@@ -1,8 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { property, customElement, state } from 'lit/decorators.js';
-import './camera-selector.js';
 import './video-canvas.js';
-import { mainStyles } from './utils.js';
+import { mainStyles, CamSetup } from './utils.js';
 
 @customElement('camera-player')
 export class CameraPlayer extends LitElement {
@@ -11,25 +10,21 @@ export class CameraPlayer extends LitElement {
   basepath: string;
 
   @state()
-  camera: any;
+  camSetup?: CamSetup;
 
   animation_handle: any;
-  width: number;
-  height: number;
   videoElement?: HTMLVideoElement;
   canvasElement?: HTMLCanvasElement;
 
   constructor() {
     super();
     this.basepath = window.location.protocol + '//' + window.location.host;
-    this.width = 1280;
-    this.height = 720;
   }
 
   async getCameraMetadata() {
     try {
-      const selected = await fetch(
-        `${this.basepath}/cameras/setup?cam=${this.id}`,
+      this.camSetup = await fetch(
+        `${this.basepath}/cameras/setup?camStream=${this.id}`,
         {
           method: 'GET',
           headers: {
@@ -37,10 +32,7 @@ export class CameraPlayer extends LitElement {
           },
         },
       ).then(res => res.json());
-
-      this.width = selected.width;
-      this.height = selected.height;
-      this.camera = selected;
+      console.log('got Camera Setup', this.camSetup)
     } catch (error) {
       console.error('Failed to get cameras', error);
     } finally {
@@ -95,8 +87,10 @@ export class CameraPlayer extends LitElement {
       <h3>Traffic detector</h3>
       <video-canvas
         .video=${this.videoElement}
-        .width=${this.width}
-        .height=${this.height}
+        .camSetup=${this.camSetup}
+        .width=${this.camSetup?.width ?? 1280}
+        .height=${this.camSetup?.height ?? 720}
+        .camStream=${this.id}
       ></video-canvas>
       <video id="video" autoplay controls muted playsinline hidden></video>
     `;

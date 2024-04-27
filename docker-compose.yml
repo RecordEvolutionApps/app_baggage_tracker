@@ -10,6 +10,11 @@ services:
             - data:/data
         depends_on:
             - janus
+        privileged: true  # **WARNING: Security Risk**
+        devices:
+            - /dev/bus/usb:/dev/bus/usb
+            - /dev/nvidia*:/dev/nvidia*
+        runtime: nvidia
         # entrypoint: "sleep infinity"
     web:
         build: ./web

@@ -131,3 +131,15 @@ export type PolygonState = {
     points: { x: number; y: number }[];
   }[];
 }
+
+export type Camera = {
+  path: string
+  name: string
+  id: string
+}
+
+export type CamSetup = {
+  camera: Camera
+  width: number
+  height: number
+}

@@ -1,7 +1,8 @@
 import { LitElement, html, css, PropertyValueMap } from 'lit';
 import { property, customElement, state } from 'lit/decorators.js';
 import { PolygonManager, Polygon } from './polygon.js';
-import { mainStyles } from './utils.js';
+import { mainStyles, CamSetup } from './utils.js';
+import './camera-selector.js';
 
 import '@material/web/button/elevated-button.js';
 import '@material/web/button/text-button.js';
@@ -16,6 +17,12 @@ export class CanvasToolbox extends LitElement {
 
   @property({ type: Object })
   polygonManager?: PolygonManager;
+
+  @property({ type: String })
+  camStream: string = 'frontCam'
+
+  @property({ type: Object })
+  camSetup?: CamSetup
 
   @state()
   polygons: Polygon[] = [];
@@ -166,7 +173,8 @@ export class CanvasToolbox extends LitElement {
           </li>
           <li>
             <camera-selector
-              .id=${this.id}
+              .camStream=${this.camStream}
+              .camSetup=${this.camSetup}
             ></camera-selector>
           </li>
           <li>
