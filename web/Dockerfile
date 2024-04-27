@@ -1,18 +1,18 @@
-FROM oven/bun:1.1.5-alpine as base
+FROM oven/bun:debian
 
-RUN apk update && apk add --no-cache openssh-client python3
-
-RUN mkdir -p /data/ssh && mkdir -p ~/.ssh
-RUN ssh-keygen -t rsa -b 4096 -f /data/ssh/mykey -N "" -O exist && \
-    cp -a /data/ssh/* ~/.ssh
+RUN apt-get update && apt-get install -y openssh-client python3
 
 WORKDIR /app
 
 COPY backend/package.json /app/backend/
 RUN cd /app/backend && bun i --production
 COPY backend/* /app/backend/
-
+COPY entrypoint.sh .
 COPY frontend /app/frontend
-RUN cd frontend && . /root/.bashrc && bun i --production && bun run build
+RUN cd frontend && bun i 
+RUN cd frontend && bun run build
 
-ENTRYPOINT [ "bun", "run", "/app/backend/index.ts" ]
+ENTRYPOINT ["/app/entrypoint.sh"]
+
+
+# ssh -o StrictHostKeyChecking=no video

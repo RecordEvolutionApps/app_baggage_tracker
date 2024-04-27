@@ -9,12 +9,11 @@
   "dependencies": {
     "@elysiajs/cors": "^1.0.2",
     "@elysiajs/html": "^1.0.2",
-    "@elysiajs/static": "^1.0.2",
-    "elysia": "^1.0.7",
-    "usb": "^2.12.1"
+    "@elysiajs/static": "^1.0.3",
+    "elysia": "^1.0.14"
   },
   "devDependencies": {
-    "@types/bun": "^1.0.10"
+    "@types/bun": "^1.1.0"
   },
   "module": "src/index.js"
 }

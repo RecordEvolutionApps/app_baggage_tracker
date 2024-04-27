@@ -20,17 +20,14 @@ RUN apt-get -y update && apt-get -y upgrade && \
 	apt-get clean && \
 	rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /data/ssh && mkdir -p ~/.ssh
-RUN ssh-keygen -t rsa -b 4096 -f /data/ssh/mykey -N "" -O exist && \
-    cp -a /data/ssh/* ~/.ssh
+WORKDIR /app/video
 
-COPY requirements.txt /app/requirements.txt
+COPY requirements.txt requirements.txt
 RUN python3 -m pip install -r requirements.txt
 
 # needs to be done seperately cus you can't install with no deps in requirements.txt
 RUN python3 -m pip install supervision --no-deps
 
-WORKDIR /app
 
 RUN mkdir -p /app/download
 
@@ -40,4 +37,6 @@ COPY patch/polygon_zone.py /usr/local/lib/python3.8/dist-packages/supervision/de
 
 COPY . /app/video
 
-CMD ["/usr/sbin/sshd", "-D"]
+RUN echo "PubkeyAuthentication yes" >> /etc/ssh/sshd_config
+
+ENTRYPOINT ["/app/video/entrypoint.sh"]

@@ -1,23 +1,20 @@
-version: '3'
 services:
     janus:
         build: ./janus
         ports:
             - 1200:1200
-        entrypoint: # "sleep infinity"
-            - /usr/local/bin/janus
+        # entrypoint: "sleep infinity"
     video:
         build: ./video
-        entrypoint: "sleep infinity"
         volumes:
             - data:/data
+        # entrypoint: "sleep infinity"
     web:
         build: ./web
         ports:
             - 1100:1100
         volumes:
             - data:/data
-        entrypoint: # "sleep infinity"
-            - bun run /app/backend/index.ts
+        # entrypoint: "sleep infinity"
 volumes:
     data:

@@ -78,7 +78,7 @@ async function startVideoStream(deviceId: string, camName: string) {
         return
     }
 
-    const proc = Bun.spawn(["ssh", "video", "python3 -u video/videoStream.py " + cameraDev.path + " " + camName, "2>&1"], {
+    const proc = Bun.spawn(["ssh", "-o", "StrictHostKeyChecking=no", "video", "python3", "-u", "/app/video/videoStream.py", cameraDev.path, camName], {
         env: { ...process.env },
         onExit: async (proc, exitCode, signalCode, error) => {
             console.log("Proccess exited with", { exitCode, signalCode, error })
@@ -122,7 +122,7 @@ async function killVideoStream(deviceId: string, deviceName: string) {
 }
 
 export async function getCameras() {
-    const camerasOutput = await $`video/list-cameras.sh`.text()
+    const camerasOutput = await $`ssh -o StrictHostKeyChecking=no video /app/video/list-cameras.sh`.text()
     return camerasOutput.split("\n").slice(0, -1).map((v: any) => {
         const [path, name, DEVPATH] = v.split(":")
         const [id] = DEVPATH.replace("/devices/platform/", "").split("/video4linux") ?? []

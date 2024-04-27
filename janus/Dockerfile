@@ -13,13 +13,14 @@ RUN apt-get -y update && apt-get -y upgrade && \
 		libwebsockets-dev \
 		# libnanomsg5 \
 		meson \
-		# libnice-dev \
+		libnice-dev \
 		##  libsrtp2-dev \
 		# libnss3-dev \
 		# extras
 		libgtk-3-dev \
 		curl \
 		ffmpeg \
+		wget \
 		unzip nginx procps v4l-utils git \
 		usbutils udev && \
 	apt-get clean && \
@@ -35,13 +36,13 @@ RUN cd /tmp && \
 
 WORKDIR /usr/local/src
 
-RUN cd /tmp && \
-	git clone https://gitlab.freedesktop.org/libnice/libnice && \
-	cd libnice && \
-	git checkout 0.1.21 && \
-	meson builddir && \
-  	ninja -C builddir && \
-	ninja -C builddir install
+# RUN cd /tmp && \
+# 	git clone https://gitlab.freedesktop.org/libnice/libnice && \
+# 	cd libnice && \
+# 	git checkout 0.1.21 && \
+# 	meson builddir && \
+#   	ninja -C builddir && \
+# 	ninja -C builddir install
 
 RUN git clone --depth=1 https://github.com/meetecho/janus-gateway.git && \
     cd /usr/local/src/janus-gateway && \
