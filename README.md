@@ -1,4 +1,4 @@
-# Vehicle counter - selective object detection for Automotive
+# Vehicle Counter - selective object detection for automotive
 Interactive camera application for selective object detection. Real-time object counting is available in user-defined areas of the video image. The application can differentiate between vehicles such as trucks, cars, buses, and motorcycles.
 
 Users can interact with the live video and select areas of interest. Object detection and counting will be isolated to the detection zones specified by the user. Multiple areas can be defined, and the number of objects will be displayed for each zone.
@@ -31,7 +31,7 @@ If multiple cameras are connected to the device, the camera can be selected via 
 
 #### Detection Classes: ####
 
-- A list of class ids from the COCO dataset. If left empty, then all classes are used. See https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/datasets/coco.yaml
+- A list of class ids from the COCO dataset. If left empty, then all classes are used. See [here](https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/datasets/coco.yaml)
 
 #### Confidence (0-1): ####
  - Sets the minimum confidence threshold for detections. Objects detected with confidence below this threshold will be disregarded. Adjusting this value can help reduce false positives.
