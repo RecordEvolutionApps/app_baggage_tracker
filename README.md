@@ -1,9 +1,11 @@
 # Vehicle Counter - selective object detection for automotive
+
 Interactive camera application for selective object detection. Real-time object counting is available in user-defined areas of the video image. The application can differentiate between vehicles such as trucks, cars, buses, and motorcycles.
 
 Users can interact with the live video and select areas of interest. Object detection and counting will be isolated to the detection zones specified by the user. Multiple areas can be defined, and the number of objects will be displayed for each zone.
 
 ## Dashboarding Insights
+
 <div style="display:flex;flex-direction:row;align-items:center;justify-content:center;">
     <img src="https://res.cloudinary.com/dotw7ar1m/image/upload/v1714118606/Video_app_Dashboard.png" width="800px">
 </div>
@@ -26,25 +28,15 @@ If multiple cameras are connected to the device, the camera can be selected via 
 
 ## Available Environment Variables
 
-#### Change the model: ####
- - Select a version for one of the YOLO Object Detection Models
 
-#### Detection Classes: ####
-
-- A list of class ids from the COCO dataset. If left empty, then all classes are used. See [here](https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/datasets/coco.yaml)
-
-#### Confidence (0-1): ####
- - Sets the minimum confidence threshold for detections. Objects detected with confidence below this threshold will be disregarded. Adjusting this value can help reduce false positives.
-
-#### Intersection over Union (0-1): ####
- - Intersection Over Union (IoU) threshold for Non-Maximum Suppression (NMS). Lower values result in fewer detections by eliminating overlapping boxes, useful for reducing duplicates.
-
-#### Width (1-10000): ####
- - Horizontal Resolution in pixel
-
-#### Height (1-10000): ####
-- Vertical Resolution in pixel
-
+Parameter | Default | Description
+-|-|-
+Model | Yolov8s | Select a version for one of the YOLO Object Detection Models
+Detection Classes | 0,2,3,5,7 | A list of class ids from the COCO dataset. If left empty, then all classes are used. See [here](https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/datasets/coco.yaml)
+Confidence | 0.1 | (0 - 1) Sets the minimum confidence threshold for detections. Objects detected with confidence below this threshold will be disregarded. Adjusting this value can help reduce false positives.
+Intersection over Union | 0.7 | (0 - 1) Intersection Over Union (IoU) threshold for Non-Maximum Suppression (NMS). Lower values result in fewer detections by eliminating overlapping boxes, useful for reducing duplicates.
+Width | 1280 | Horizontal Resolution in pixel of the camera stream. The camera should support the selected resolution.
+Height | 720 | Vertical Resolution in pixel of the camera stream. The camera should support the selected resolution.
 
 
 ## Requirements
