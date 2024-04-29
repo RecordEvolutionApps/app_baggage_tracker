@@ -214,6 +214,7 @@ export class PolygonManager extends EventTarget {
   }
 
   export(): PolygonState {
+    
     return {
       selectedPolygonId: this.selectedPolygon?.id,
       polygons: this.polygons.map(p => p.toJSON())

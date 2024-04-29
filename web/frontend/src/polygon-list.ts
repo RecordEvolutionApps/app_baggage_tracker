@@ -153,7 +153,7 @@ export class PolygonList extends LitElement {
               ></div>
               <b title="${c.label}">${c.label}</b>
             </div>
-            <div slot="supporting-text">Points: ${c.points.length}</div>
+            <!-- <div slot="supporting-text">Points: ${c.points.length}</div> -->
             <md-icon slot="end" @click=${this.deletePolygon(c.id)}
               >delete</md-icon
             >

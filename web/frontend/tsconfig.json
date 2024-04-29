@@ -10,9 +10,9 @@
     "allowSyntheticDefaultImports": true,
     "experimentalDecorators": true,
     "importHelpers": true,
-    "outDir": "out-tsc",
-    "sourceMap": true,
-    "inlineSources": true,
+    "outDir": "dist/out-tsc",
+    "sourceMap": false,
+    "inlineSources": false,
     "rootDir": "./",
     "incremental": true
   },

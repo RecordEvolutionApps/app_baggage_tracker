@@ -5,7 +5,7 @@ import { PolygonManager, Polygon } from './polygon.js';
 import '@material/web/elevation/elevation.js';
 import './canvas-toolbox.js';
 import './polygon-list.js';
-import { mainStyles } from './utils.js';
+import { mainStyles, CamSetup } from './utils.js';
 @customElement('video-canvas')
 export class VideoCanvas extends LitElement {
   canvasElement!: HTMLCanvasElement;
@@ -21,6 +21,12 @@ export class VideoCanvas extends LitElement {
 
   @property({ type: Number })
   height: number = 0;
+
+  @property({ type: String})
+  camStream: string = 'frontCam'
+
+  @property({ type: Object })
+  camSetup?: CamSetup;
 
   initialized = false;
 
@@ -107,11 +113,13 @@ export class VideoCanvas extends LitElement {
     if (!this.canvasElement) return;
 
     const rect = this.canvasElement.getBoundingClientRect();
+    const scaler = this.width / rect.width;
+
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
 
     const selectedPolygon = this.polygonManager.getSelected();
-    selectedPolygon?.add(x, y);
+    selectedPolygon?.add(x * scaler , y * scaler);
 
     this.polygonManager.update();
   }
@@ -194,6 +202,8 @@ export class VideoCanvas extends LitElement {
         <canvas-toolbox
           .canvas=${this.canvasElement}
           .polygonManager=${this.polygonManager}
+          .camSetup=${this.camSetup}
+          .camStream=${this.camStream}
         ></canvas-toolbox>
         <polygon-list
           .canvas=${this.canvasElement}

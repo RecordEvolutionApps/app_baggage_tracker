@@ -1,0 +1,29 @@
+services:
+    janus:
+        build: ./janus
+        ports:
+            - 1200:1200
+        # entrypoint: "sleep infinity"
+    video:
+        build: ./video
+        volumes:
+            - data:/data
+        depends_on:
+            - janus
+        privileged: true  # **WARNING: Security Risk**
+        devices:
+            - /dev/bus/usb:/dev/bus/usb
+            - /dev/nvidia*:/dev/nvidia*
+        runtime: nvidia
+        # entrypoint: "sleep infinity"
+    web:
+        build: ./web
+        ports:
+            - 1100:1100
+        volumes:
+            - data:/data
+        depends_on: 
+            - video
+        # entrypoint: "sleep infinity"
+volumes:
+    data:

@@ -49,6 +49,6 @@ If multiple cameras are connected to the device, the camera can be selected via 
 
 ## Requirements
 
-This app requires NVIDIA Jetson Xavier and Orin systems.
+This app requires NVIDIA Jetson systems.
 
 Any USB or IP camera connected to the Nvidia IPC can be used with the app. 

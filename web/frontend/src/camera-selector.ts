@@ -5,14 +5,19 @@ import { repeat } from 'lit/directives/repeat.js';
 import '@material/web/select/outlined-select.js';
 import '@material/web/select/select-option.js';
 import { MdOutlinedSelect } from '@material/web/select/outlined-select.js';
-import { mainStyles } from './utils';
+import { mainStyles, Camera, CamSetup } from './utils';
 
 @customElement('camera-selector')
 export class CameraSelector extends LitElement {
-  @property({ type: Object }) camera: any;
+
+  @property({ type: String}) 
+  camStream: string = 'frontCam'
+
+  @property({ type: Object })
+  camSetup?: CamSetup
 
   @state()
-  private camList: any[] = [];
+  private camList: Camera[] = [];
   basepath: string;
   selector?: MdOutlinedSelect;
   constructor() {
@@ -26,8 +31,14 @@ export class CameraSelector extends LitElement {
     ) as MdOutlinedSelect;
 
     await this.getCameras();
+    this.selector.select(this.camSetup?.camera?.id);
+  }
 
-    this.selector.select(this.camera?.device?.id);
+  update(changedProps) {
+    if (changedProps.has('camSetup')) {
+      this.selector.select(this.camSetup?.camera?.id)
+    }
+    super.update(changedProps)
   }
 
   async getCameras() {
@@ -44,10 +55,10 @@ export class CameraSelector extends LitElement {
   }
   async selectCamera() {
     const value = this.selector?.value;
-    console.log('selected', value, this.id);
+    console.log('selected', value, this.camStream);
     const payload = {
       id: value,
-      deviceName: this.id,
+      camStream: this.camStream,
     };
 
     await fetch(`${this.basepath}/cameras/select`, {
@@ -88,8 +99,8 @@ export class CameraSelector extends LitElement {
       >
         ${repeat(
           this.camList,
-          c => c.id,
-          c => html`
+          (c: Camera) => c.id,
+          (c: Camera) => html`
             <md-select-option value="${c.id}">
               <div slot="headline">${c.name} (${c.id})</div>
             </md-select-option>
