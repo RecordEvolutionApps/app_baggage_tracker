@@ -5,7 +5,6 @@ import supervision as sv
 from ultralytics import YOLO
 import cv2
 import numpy as np
-import math
 import os
 import argparse
 import time
@@ -13,7 +12,6 @@ from datetime import datetime
 from reswarm import Reswarm
 from collections import Counter
 from datetime import datetime
-import polars as pl
 import shutil
 from pathlib import Path
 from pprint import pprint
@@ -161,7 +159,6 @@ async def main():
         fps_monitor = sv.FPSMonitor()
         start_time = time.time()
         global out
-        global pub
         global saved_masks
 
         while cap.isOpened():
