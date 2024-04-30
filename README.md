@@ -33,7 +33,7 @@ The detection data history is collected in the cloud storage backend of the app.
 The app additionally provides a web interface on each individual camera that allows users to view the low latency live video stream from that camera. This interface also allows users to configure the video and detection model for the camera.
 
 <div style="display:flex;flex-direction:row;align-items:center;justify-content:center;">
-    <img src="https://res.cloudinary.com/dotw7ar1m/image/upload/v1714052452/APPmockup.png" width="600px">
+    <img src="https://res.cloudinary.com/dotw7ar1m/image/upload/v1714482490/videoApp.png" width="600px">
 </div>
 
 ## App Parameters
