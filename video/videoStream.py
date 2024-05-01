@@ -112,14 +112,18 @@ portMap = {"frontCam": 5004,
            "backCam": 5007}
 
 device = args.device
+print('CAMERA USED:' + device)
+
+# if not rtsp, then it is usb like /dev/video0
+if not device.startswith('rtsp:'):
+    device = int(device[-1])
 
 model = getModel(OBJECT_MODEL)
 # bounding_box_annotator = sv.BoundingBoxAnnotator()
 bounding_box_annotator = sv.DotAnnotator(radius=6)
 label_annotator = sv.LabelAnnotator(text_scale=0.4, text_thickness=1, text_padding=3)
 
-print('CAMERA USED:' + device)
-cap = cv2.VideoCapture(int(device[-1]))
+cap = cv2.VideoCapture(device)
 cap.set(3, RESOLUTION_X)
 cap.set(4, RESOLUTION_Y)
 
