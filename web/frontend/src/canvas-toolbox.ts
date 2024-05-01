@@ -35,7 +35,7 @@ export class CanvasToolbox extends LitElement {
   mask_name: string = '';
 
   @state()
-  selectedCamType: 'USB' | 'IP' = 'IP'
+  selectedCamType: 'USB' | 'IP' = 'USB'
 
   dialog?: MdDialog;
   cameraDialog?: MdDialog;
@@ -220,7 +220,7 @@ export class CanvasToolbox extends LitElement {
           </li>
 
           <li class="column paging" ?active=${this.selectedCamType === 'IP'}>
-            <div>${this.camSetup?.camera?.path ?? ''}</div>
+            <div>${this.camSetup?.camera.type === 'IP' ? this.camSetup?.camera?.path ?? '' : ''}</div>
             <md-elevated-button @click=${this.onCreateIPClick}>
               Setup IP Camera
               <md-icon slot="icon">edit</md-icon>
