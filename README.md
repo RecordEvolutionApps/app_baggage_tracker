@@ -1,8 +1,17 @@
-# Vehicle Counter - selective object detection for automotive
+<div style="display:flex;flex-direction:row;align-items:center;justify-content:center;">
+    <img src="https://res.cloudinary.com/dotw7ar1m/image/upload/v1714483863/carAppVideo.png" width="800px">
+</div>
+
+# End-To-End Smart Traffic Detection System​ - Selective object detection for automotive
 
 Interactive camera application for selective object detection. Real-time object counting is available in user-defined areas of the video image. The application can differentiate between vehicles such as trucks, cars, buses, and motorcycles.
 
 Users can interact with the live video and select areas of interest. Object detection and counting will be isolated to the detection zones specified by the user. Multiple areas can be defined, and the number of objects will be displayed for each zone.
+
+## Hardware
+
+The Revis box is an End-to-End solution that can be configured for your needs. This means that even though parts can be exchanged, we provide a turnkey solution. While we rely on NVIDIA devices, the camera itself can be selected depending on the use case. This has several advantages such as extending existing cameras with AI functionality or selecting a special camera, for instance, night vision.
+
 
 ## Use on your camera
 
