@@ -7,7 +7,7 @@ import type { Context } from "elysia";
 
 export const streams: Map<string, Subprocess<"ignore", "pipe", "inherit">> = new Map()
 const ports = new Map()
-let streamSetup: any = {}
+let streamSetup: Record<string, Camera> = {}
 const streamSetupFile: BunFile = Bun.file("/data/streamSetup.json");
 const camStreams = ['frontCam', 'backCam', 'leftCam', 'rightCam']
 
@@ -37,13 +37,13 @@ async function initStreams() {
         streamSetup = await streamSetupFile.json()
     } catch (err) {
         console.error('error loading streamSetup file:', err)
-        if (firstCam) await Bun.write(streamSetupFile, JSON.stringify({ frontCam: firstCam }))
-        streamSetup = await streamSetupFile.json()
+        await Bun.write(streamSetupFile, JSON.stringify({}))
+        streamSetup = {}
     }
 
     console.log('StreamSetup', streamSetup)
     for (const [camStream, cam] of Object.entries(streamSetup)) {
-        if (cam && camStream) startVideoStream(cam, camStream)
+        if (camStream && cam) startVideoStream(cam, camStream)
     }
 }
 
