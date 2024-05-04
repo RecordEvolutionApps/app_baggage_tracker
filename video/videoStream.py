@@ -19,6 +19,7 @@ import base64
 import torch
 import functools
 import urllib.request
+
 print = functools.partial(print, flush=True)
 
 with open('/app/video/coco_classes.json', 'r') as f:
@@ -122,6 +123,8 @@ model = getModel(OBJECT_MODEL)
 # bounding_box_annotator = sv.BoundingBoxAnnotator()
 bounding_box_annotator = sv.DotAnnotator(radius=6)
 label_annotator = sv.LabelAnnotator(text_scale=0.4, text_thickness=1, text_padding=3)
+tracker = sv.ByteTrack()
+smoother = sv.DetectionsSmoother()
 
 cap = cv2.VideoCapture(device)
 cap.set(3, RESOLUTION_X)
@@ -176,6 +179,8 @@ async def main():
 
             results = model(frame, imgsz=(MODEL_RESY, MODEL_RESX), conf=CONF, iou=IOU, half=True, verbose=False, classes=CLASS_LIST)
             detections = sv.Detections.from_ultralytics(results[0])
+            detections = tracker.update_with_detections(detections)
+            detections = smoother.update_with_detections(detections)
             counts = []
 
             for saved_mask in saved_masks:
@@ -185,9 +190,9 @@ async def main():
                 label = str(count) + ' - ' + saved_mask['label']
                 color = saved_mask['color']
 
-
                 zone_mask = zone.trigger(detections=detections)
                 filtered_detections = detections[zone_mask]
+                labels = [f"{class_id_topic[class_id]} #{tracker_id}" for class_id, tracker_id in zip(filtered_detections.class_ids, filtered_detections.tracker_ids)]
 
                 zone_annotator = sv.PolygonZoneAnnotator(
                     zone=zone,
@@ -198,7 +203,7 @@ async def main():
                 counts.append({'label': saved_mask['label'], 'count': count_dict})
 
                 frame = bounding_box_annotator.annotate(scene=frame, detections=filtered_detections)
-                frame = label_annotator.annotate(scene=frame, detections=filtered_detections)
+                frame = label_annotator.annotate(scene=frame, detections=filtered_detections, labels=labels)
                 frame = zone_annotator.annotate(scene=frame, label=label)
 
 
@@ -283,7 +288,7 @@ async def readMasksFromStdin():
                 polygon = np.array(mask['points'])
                 polygon.astype(int)
 
-                polygon_zone = sv.PolygonZone(polygon=polygon, frame_resolution_wh=(RESOLUTION_X, RESOLUTION_Y))
+                polygon_zone = sv.PolygonZone(polygon=polygon, frame_resolution_wh=(RESOLUTION_X, RESOLUTION_Y), triggering_position=sv.TriggeringPosition.CENTER)
                 mask['zone'] = polygon_zone
 
                 saved_masks.append(mask)
