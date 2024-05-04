@@ -192,7 +192,7 @@ export class CanvasToolbox extends LitElement {
     this.selectedCamType = this.selectedCamType === 'USB' ? 'IP' : 'USB'
     if (this.selectedCamType !== 'IP') return
     
-    if (this.camSetup?.camera?.path) {
+    if (this.camSetup?.camera?.path && this.camSetup?.camera.type === 'IP') {
       this.cameraDialog?.submitIPCamera();
     } else {
       this.cameraDialog?.show();

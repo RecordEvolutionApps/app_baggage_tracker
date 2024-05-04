@@ -19,6 +19,7 @@ import base64
 import torch
 import functools
 import urllib.request
+import traceback
 
 print = functools.partial(print, flush=True)
 
@@ -136,7 +137,7 @@ label_annotator = sv.LabelAnnotator(text_scale=0.4, text_thickness=1, text_paddi
 #     text_scale=0.5)
 
 tracker = sv.ByteTrack()
-smoother = sv.DetectionsSmoother()
+smoother = sv.DetectionsSmoother(length=5)
 
 cap = cv2.VideoCapture(device)
 cap.set(3, RESOLUTION_X)
@@ -178,7 +179,6 @@ async def main():
         fps_monitor = sv.FPSMonitor()
         start_time = time.time()
         global out
-        global saved_masks
 
         while cap.isOpened():
             elapsed_time = time.time() - start_time
@@ -189,43 +189,8 @@ async def main():
                 continue
             
             results = model(frame, imgsz=(MODEL_RESY, MODEL_RESX), conf=CONF, iou=IOU, verbose=False, classes=CLASS_LIST)
-            detections = sv.Detections.from_ultralytics(results[0])
-            detections = tracker.update_with_detections(detections)
-            detections = smoother.update_with_detections(detections)
-            counts = []
-
-            # line_zone.trigger(detections)
-            # frame = line_zone_annotator.annotate(frame, line_counter=line_zone)
-
-            for saved_mask in saved_masks:
-                zone = saved_mask['zone']
-                zone_annotator = saved_mask['annotator']
-                
-                zone_mask = zone.trigger(detections=detections)
-
-
-                count = zone.current_count
-                zone_label = str(count) + ' - ' + saved_mask['label']
-
-                filtered_detections = detections[zone_mask]
-                
-                labels = [f"{class_id_topic[str(class_id)]} #{tracker_id}" for class_id, tracker_id in zip(filtered_detections.class_id, filtered_detections.tracker_id)]
-
-                count_dict = count_polygon_zone(zone)
-                counts.append({'label': saved_mask['label'], 'count': count_dict})
-
-                frame = bounding_box_annotator.annotate(scene=frame, detections=filtered_detections)
-                frame = label_annotator.annotate(scene=frame, detections=filtered_detections, labels=labels)
-                frame = zone_annotator.annotate(scene=frame, label=zone_label)
-
-            # Annotate all detections if no masks are defined
-            if len(saved_masks) == 0:
-                frame = bounding_box_annotator.annotate(scene=frame, detections=detections)
-                labels = [f"{class_id_topic[str(class_id)]} #{tracker_id}" for class_id, tracker_id in zip(detections.class_id, detections.tracker_id)]
-                frame = label_annotator.annotate(scene=frame, detections=detections, labels=labels)
-
-                count_dict = count_detections(detections)
-                counts.append({'label': DEVICE_NAME + "_" + "default", 'count': count_dict})
+            
+            frame, counts = processFrame(frame, results)
 
             # Draw FPS and Timestamp
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
@@ -252,9 +217,57 @@ async def main():
         cap.release()
         cv2.destroyAllWindows()
     except Exception as e:
-        print(f'Error in video loop: {str(e)}')
+        print(f'############################# Error in video loop: {str(e)}')
+        traceback.print_exc()
         import sys
         sys.exit(1)
+
+def processFrame(frame, results):
+    global saved_masks
+    if len(results) == 0:
+        return frame, []          
+    detections = sv.Detections.from_ultralytics(results[0])
+    try:
+        detections = tracker.update_with_detections(detections)
+        detections = smoother.update_with_detections(detections)
+    except Exception as e:
+        print('Error when smoothing detections', str(e))
+
+    counts = []
+
+    # line_zone.trigger(detections)
+    # frame = line_zone_annotator.annotate(frame, line_counter=line_zone)
+
+    for saved_mask in saved_masks:
+        zone = saved_mask['zone']
+        zone_annotator = saved_mask['annotator']
+        
+        zone_mask = zone.trigger(detections=detections)
+
+
+        count = zone.current_count
+        zone_label = str(count) + ' - ' + saved_mask['label']
+
+        filtered_detections = detections[zone_mask]
+        
+        # labels = [f"{class_id_topic[str(class_id)]} #{tracker_id}" for class_id, tracker_id in zip(filtered_detections.class_id, filtered_detections.tracker_id)]
+
+        count_dict = count_polygon_zone(zone)
+        counts.append({'label': saved_mask['label'], 'count': count_dict})
+
+        frame = bounding_box_annotator.annotate(scene=frame, detections=filtered_detections)
+        frame = label_annotator.annotate(scene=frame, detections=filtered_detections)
+        frame = zone_annotator.annotate(scene=frame, label=zone_label)
+
+    # Annotate all detections if no masks are defined
+    if len(saved_masks) == 0:
+        frame = bounding_box_annotator.annotate(scene=frame, detections=detections)
+        # labels = [f"{class_id_topic[str(class_id)]} #{tracker_id}" for class_id, tracker_id in zip(detections.class_id, detections.tracker_id)]
+        frame = label_annotator.annotate(scene=frame, detections=detections)
+
+        count_dict = count_detections(detections)
+        counts.append({'label': DEVICE_NAME + "_" + "default", 'count': count_dict})
+    return frame, counts
 
 def publishImage(frame):
     _, encoded_frame = cv2.imencode('.jpg', frame)
