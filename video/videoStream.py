@@ -126,14 +126,14 @@ model = getModel(OBJECT_MODEL)
 bounding_box_annotator = sv.DotAnnotator(radius=6)
 label_annotator = sv.LabelAnnotator(text_scale=0.4, text_thickness=1, text_padding=3)
 
-START = sv.Point(10, 400)
-END = sv.Point(1200, 400)
-line_zone = sv.LineZone(start=START, end=END)
+# START = sv.Point(10, 400)
+# END = sv.Point(1200, 400)
+# line_zone = sv.LineZone(start=START, end=END)
 
-line_zone_annotator = sv.LineZoneAnnotator(
-    thickness=1,
-    text_thickness=1,
-    text_scale=0.5)
+# line_zone_annotator = sv.LineZoneAnnotator(
+#     thickness=1,
+#     text_thickness=1,
+#     text_scale=0.5)
 
 tracker = sv.ByteTrack()
 smoother = sv.DetectionsSmoother()
@@ -188,7 +188,7 @@ async def main():
             if not success:
                 continue
             
-            results = model(frame, imgsz=(MODEL_RESY, MODEL_RESX), conf=CONF, iou=IOU, half=True, verbose=False, classes=CLASS_LIST)
+            results = model(frame, imgsz=(MODEL_RESY, MODEL_RESX), conf=CONF, iou=IOU, verbose=False, classes=CLASS_LIST)
             detections = sv.Detections.from_ultralytics(results[0])
             detections = tracker.update_with_detections(detections)
             detections = smoother.update_with_detections(detections)

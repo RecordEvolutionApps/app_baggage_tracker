@@ -72,9 +72,9 @@ export const selectCamera = async (ctx: Context) => {
     const startCam = streamSetup[cam.camStream]
     await Bun.write(streamSetupFile, JSON.stringify(streamSetup));
 
-    await killVideoStream(startCam.path, startCam.camStream)
+    await killVideoStream(startCam.path, cam.camStream)
 
-    startVideoStream(startCam, startCam.camStream)
+    startVideoStream(startCam, cam.camStream)
 }
 
 async function startVideoStream(cam: Camera, camStream: string) {
