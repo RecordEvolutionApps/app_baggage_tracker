@@ -120,9 +120,21 @@ if not device.startswith('rtsp:'):
     device = int(device[-1])
 
 model = getModel(OBJECT_MODEL)
+
+# Supervision Annotations
 # bounding_box_annotator = sv.BoundingBoxAnnotator()
 bounding_box_annotator = sv.DotAnnotator(radius=6)
 label_annotator = sv.LabelAnnotator(text_scale=0.4, text_thickness=1, text_padding=3)
+
+START = sv.Point(0, 400)
+END = sv.Point(1200, 400)
+line_zone = sv.LineZone(start=START, end=END)
+
+line_zone_annotator = sv.LineZoneAnnotator(
+    thickness=4,
+    text_thickness=4,
+    text_scale=2)
+
 tracker = sv.ByteTrack()
 smoother = sv.DetectionsSmoother()
 
@@ -194,10 +206,7 @@ async def main():
                 filtered_detections = detections[zone_mask]
                 labels = [f"{class_id_topic[class_id]} #{tracker_id}" for class_id, tracker_id in zip(filtered_detections.class_ids, filtered_detections.tracker_ids)]
 
-                zone_annotator = sv.PolygonZoneAnnotator(
-                    zone=zone,
-                    color=sv.Color.from_hex(color),
-                )
+                zone_annotator = saved_mask['annotator']
 
                 count_dict = count_polygon_zone(zone)
                 counts.append({'label': saved_mask['label'], 'count': count_dict})
@@ -205,7 +214,7 @@ async def main():
                 frame = bounding_box_annotator.annotate(scene=frame, detections=filtered_detections)
                 frame = label_annotator.annotate(scene=frame, detections=filtered_detections, labels=labels)
                 frame = zone_annotator.annotate(scene=frame, label=label)
-
+                frame = line_zone_annotator.annotate(scene=frame, line_counter=line_zone)
 
             # Annotate all detections if no masks are defined
             if len(saved_masks) == 0:
@@ -290,6 +299,11 @@ async def readMasksFromStdin():
 
                 polygon_zone = sv.PolygonZone(polygon=polygon, frame_resolution_wh=(RESOLUTION_X, RESOLUTION_Y), triggering_position=sv.TriggeringPosition.CENTER)
                 mask['zone'] = polygon_zone
+                zone_annotator = sv.PolygonZoneAnnotator(
+                    zone=polygon_zone,
+                    color=sv.Color.from_hex(mask['color']),
+                )
+                mask['annotator'] = zone_annotator
 
                 saved_masks.append(mask)
         except Exception as e:
