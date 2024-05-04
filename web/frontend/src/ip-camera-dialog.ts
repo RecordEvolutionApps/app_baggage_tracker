@@ -82,7 +82,7 @@ export class IpCameraDialog extends LitElement {
   ) {
 
     this.dialog = this.shadowRoot?.getElementById('dialog') as MdDialog;
-    this.pathEl = this.shadowRoot?.getElementById('path') as MdOutlinedTextField
+    this.pathEl = this.shadowRoot?.getElementById('ipaddress') as MdOutlinedTextField
     this.usernameEl = this.shadowRoot?.getElementById('username') as MdOutlinedTextField
     this.passwordEl = this.shadowRoot?.getElementById('password') as MdOutlinedTextField
   }
@@ -120,6 +120,8 @@ export class IpCameraDialog extends LitElement {
       camStream: this.camStream,
     };
 
+    this.dispatchEvent(new CustomEvent('camera-selected', { detail: payload }));
+
     await fetch(`${this.basepath}/cameras/select`, {
       method: 'POST',
       headers: {
@@ -127,6 +129,7 @@ export class IpCameraDialog extends LitElement {
       },
       body: JSON.stringify(payload),
     });
+
   }
 
   show() {
@@ -172,21 +175,21 @@ export class IpCameraDialog extends LitElement {
                 label="Camera IP address (127.0.0.1:4000/streampath)"
                 value="${ this.camSetup?.camera?.path ?? '' }"
                 type="text"
-                field="ipaddress"
+                id="ipaddress"
                 >
             </md-outlined-text-field>
             <md-outlined-text-field
                 label="Username"
                 .value="${ this.camSetup?.camera?.username ?? '' }"
                 type="text"
-                field="username"
+                id="username"
                 >
             </md-outlined-text-field>
             <md-outlined-text-field
                 label="Password"
                 value=""
                 type="password"
-                field="password"
+                id="password"
                 >
             </md-outlined-text-field>
           </div>          

@@ -10,6 +10,7 @@ import '@material/web/textfield/outlined-text-field.js';
 import '@material/web/radio/radio.js';
 import '@material/web/dialog/dialog.js';
 import { MdDialog } from '@material/web/dialog/dialog.js';
+import { IpCameraDialog } from './ip-camera-dialog.js';
 
 @customElement('canvas-toolbox')
 export class CanvasToolbox extends LitElement {
@@ -38,7 +39,7 @@ export class CanvasToolbox extends LitElement {
   selectedCamType: 'USB' | 'IP' = 'USB'
 
   dialog?: MdDialog;
-  cameraDialog?: MdDialog;
+  cameraDialog?: IpCameraDialog;
 
   static styles = [
     mainStyles,
@@ -117,7 +118,7 @@ export class CanvasToolbox extends LitElement {
     if (!this.polygonManager) throw new Error('polygon manager not defined');
 
     this.dialog = this.shadowRoot?.getElementById('dialog') as MdDialog;
-    this.cameraDialog = this.shadowRoot?.getElementById('camera-dialog') as MdDialog;
+    this.cameraDialog = this.shadowRoot?.getElementById('camera-dialog') as IpCameraDialog;
 
     this.polygonManager.addEventListener('update', (ev: any) => {
       const { polygons, selectedPolygon } = ev.detail;
@@ -165,7 +166,7 @@ export class CanvasToolbox extends LitElement {
       this.dialog.returnValue = 'cancel';
     }
     if (this.cameraDialog) {
-      this.cameraDialog.returnValue = 'cancel';
+      this.cameraDialog.onDialogCancel();
     }
   }
 
@@ -187,8 +188,19 @@ export class CanvasToolbox extends LitElement {
     }
   }
 
-  check(type: 'USB' | 'IP') {
+  selectCameraType(type: 'USB' | 'IP') {
     this.selectedCamType = this.selectedCamType === 'USB' ? 'IP' : 'USB'
+    if (this.selectedCamType !== 'IP') return
+    
+    if (this.camSetup?.camera?.path) {
+      this.cameraDialog?.submitIPCamera();
+    } else {
+      this.cameraDialog?.show();
+    }
+  }
+
+  onSetIPCamera(ev: CustomEvent) {
+    this.camSetup = {camera: ev.detail, width: 1270, height: 720} as CamSetup
   }
 
   render() {
@@ -201,12 +213,12 @@ export class CanvasToolbox extends LitElement {
           <li>
             <div class="mb16">
               <md-radio id="usb" value="USB" aria-label="USB" 
-                @change=${ () => this.check('USB')}
+                @change=${ () => this.selectCameraType('USB')}
                 .checked=${ this.selectedCamType === 'USB'}
                 ></md-radio>
               <label for="usb">USB</label>
               <md-radio id="ip" value="IP" aria-label="IP" 
-                @change=${ () => this.check('IP')}
+                @change=${ () => this.selectCameraType('IP')}
                 .checked=${ this.selectedCamType === 'IP'}
                 ></md-radio>
               <label for="ip">IP Camera</label>
@@ -227,7 +239,7 @@ export class CanvasToolbox extends LitElement {
             </md-elevated-button>
           </li>
           <li>
-            <h4>Detection Zone</h4>
+            <h4>Detection Zones</h4>
           </li>
           <li class="mb16">
             <md-elevated-button @click=${this.onCreateClick}>
@@ -243,8 +255,7 @@ export class CanvasToolbox extends LitElement {
           </li>
           <li>
             <md-elevated-button
-              .disabled=${this.selectedPolygon?.committed ||
-      !this.selectedPolygon?.isCommitable}
+              .disabled=${this.selectedPolygon?.committed || !this.selectedPolygon?.isCommitable}
               @click=${this.commitPolygon}
             >
               Commit
@@ -258,6 +269,7 @@ export class CanvasToolbox extends LitElement {
         id="camera-dialog"
         .camStream=${this.camStream}
         .camSetup=${this.camSetup}
+        @camera-selected=${ this.onSetIPCamera}
         >
 
       </ip-camera-dialog>
