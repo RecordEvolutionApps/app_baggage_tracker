@@ -31,12 +31,12 @@ export class CameraSelector extends LitElement {
     ) as MdOutlinedSelect;
 
     await this.getCameras();
-    this.selector.select(this.camSetup?.camera?.id);
+    this.selector.select(this.camSetup?.camera?.id ?? '');
   }
 
-  update(changedProps) {
+  update(changedProps: any) {
     if (changedProps.has('camSetup')) {
-      this.selector.select(this.camSetup?.camera?.id)
+      this.selector?.select(this.camSetup?.camera?.id ?? '')
     }
     super.update(changedProps)
   }
@@ -53,11 +53,13 @@ export class CameraSelector extends LitElement {
 
     await this.updateComplete;
   }
+
   async selectCamera() {
     const value = this.selector?.value;
     console.log('selected', value, this.camStream);
     const payload = {
       id: value,
+      type: 'USB',
       camStream: this.camStream,
     };
 
@@ -101,7 +103,7 @@ export class CameraSelector extends LitElement {
           this.camList,
           (c: Camera) => c.id,
           (c: Camera) => html`
-            <md-select-option value="${c.id}">
+            <md-select-option value="${c.id ?? ''}">
               <div slot="headline">${c.name} (${c.id})</div>
             </md-select-option>
           `,

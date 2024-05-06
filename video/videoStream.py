@@ -19,6 +19,8 @@ import base64
 import torch
 import functools
 import urllib.request
+import traceback
+
 print = functools.partial(print, flush=True)
 
 with open('/app/video/coco_classes.json', 'r') as f:
@@ -112,14 +114,32 @@ portMap = {"frontCam": 5004,
            "backCam": 5007}
 
 device = args.device
+print('CAMERA USED:' + device)
+
+# if not rtsp, then it is usb like /dev/video0
+if not device.startswith('rtsp:'):
+    device = int(device[-1])
 
 model = getModel(OBJECT_MODEL)
+
+# Supervision Annotations
 # bounding_box_annotator = sv.BoundingBoxAnnotator()
 bounding_box_annotator = sv.DotAnnotator(radius=6)
 label_annotator = sv.LabelAnnotator(text_scale=0.4, text_thickness=1, text_padding=3)
 
-print('CAMERA USED:' + device)
-cap = cv2.VideoCapture(int(device[-1]))
+# START = sv.Point(10, 400)
+# END = sv.Point(1200, 400)
+# line_zone = sv.LineZone(start=START, end=END)
+
+# line_zone_annotator = sv.LineZoneAnnotator(
+#     thickness=1,
+#     text_thickness=1,
+#     text_scale=0.5)
+
+tracker = sv.ByteTrack()
+smoother = sv.DetectionsSmoother(length=5)
+
+cap = cv2.VideoCapture(device)
 cap.set(3, RESOLUTION_X)
 cap.set(4, RESOLUTION_Y)
 
@@ -159,7 +179,6 @@ async def main():
         fps_monitor = sv.FPSMonitor()
         start_time = time.time()
         global out
-        global saved_masks
 
         while cap.isOpened():
             elapsed_time = time.time() - start_time
@@ -168,49 +187,17 @@ async def main():
             success, frame = cap.read()
             if not success:
                 continue
-
-
-            results = model(frame, imgsz=(MODEL_RESY, MODEL_RESX), conf=CONF, iou=IOU, half=True, verbose=False, classes=CLASS_LIST)
-            detections = sv.Detections.from_ultralytics(results[0])
-            counts = []
-
-            for saved_mask in saved_masks:
-                zone = saved_mask['zone']
-                count = zone.current_count
-
-                label = str(count) + ' - ' + saved_mask['label']
-                color = saved_mask['color']
-
-
-                zone_mask = zone.trigger(detections=detections)
-                filtered_detections = detections[zone_mask]
-
-                zone_annotator = sv.PolygonZoneAnnotator(
-                    zone=zone,
-                    color=sv.Color.from_hex(color),
-                )
-
-                count_dict = count_polygon_zone(zone)
-                counts.append({'label': saved_mask['label'], 'count': count_dict})
-
-                frame = bounding_box_annotator.annotate(scene=frame, detections=filtered_detections)
-                frame = label_annotator.annotate(scene=frame, detections=filtered_detections)
-                frame = zone_annotator.annotate(scene=frame, label=label)
-
-
-            # Annotate all detections if no masks are defined
-            if len(saved_masks) == 0:
-                frame = bounding_box_annotator.annotate(scene=frame, detections=detections)
-                frame = label_annotator.annotate(scene=frame, detections=detections)
-
-                count_dict = count_detections(detections)
-                counts.append({'label': DEVICE_NAME + "_" + "default", 'count': count_dict})
+            
+            results = model(frame, imgsz=(MODEL_RESY, MODEL_RESX), conf=CONF, iou=IOU, verbose=False, classes=CLASS_LIST)
+            
+            frame, counts = processFrame(frame, results)
 
             # Draw FPS and Timestamp
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
             overlay_text(frame, f'Timestamp: {current_time}', position=(10, 30))
             overlay_text(frame, f'FPS: {fps_monitor.fps:.2f}', position=(10, 60))
 
+            # Publish data
             if elapsed_time >= 1.0:
                 for item in counts:
                     publishImage(frame)
@@ -230,9 +217,57 @@ async def main():
         cap.release()
         cv2.destroyAllWindows()
     except Exception as e:
-        print('error in the video loop, exiting', e)
+        print(f'############################# Error in video loop: {str(e)}')
+        traceback.print_exc()
         import sys
         sys.exit(1)
+
+def processFrame(frame, results):
+    global saved_masks
+    if len(results) == 0:
+        return frame, []          
+    detections = sv.Detections.from_ultralytics(results[0])
+    try:
+        detections = tracker.update_with_detections(detections)
+        detections = smoother.update_with_detections(detections)
+    except Exception as e:
+        print('Error when smoothing detections', str(e))
+
+    counts = []
+
+    # line_zone.trigger(detections)
+    # frame = line_zone_annotator.annotate(frame, line_counter=line_zone)
+
+    for saved_mask in saved_masks:
+        zone = saved_mask['zone']
+        zone_annotator = saved_mask['annotator']
+        
+        zone_mask = zone.trigger(detections=detections)
+
+
+        count = zone.current_count
+        zone_label = str(count) + ' - ' + saved_mask['label']
+
+        filtered_detections = detections[zone_mask]
+        
+        # labels = [f"{class_id_topic[str(class_id)]} #{tracker_id}" for class_id, tracker_id in zip(filtered_detections.class_id, filtered_detections.tracker_id)]
+
+        count_dict = count_polygon_zone(zone)
+        counts.append({'label': saved_mask['label'], 'count': count_dict})
+
+        frame = bounding_box_annotator.annotate(scene=frame, detections=filtered_detections)
+        frame = label_annotator.annotate(scene=frame, detections=filtered_detections)
+        frame = zone_annotator.annotate(scene=frame, label=zone_label)
+
+    # Annotate all detections if no masks are defined
+    if len(saved_masks) == 0:
+        frame = bounding_box_annotator.annotate(scene=frame, detections=detections)
+        # labels = [f"{class_id_topic[str(class_id)]} #{tracker_id}" for class_id, tracker_id in zip(detections.class_id, detections.tracker_id)]
+        frame = label_annotator.annotate(scene=frame, detections=detections)
+
+        count_dict = count_detections(detections)
+        counts.append({'label': DEVICE_NAME + "_" + "default", 'count': count_dict})
+    return frame, counts
 
 def publishImage(frame):
     _, encoded_frame = cv2.imencode('.jpg', frame)
@@ -260,10 +295,16 @@ def publishClassCount(result, zone_name):
 
     get_event_loop().create_task(rw.publish_to_table('detections', payload))
 
-rw = Reswarm()
-
 async def readMasksFromStdin():
     print("Reading STDIN")
+
+    try:
+        with open('/data/mask.json', 'r') as f:
+            loaded_masks = json.load(f)
+
+        prepMasks(loaded_masks)
+    except Exception as e:
+        print('Failed to load masks initially', e)
 
     while True:
         try:
@@ -273,25 +314,46 @@ async def readMasksFromStdin():
 
             stdin_masks = json.loads(masksJSON)
 
-            global saved_masks
-            saved_masks = []
-            for mask in stdin_masks:
-                polygon = np.array(mask['points'])
-                polygon.astype(int)
-
-                polygon_zone = sv.PolygonZone(polygon=polygon, frame_resolution_wh=(RESOLUTION_X, RESOLUTION_Y))
-                mask['zone'] = polygon_zone
-
-                saved_masks.append(mask)
+            prepMasks(stdin_masks)
+            
         except Exception as e:
             print(e)
+        await sleep(0)
 
-            
+def prepMasks(in_masks):
+    global saved_masks
+
+    pre_masks = [
+        {
+            'label': mask['label'],
+            'points': [(int(point['x']), int(point['y'])) for point in mask['points'][:-1]],
+            'color': mask['lineColor']
+        }
+        for mask in in_masks['polygons']
+    ]
+    out_masks = []
+    for mask in pre_masks:
+        polygon = np.array(mask['points'])
+        polygon.astype(int)
+
+        polygon_zone = sv.PolygonZone(polygon=polygon, frame_resolution_wh=(RESOLUTION_X, RESOLUTION_Y), triggering_position=sv.Position.CENTER)
+        mask['zone'] = polygon_zone
+        zone_annotator = sv.PolygonZoneAnnotator(
+            zone=polygon_zone,
+            color=sv.Color.from_hex(mask['color']),
+        )
+        mask['annotator'] = zone_annotator
+
+        out_masks.append(mask)
+    saved_masks = out_masks
+    print('Refreshed Masks', saved_masks)
+
+rw = Reswarm()
 
 if __name__ == "__main__":
     # run the main coroutine
-    task = get_event_loop().create_task(main())
-    task2 = get_event_loop().create_task(readMasksFromStdin())
+    task1 = get_event_loop().create_task(readMasksFromStdin())
+    task2 = get_event_loop().create_task(main())
 
     # run the reswarm component
     rw.run()

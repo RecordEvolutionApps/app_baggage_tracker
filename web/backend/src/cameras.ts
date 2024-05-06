@@ -7,38 +7,43 @@ import type { Context } from "elysia";
 
 export const streams: Map<string, Subprocess<"ignore", "pipe", "inherit">> = new Map()
 const ports = new Map()
-let streamSetup: any = {}
+let streamSetup: Record<string, Camera> = {}
 const streamSetupFile: BunFile = Bun.file("/data/streamSetup.json");
 const camStreams = ['frontCam', 'backCam', 'leftCam', 'rightCam']
 
 
+type Camera = {
+    id: string
+    type: 'USB' | 'IP'
+    name: string
+    path?: string
+    username?: string
+    password?: string
+    camStream: string
+  }
+
 async function initStreams() {
-    const camList = await getCameras()
+    const camList = await getUSBCameras()
     console.log("CAMERA LIST", { camList })
 
-    if (!camList.length) {
-        console.log('NO CAMERA DETECTED')
-        return
-    }
-    const firstCam = camList[0]
+    const firstCam = camList?.[0]
 
     const exists: boolean = await streamSetupFile.exists();
-    console.log("setup file exists: ", exists)
-    if (!exists) {
+    if (!exists && firstCam) {
         await Bun.write(streamSetupFile, JSON.stringify({ frontCam: firstCam }))
     }
 
     try {
         streamSetup = await streamSetupFile.json()
     } catch (err) {
-        console.error('errrrrr', err)
-        await Bun.write(streamSetupFile, JSON.stringify({ frontCam: firstCam }))
-        streamSetup = await streamSetupFile.json()
+        console.error('error loading streamSetup file:', err)
+        await Bun.write(streamSetupFile, JSON.stringify({}))
+        streamSetup = {}
     }
 
     console.log('StreamSetup', streamSetup)
-    for (const [camStream, { id }] of Object.entries(streamSetup)) {
-        if (id && camStream) runVideoStream(id, camStream)
+    for (const [camStream, cam] of Object.entries(streamSetup)) {
+        if (camStream && cam) startVideoStream(cam, camStream)
     }
 }
 
@@ -52,45 +57,46 @@ export function getStreamSetup(ctx: Context): any {
 }
 
 export const selectCamera = async (ctx: Context) => {
-    const { id, camStream }: { id: string, camStream: string } = JSON.parse(ctx.body as any)
-    console.log('selected camera', { id, camStream })
+    const cam: Camera = JSON.parse(ctx.body as any)
+    console.log('selected camera', cam)
+    if (cam.type === 'IP') {
+        streamSetup[cam.camStream] = cam
+    }
+    else {
+        const camList = await getUSBCameras()
+        const cameraDev = camList.find((c) => c.id === cam.id)
 
-    const camList = await getCameras()
-    const cameraDev = camList.find((c) => c.id === id)
+        streamSetup[cam.camStream] = cameraDev
+    }
 
-    streamSetup[camStream] = cameraDev
+    const startCam = streamSetup[cam.camStream]
     await Bun.write(streamSetupFile, JSON.stringify(streamSetup));
 
-    await killVideoStream(id, camStream)
+    await killVideoStream(startCam.path, cam.camStream)
 
-    runVideoStream(id, camStream)
+    startVideoStream(startCam, cam.camStream)
 }
 
-async function runVideoStream(deviceId: string, camStream: string) {
+async function startVideoStream(cam: Camera, camStream: string) {
     if (!camStreams.includes(camStream)) {
         console.error('Error camStream is illegal:', camStream)
         return
     }
-    console.log('running video stream for ', deviceId, camStream)
+    console.log('running video stream for ', cam, camStream)
 
-    await startVideoStream(deviceId, camStream)
-}
-
-async function startVideoStream(deviceId: string, camStream: string) {
-    const camList = await getCameras()
-    const cameraDev = camList.find((c: any) => c.id === deviceId)
-
-    if (!cameraDev) {
-        console.log("Unable to find Device path for ID", deviceId)
-        return
+    let camPath: string
+    if (cam.type === 'IP') {
+        camPath = `rtsp://${cam.username}:${cam.password}@${cam.path}`
+    } else {
+        camPath = cam.path ?? ''
     }
 
-    const proc = Bun.spawn(["ssh", "-o", "StrictHostKeyChecking=no", "video", "source",  "~/env_vars.txt", "&&", "python3", "-u", "/app/video/videoStream.py", cameraDev.path, camStream], {
+    const proc = Bun.spawn(["ssh", "-o", "StrictHostKeyChecking=no", "video", "source",  "~/env_vars.txt", "&&", "python3", "-u", "/app/video/videoStream.py", camPath, camStream], {
         env: { ...process.env },
         onExit: async (proc, exitCode, signalCode, error) => {
             console.log("Proccess exited with", { exitCode, signalCode, error })
             if (exitCode > 0) {
-                await startVideoStream(deviceId, camStream)
+                await startVideoStream(cam, camStream)
             }
         },
         stderr: "inherit",
@@ -98,7 +104,7 @@ async function startVideoStream(deviceId: string, camStream: string) {
         stdin: "pipe",
     });
 
-    streams.set(deviceId, proc)
+    streams.set(cam.path ?? 'xxx', proc)
     ports.set(camStream, proc)
 
     await proc.exited
@@ -106,14 +112,14 @@ async function startVideoStream(deviceId: string, camStream: string) {
     console.error('Python video stream exited', proc.exitCode, proc.signalCode)
 }
 
-async function killVideoStream(deviceId: string, camStream: string) {
-    console.log('Killing video stream (if exists) on ', deviceId, camStream)
+async function killVideoStream(camPath: string, camStream: string) {
+    console.log('Killing video stream (if exists) on ', camPath, camStream)
 
-    const proc: Subprocess = streams.get(deviceId)
+    const proc: Subprocess = streams.get(camPath)
 
     if (proc) {
         console.log('killing device process', proc)
-        streams.delete(deviceId)
+        streams.delete(camPath)
         proc.kill()
         await proc.exited
     }
@@ -128,7 +134,7 @@ async function killVideoStream(deviceId: string, camStream: string) {
     }
 }
 
-export async function getCameras() {
+export async function getUSBCameras(): Promise<Camera[]> {
     const camerasOutput = await $`ssh -o StrictHostKeyChecking=no video /app/video/list-cameras.sh`.text()
     return camerasOutput.split("\n").slice(0, -1).map((v: any) => {
         const [path, name, DEVPATH] = v.split(":")

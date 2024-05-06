@@ -21,15 +21,8 @@ export const updateStreamsWithMask = () => {
     for (const stream of streams.values()) {
         if (stream.stdin) {
             const stdin = stream.stdin as FileSink
-            const masks = currentMaskData.polygons.map(({ label, points, lineColor: color }) => {
-                const transformedPoints = points.map((point) => [Math.ceil(point.x), Math.ceil(point.y)])
-                // Remove last point
-                transformedPoints.pop()
 
-                return { label, points: transformedPoints, color }
-            })
-
-            stdin.write(JSON.stringify(masks) + "\n")
+            stdin.write(JSON.stringify(currentMaskData) + "\n")
             stdin.flush()
         }
     }
