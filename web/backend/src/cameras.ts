@@ -86,7 +86,7 @@ async function startVideoStream(cam: Camera, camStream: string) {
 
     let camPath: string
     if (cam.type === 'IP') {
-        camPath = `rtsp://${cam.username}:${cam.password}@${cam.path}`
+        camPath = `rtsp://${cam.username + (cam.password ? `:${cam.password}`: '')}@${cam.path}`
     } else {
         camPath = cam.path ?? ''
     }
