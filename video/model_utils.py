@@ -13,6 +13,7 @@ import cv2
 OBJECT_MODEL = os.environ.get('OBJECT_MODEL')
 RESOLUTION_X = int(os.environ.get('RESOLUTION_X', 640))
 RESOLUTION_Y = int(os.environ.get('RESOLUTION_Y', 480))
+DEVICE_NAME = os.environ.get('DEVICE_NAME')
 
 # Supervision Annotations
 if (OBJECT_MODEL.endswith('obb')):
