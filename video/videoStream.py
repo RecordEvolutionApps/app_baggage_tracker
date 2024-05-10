@@ -2,24 +2,21 @@ import sys
 import json
 from asyncio import get_event_loop, sleep
 import supervision as sv
-from ultralytics import YOLO
 import cv2
-import numpy as np
 import os
 import argparse
 import time
 from datetime import datetime
 from reswarm import Reswarm
-from collections import Counter
-from datetime import datetime
-import shutil
-from pathlib import Path
+
 from pprint import pprint
 import base64
 import torch
 import functools
-import urllib.request
+
 import traceback
+
+from model_utils import getModel, processFrame, get_youtube_video, overlay_text, count_polygon_zone, count_detections, prepMasks, readMasksFromStdin
 
 print = functools.partial(print, flush=True)
 
@@ -51,53 +48,6 @@ if len(CLASS_LIST) <= 1:
 
 saved_masks = []
 
-def downloadModel(model_name, model_path):
-    print(f'Downloading Pytorch model {model_name}...')
-    urllib.request.urlretrieve(f'https://github.com/ultralytics/assets/releases/download/v8.2.0/{model_name}.pt', model_path)
-    print(f'Download complete!')
-
-def getModel(model_name):
-    pytorch_model_path = f'/app/{model_name}.pt'
-    tensorrt_initial_model_path = f'/app/{model_name}.engine'
-
-    stored_pytorch_model_path = f'/data/{model_name}.pt'
-    stored_tensorrt_model_path = f'/data/{model_name}-{MODEL_RESY}-{MODEL_RESX}.engine'
-    model_download_path = f'/app/download/{model_name}.pt'
-
-    stored_tensorrt_file = Path(stored_tensorrt_model_path)
-    if stored_tensorrt_file.is_file():
-        print(f'Found existing TensorRT Model for {model_name}')
-        return YOLO(stored_tensorrt_model_path)
-
-    pytorch_model_file = Path(stored_pytorch_model_path)
-    if not pytorch_model_file.is_file():
-        print('Original Pytorch model was not found, will download model')
-
-        downloadModel(model_name, model_download_path)
-
-        print('Copying downloaded Pytorch model to /app directory')
-        # Move to /app directory to then export it, in case the export fails we don't have any bad data in the /data folder
-        shutil.copy(model_download_path, pytorch_model_path)
-
-        print('Moving downloaded Pytorch model to /data directory')
-        shutil.move(model_download_path, stored_pytorch_model_path)
-    else:
-        print('Original Pytorch model was found, copying to main directory to avoid corrupted items in /data')
-
-        print('Copying existing Pytorch model to /app directory')
-        # Copy to /app directory to then export it, in case the export fails we don't have any bad data in the /data folder
-        shutil.copyfile(stored_pytorch_model_path, pytorch_model_path)
-    
-    print("Exporting Pytorch model from /app directory into TensorRT....")
-    pytorch_model = YOLO(pytorch_model_path)
-    pytorch_model.export(format='engine', imgsz=(MODEL_RESY, MODEL_RESX))
-    print("Model exported!")
-
-    print(f'Moving exported TensorRT model {model_name} to data folder...')
-    shutil.move(tensorrt_initial_model_path, stored_tensorrt_model_path)
-
-    return YOLO(stored_tensorrt_model_path)
-
 parser = argparse.ArgumentParser(description='Start a Video Stream for the given Camera Device')
 
 parser.add_argument('device', type=str, help='A device path like e.g. /dev/video0')
@@ -112,23 +62,6 @@ portMap = {"frontCam": 5004,
 
 device = args.device
 print('CAMERA USED:' + device)
-
-def get_youtube_video(url, height):
-    import yt_dlp
-    with yt_dlp.YoutubeDL() as ydl:
-        info_dict = ydl.extract_info(url, download=False)
-        formats = info_dict.get('formats', [])
-        output_resolution = {"height": 0, "width": 0}
-        for format in formats:
-            resolution = format.get('height')
-            if resolution == None:
-                continue
-            if height and height == int(resolution):
-                output_resolution = format
-                break
-            elif output_resolution is None or resolution > output_resolution['height']:
-                output_resolution = format
-        return output_resolution
 
 if device.startswith('http'):
     if device.startswith('https://youtu'):
@@ -152,27 +85,7 @@ cap.set(4, RESOLUTION_Y)
 
 MODEL_RESX = (RESOLUTION_X // 32) * 32 # must be multiple of max stride 32
 MODEL_RESY = (RESOLUTION_Y // 32) * 32
-model = getModel(OBJECT_MODEL)
-
-# Supervision Annotations
-if (OBJECT_MODEL.endswith('obb')):
-    bounding_box_annotator = sv.OrientedBoxAnnotator()
-else:
-    bounding_box_annotator = sv.BoundingBoxAnnotator()
-# bounding_box_annotator = sv.DotAnnotator(radius=6)
-label_annotator = sv.LabelAnnotator(text_scale=0.4, text_thickness=1, text_padding=3)
-
-# START = sv.Point(10, 400)
-# END = sv.Point(1200, 400)
-# line_zone = sv.LineZone(start=START, end=END)
-
-# line_zone_annotator = sv.LineZoneAnnotator(
-#     thickness=1,
-#     text_thickness=1,
-#     text_scale=0.5)
-
-tracker = sv.ByteTrack()
-smoother = sv.DetectionsSmoother(length=5)
+model = getModel(OBJECT_MODEL, MODEL_RESX, MODEL_RESY)
 
 # print("CUDA available:", torch.cuda.is_available(), 'GPUs', torch.cuda.device_count())
 
@@ -183,29 +96,6 @@ writerStream = "appsrc do-timestamp=true ! " + outputFormat + " ! udpsink host=j
 # print(writerStream)
 
 out = cv2.VideoWriter(writerStream, 0, FRAMERATE, (RESOLUTION_X, RESOLUTION_Y))
-
-# Function to display frame rate and timestamp on the frame
-def overlay_text(frame, text, position=(10, 30), font_scale=1, color=(0, 255, 0), thickness=2):
-    cv2.putText(frame, text, position, cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, thickness, cv2.LINE_AA)
-
-def count_polygon_zone(zone):
-    count_dict = {}
-    for class_id in CLASS_LIST:
-        count = zone.class_in_current_count.get(class_id, 0)
-        count_dict[class_id] = count
-    return count_dict
-
-def count_detections(detections):
-    count_dict = {}
-    try:
-        for xyxy, mask, conf, class_id, tracker_id, data in detections:
-            if class_id in count_dict:
-                count_dict[class_id] += 1
-            else:
-                count_dict[class_id] = 1
-    except Exception as e:
-        print('failed to count', e)
-    return count_dict
 
 async def main():
     try:
@@ -248,7 +138,7 @@ async def main():
             start_time2 = time.time()
             
             if len(results) > 0:
-                frame, counts = processFrame(frame, results)
+                frame, counts = processFrame(frame, results, CLASS_LIST)
 
             # Draw FPS and Timestamp
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
@@ -281,62 +171,6 @@ async def main():
         import sys
         sys.exit(1)
 
-def processFrame(frame, results):
-    global saved_masks
-    if len(results) == 0:
-        return frame, []
-
-    try:
-        detections = sv.Detections.from_ultralytics(results[0])
-    except Exception as e:
-        print('Failed to extract detections from model result', e)
-        traceback.print_exc()
-        return frame, []
-
-    try:
-        detections = tracker.update_with_detections(detections)
-        detections = smoother.update_with_detections(detections)
-    except Exception as e:
-        print('Error when smoothing detections', str(e))
-
-    counts = []
-
-    # line_zone.trigger(detections)
-    # frame = line_zone_annotator.annotate(frame, line_counter=line_zone)
-
-    for saved_mask in saved_masks:
-        zone = saved_mask['zone']
-        zone_annotator = saved_mask['annotator']
-        try:
-            zone_mask = zone.trigger(detections=detections)
-        except Exception as e:
-            print('Failed to get detections')
-            continue
-
-        count = zone.current_count
-        zone_label = str(count) + ' - ' + saved_mask['label']
-
-        filtered_detections = detections[zone_mask]
-        
-        # labels = [f"{class_id_topic[str(class_id)]} #{tracker_id}" for class_id, tracker_id in zip(filtered_detections.class_id, filtered_detections.tracker_id)]
-
-        count_dict = count_polygon_zone(zone)
-        counts.append({'label': saved_mask['label'], 'count': count_dict})
-
-        frame = bounding_box_annotator.annotate(scene=frame, detections=filtered_detections)
-        frame = label_annotator.annotate(scene=frame, detections=filtered_detections)
-        frame = zone_annotator.annotate(scene=frame, label=zone_label)
-
-    # Annotate all detections if no masks are defined
-    if len(saved_masks) == 0:
-        frame = bounding_box_annotator.annotate(scene=frame, detections=detections)
-        # labels = [f"{class_id_topic[str(class_id)]} #{tracker_id}" for class_id, tracker_id in zip(detections.class_id, detections.tracker_id)]
-        frame = label_annotator.annotate(scene=frame, detections=detections)
-
-        count_dict = count_detections(detections)
-        counts.append({'label': DEVICE_NAME + "_" + "default", 'count': count_dict})
-    return frame, counts
-
 def publishImage(frame):
     _, encoded_frame = cv2.imencode('.jpg', frame)
     base64_encoded_frame = base64.b64encode(encoded_frame.tobytes()).decode('utf-8')
@@ -362,59 +196,6 @@ def publishClassCount(result, zone_name):
     print(payload)
 
     get_event_loop().create_task(rw.publish_to_table('detections', payload))
-
-async def readMasksFromStdin():
-    print("Reading STDIN")
-
-    try:
-        with open('/data/mask.json', 'r') as f:
-            loaded_masks = json.load(f)
-
-        prepMasks(loaded_masks)
-    except Exception as e:
-        print('Failed to load masks initially', e)
-
-    while True:
-        try:
-            masksJSON = await get_event_loop().run_in_executor(None, sys.stdin.readline)
-
-            print("Got masks from stdin:", masksJSON)
-
-            stdin_masks = json.loads(masksJSON)
-
-            prepMasks(stdin_masks)
-            
-        except Exception as e:
-            print(e)
-        await sleep(0)
-
-def prepMasks(in_masks):
-    global saved_masks
-
-    pre_masks = [
-        {
-            'label': mask['label'],
-            'points': [(int(point['x']), int(point['y'])) for point in mask['points'][:-1]],
-            'color': mask['lineColor']
-        }
-        for mask in in_masks['polygons']
-    ]
-    out_masks = []
-    for mask in pre_masks:
-        polygon = np.array(mask['points'])
-        polygon.astype(int)
-
-        polygon_zone = sv.PolygonZone(polygon=polygon, frame_resolution_wh=(RESOLUTION_X, RESOLUTION_Y), triggering_position=sv.Position.CENTER)
-        mask['zone'] = polygon_zone
-        zone_annotator = sv.PolygonZoneAnnotator(
-            zone=polygon_zone,
-            color=sv.Color.from_hex(mask['color']),
-        )
-        mask['annotator'] = zone_annotator
-
-        out_masks.append(mask)
-    saved_masks = out_masks
-    print('Refreshed Masks', saved_masks)
 
 rw = Reswarm()
 

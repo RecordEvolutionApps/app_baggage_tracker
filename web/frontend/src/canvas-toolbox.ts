@@ -134,7 +134,7 @@ export class CanvasToolbox extends LitElement {
 
   update(_changedProperties: PropertyValueMap<any> | Map<PropertyKey, unknown>) {
     if (_changedProperties.has('camSetup') && this.camSetup)
-    this.selectedCamType = this.camSetup?.camera?.type
+    this.selectedCamType = this.camSetup?.camera?.type ?? 'USB'
     super.update(_changedProperties)
   }
 
