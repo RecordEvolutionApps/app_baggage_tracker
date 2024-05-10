@@ -59,7 +59,6 @@ export class CameraPlayer extends LitElement {
         align-items: center;
         flex: 1;
         position: relative;
-        max-width: 1600px;
         margin: 0 auto;
         padding: 23px 16px;
         box-sizing: border-box;

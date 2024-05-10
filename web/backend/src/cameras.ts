@@ -86,10 +86,14 @@ async function startVideoStream(cam: Camera, camStream: string) {
 
     let camPath: string
     if (cam.type === 'IP') {
-        camPath = `rtsp://${cam.username + (cam.password ? `:${cam.password}`: '')}@${cam.path}`
+        const [protocol, path] = cam.path?.split('://') ?? []
+        const userpw =  cam.username ? (cam.username + (cam.password ? `:${cam.password}@`: '@')) : ''
+        camPath = `${protocol}://${userpw}${path}`
     } else {
         camPath = cam.path ?? ''
     }
+
+    camPath = `"${camPath}"`
 
     const proc = Bun.spawn(["ssh", "-o", "StrictHostKeyChecking=no", "video", "source",  "~/env_vars.txt", "&&", "python3", "-u", "/app/video/videoStream.py", camPath, camStream], {
         env: { ...process.env },

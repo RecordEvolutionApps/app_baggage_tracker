@@ -49,9 +49,6 @@ if len(CLASS_LIST) <= 1:
     CLASS_LIST = list(class_id_topic.keys())
     CLASS_LIST = [int(item) for item in CLASS_LIST]
 
-MODEL_RESX = (RESOLUTION_X // 32) * 32 # must be multiple of max stride 32
-MODEL_RESY = (RESOLUTION_Y // 32) * 32
-
 saved_masks = []
 
 def downloadModel(model_name, model_path):
@@ -116,15 +113,50 @@ portMap = {"frontCam": 5004,
 device = args.device
 print('CAMERA USED:' + device)
 
-# if not rtsp, then it is usb like /dev/video0
-if not device.startswith('rtsp:'):
-    device = int(device[-1])
+def get_youtube_video(url, height):
+    import yt_dlp
+    with yt_dlp.YoutubeDL() as ydl:
+        info_dict = ydl.extract_info(url, download=False)
+        formats = info_dict.get('formats', [])
+        output_resolution = {"height": 0, "width": 0}
+        for format in formats:
+            resolution = format.get('height')
+            if resolution == None:
+                continue
+            if height and height == int(resolution):
+                output_resolution = format
+                break
+            elif output_resolution is None or resolution > output_resolution['height']:
+                output_resolution = format
+        return output_resolution
 
+if device.startswith('http'):
+    if device.startswith('https://youtu'):
+        video = get_youtube_video(device, RESOLUTION_Y)
+        RESOLUTION_X = video["width"]
+        RESOLUTION_Y = video["height"]
+        device = video.get('url')
+    cap = cv2.VideoCapture(device)
+    # device = f"uridecay url='{device}' ! nvenc-hwaccel=true ! nvdec_hwaccel ! videoconvert ! appsink"
+    # cap = cv2.VideoCapture(device, cv2.CAP_GSTREAMER)
+
+elif device.startswith('rtsp:'):
+    cap = cv2.VideoCapture(device)
+else:
+    device = int(device[-1])
+    cap = cv2.VideoCapture(device)
+
+print('RESOLUTION', RESOLUTION_X, RESOLUTION_Y, device)
+cap.set(3, RESOLUTION_X)
+cap.set(4, RESOLUTION_Y)
+
+MODEL_RESX = (RESOLUTION_X // 32) * 32 # must be multiple of max stride 32
+MODEL_RESY = (RESOLUTION_Y // 32) * 32
 model = getModel(OBJECT_MODEL)
 
 # Supervision Annotations
-# bounding_box_annotator = sv.BoundingBoxAnnotator()
-bounding_box_annotator = sv.DotAnnotator(radius=6)
+bounding_box_annotator = sv.BoundingBoxAnnotator()
+# bounding_box_annotator = sv.DotAnnotator(radius=6)
 label_annotator = sv.LabelAnnotator(text_scale=0.4, text_thickness=1, text_padding=3)
 
 # START = sv.Point(10, 400)
@@ -138,10 +170,6 @@ label_annotator = sv.LabelAnnotator(text_scale=0.4, text_thickness=1, text_paddi
 
 tracker = sv.ByteTrack()
 smoother = sv.DetectionsSmoother(length=5)
-
-cap = cv2.VideoCapture(device)
-cap.set(3, RESOLUTION_X)
-cap.set(4, RESOLUTION_Y)
 
 # print("CUDA available:", torch.cuda.is_available(), 'GPUs', torch.cuda.device_count())
 
@@ -166,11 +194,14 @@ def count_polygon_zone(zone):
 
 def count_detections(detections):
     count_dict = {}
-    for xyxy, mask, conf, class_id, tracker_id, data in detections:
-        if class_id in count_dict:
-            count_dict[class_id] += 1
-        else:
-            count_dict[class_id] = 1
+    try:
+        for xyxy, mask, conf, class_id, tracker_id, data in detections:
+            if class_id in count_dict:
+                count_dict[class_id] += 1
+            else:
+                count_dict[class_id] = 1
+    except Exception as e:
+        print('failed to count', e)
     return count_dict
 
 async def main():
@@ -178,19 +209,43 @@ async def main():
         print('starting main video loop...')
         fps_monitor = sv.FPSMonitor()
         start_time = time.time()
+        start_time1 = time.time()
+        start_time2 = time.time()
+
+        prev_frame_time = time.time()
+        frame_skip_threshold = 1.0 / FRAMERATE  # Maximum allowed processing time per frame
+
         global out
 
         while cap.isOpened():
             elapsed_time = time.time() - start_time
-            fps_monitor.tick()
+            elapsed_time1 = time.time() - start_time1
+            elapsed_time2 = time.time() - start_time2
 
             success, frame = cap.read()
             if not success:
                 continue
+
+            curr_frame_time = time.time()
+
+            # Check if processing time for previous frame exceeded threshold
+            if curr_frame_time - prev_frame_time > frame_skip_threshold:
+                # print("Skipping frame!", curr_frame_time - prev_frame_time)
+                prev_frame_time = curr_frame_time
+                continue
+
+            # print("process frame", curr_frame_time - prev_frame_time)
+            # Update previous frame time for next iteration
+            prev_frame_time = curr_frame_time
             
+            counts = {}
+            results = []
+            fps_monitor.tick()
             results = model(frame, imgsz=(MODEL_RESY, MODEL_RESX), conf=CONF, iou=IOU, verbose=False, classes=CLASS_LIST)
+            start_time2 = time.time()
             
-            frame, counts = processFrame(frame, results)
+            if len(results) > 0:
+                frame, counts = processFrame(frame, results)
 
             # Draw FPS and Timestamp
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
@@ -198,13 +253,14 @@ async def main():
             overlay_text(frame, f'FPS: {fps_monitor.fps:.2f}', position=(10, 60))
 
             # Publish data
-            if elapsed_time >= 1.0:
+            if elapsed_time1 >= 2.0:
                 for item in counts:
                     publishImage(frame)
                     publishClassCount(item["count"], item["label"])
-                
+                    start_time1 = time.time()
+            
+            if elapsed_time > 10.0:
                 publishCameras()
-
                 start_time = time.time()
 
             out.write(frame)
@@ -241,9 +297,11 @@ def processFrame(frame, results):
     for saved_mask in saved_masks:
         zone = saved_mask['zone']
         zone_annotator = saved_mask['annotator']
-        
-        zone_mask = zone.trigger(detections=detections)
-
+        try:
+            zone_mask = zone.trigger(detections=detections)
+        except Exception as e:
+            print('Failed to get detections')
+            continue
 
         count = zone.current_count
         zone_label = str(count) + ' - ' + saved_mask['label']

@@ -132,6 +132,12 @@ export class CanvasToolbox extends LitElement {
     this.requestUpdate();
   }
 
+  update(_changedProperties: PropertyValueMap<any> | Map<PropertyKey, unknown>) {
+    if (_changedProperties.has('camSetup') && this.camSetup)
+    this.selectedCamType = this.camSetup?.camera?.type
+    super.update(_changedProperties)
+  }
+
   handleMaskNameInput(ev: { target: { value: string } }) {
     if (ev.target) {
       this.mask_name = ev.target.value;

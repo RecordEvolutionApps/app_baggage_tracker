@@ -284,8 +284,8 @@ media: {
 # be used for gathering candidates, and enable or disable the
 # internal libnice debugging, if needed.
 nat: {
-	stun_server = "stun.relay.metered.ca"
-	stun_port = 80
+	stun_server = "stun.l.google.com"
+	stun_port = 19302
 	nice_debug = false
 	full_trickle = true
 	ice_nomination = "aggressive"
@@ -329,11 +329,11 @@ nat: {
 	# side, and NOT in Janus. The following TURN configuration should ONLY
 	# be enabled when Janus itself is sitting behind a restrictive firewall
 	# (e.g., it's part of a service installed on a box in a private home).
-	# turn_server = "a.relay.metered.ca"
-	# turn_port = 80
+	# turn_server = "relay1.expressturn.com"
+	# turn_port = 3478
 	# turn_type = "udp"
-	# turn_user = "f63d4fc5ff93197d239f602f"
-	# turn_pwd = "ZaHWKZRVcc1+8sKn"
+	# turn_user = "ef8VXO351A31UJVGBY"
+	# turn_pwd = "PD1trsvPrgQ4uWAf"
 
 	# You can also make use of the TURN REST API to get info on one or more
 	# TURN services dynamically. This makes use of the proposed standard of

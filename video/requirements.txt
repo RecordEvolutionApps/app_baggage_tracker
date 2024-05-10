@@ -6,7 +6,8 @@ scipy==1.10.0
 defusedxml==0.7.1
 pillow>=9.4
 lapx==0.5.5
-pyudev
-polars
-aiohttp
-aiohttp_cors
+# pyudev
+# polars
+# aiohttp
+# aiohttp_cors
+yt_dlp
