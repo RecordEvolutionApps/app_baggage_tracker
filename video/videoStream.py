@@ -53,7 +53,7 @@ saved_masks = []
 
 def downloadModel(model_name, model_path):
     print(f'Downloading Pytorch model {model_name}...')
-    urllib.request.urlretrieve(f'https://github.com/ultralytics/assets/releases/download/v0.0.0/{model_name}.pt', model_path)
+    urllib.request.urlretrieve(f'https://github.com/ultralytics/assets/releases/download/v8.2.0/{model_name}.pt', model_path)
     print(f'Download complete!')
 
 def getModel(model_name):
@@ -155,7 +155,10 @@ MODEL_RESY = (RESOLUTION_Y // 32) * 32
 model = getModel(OBJECT_MODEL)
 
 # Supervision Annotations
-bounding_box_annotator = sv.BoundingBoxAnnotator()
+if (OBJECT_MODEL.endswith('obb')):
+    bounding_box_annotator = sv.OrientedBoxAnnotator()
+else:
+    bounding_box_annotator = sv.BoundingBoxAnnotator()
 # bounding_box_annotator = sv.DotAnnotator(radius=6)
 label_annotator = sv.LabelAnnotator(text_scale=0.4, text_thickness=1, text_padding=3)
 
@@ -281,8 +284,15 @@ async def main():
 def processFrame(frame, results):
     global saved_masks
     if len(results) == 0:
-        return frame, []          
-    detections = sv.Detections.from_ultralytics(results[0])
+        return frame, []
+
+    try:
+        detections = sv.Detections.from_ultralytics(results[0])
+    except Exception as e:
+        print('Failed to extract detections from model result', e)
+        traceback.print_exc()
+        return frame, []
+
     try:
         detections = tracker.update_with_detections(detections)
         detections = smoother.update_with_detections(detections)

@@ -35,7 +35,7 @@ CONF:
 IOU:
     label: Intersection over Union
     type: numeric
-    defaultValue: 0.8
+    defaultValue: 0.7
     description: Intersection Over Union (IoU) threshold for Non-Maximum Suppression (NMS). Lower values result in fewer detections by eliminating overlapping boxes, useful for reducing duplicates.
     max: 1
     min: 0
