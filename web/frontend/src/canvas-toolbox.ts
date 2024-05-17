@@ -1,7 +1,7 @@
 import { LitElement, html, css, PropertyValueMap } from 'lit';
 import { property, customElement, state } from 'lit/decorators.js';
 import { PolygonManager, Polygon } from './polygon.js';
-import { mainStyles, CamSetup, Camera } from './utils.js';
+import { mainStyles, CamSetup, Camera, PolygonType } from './utils.js';
 import './camera-selector.js';
 import './ip-camera-dialog.js';
 import '@material/web/button/elevated-button.js';
@@ -38,7 +38,8 @@ export class CanvasToolbox extends LitElement {
   @state()
   selectedCamType: 'USB' | 'IP' = 'USB'
 
-  dialog?: MdDialog;
+  zoneDialog?: MdDialog;
+  lineDialog: MdDialog;
   cameraDialog?: IpCameraDialog;
 
   static styles = [
@@ -83,7 +84,7 @@ export class CanvasToolbox extends LitElement {
         margin: 11px 0;
       }
 
-      #dialog {
+      .dialog {
         --md-dialog-container-color: #fff;
         --md-dialog-headline-color: #5e5f61;
         --md-dialog-supporting-text-color: #5e5f61;
@@ -104,6 +105,11 @@ export class CanvasToolbox extends LitElement {
         color: #5e5f61;
       }
 
+      .button-row {
+        display: flex;
+        gap: 8px;       
+      }
+
       @media only screen and (max-width: 600px) {
         h3 {
           display: none;
@@ -117,7 +123,8 @@ export class CanvasToolbox extends LitElement {
   ): void {
     if (!this.polygonManager) throw new Error('polygon manager not defined');
 
-    this.dialog = this.shadowRoot?.getElementById('dialog') as MdDialog;
+    this.zoneDialog = this.shadowRoot?.getElementById('zonedialog') as MdDialog;
+    this.lineDialog = this.shadowRoot?.getElementById('linedialog') as MdDialog;
     this.cameraDialog = this.shadowRoot?.getElementById('camera-dialog') as IpCameraDialog;
 
     this.polygonManager.addEventListener('update', (ev: any) => {
@@ -144,23 +151,42 @@ export class CanvasToolbox extends LitElement {
     }
   }
 
-  handleNameInputKeypress(ev: any) {
+  handleZoneNameInputKeypress(ev: any) {
     if (ev.key === 'Enter' && this.mask_name.length) {
-      this.dialog?.close('create');
+      this.zoneDialog?.close('create');
     }
   }
 
-  createPolygon() {
-    console.log(this.dialog?.returnValue);
-    if (this.dialog?.returnValue === 'create') {
-      this.polygonManager?.create(this.mask_name);
+  handleLineNameInputKeypress(ev: any) {
+    if (ev.key === 'Enter' && this.mask_name.length) {
+      this.lineDialog?.close('create');
+    }
+  }
+
+  createZone() {
+    console.log(this.zoneDialog?.returnValue);
+    if (this.zoneDialog?.returnValue === 'create') {
+      this.polygonManager?.create(this.mask_name, 'ZONE');
     }
 
     this.mask_name = '';
   }
 
-  onCreateClick() {
-    this.dialog?.show();
+  createLine() {
+    console.log(this.lineDialog?.returnValue);
+    if (this.lineDialog?.returnValue === 'create') {
+      this.polygonManager?.create(this.mask_name, 'LINE');
+    }
+
+    this.mask_name = '';
+  }
+
+  onCreateZoneClick() {
+    this.zoneDialog?.show();
+  }
+  
+  onCreateLineClick() {
+    this.lineDialog?.show();
   }
 
   onCreateIPClick() {
@@ -168,8 +194,8 @@ export class CanvasToolbox extends LitElement {
   }
 
   onDialogCancel() {
-    if (this.dialog) {
-      this.dialog.returnValue = 'cancel';
+    if (this.zoneDialog) {
+      this.zoneDialog.returnValue = 'cancel';
     }
     if (this.cameraDialog) {
       this.cameraDialog.onDialogCancel();
@@ -245,13 +271,19 @@ export class CanvasToolbox extends LitElement {
             </md-elevated-button>
           </li>
           <li>
-            <h4>Detection Zones</h4>
+            <h4>Detection Zones and Lines</h4>
           </li>
           <li class="mb16">
-            <md-elevated-button @click=${this.onCreateClick}>
-              Create
-              <md-icon slot="icon">add_circle</md-icon>
-            </md-elevated-button>
+            <div class="button-row">
+              <md-elevated-button @click=${this.onCreateZoneClick}>
+                Zone
+                <md-icon slot="icon">add_circle</md-icon>
+              </md-elevated-button>
+              <md-elevated-button @click=${this.onCreateLineClick}>
+                Line
+                <md-icon slot="icon">add_circle</md-icon>
+              </md-elevated-button>
+            </div>
           </li>
           <li class="mb16">
             <md-elevated-button @click=${this.undoLastLine}>
@@ -282,18 +314,21 @@ export class CanvasToolbox extends LitElement {
 
       <md-dialog
         @cancel=${this.onDialogCancel}
-        @close=${this.createPolygon}
-        id="dialog"
+        @close=${this.createLine}
+        id="linedialog"
+        class="dialog"
       >
-        <div slot="headline">Zone name</div>
-        <form slot="content" id="create-mask-form" method="dialog">
+        <div slot="headline">Line name</div>
+        <form slot="content" id="create-line-form" method="dialog">
           <div style="display: flex; flex-direction: column;">
-            <p>Enter a name for your zone</p>
+            <p>Enter a name for your counter line. After you clicked create, this window closes and you can start
+              setting the beginning and end points of your line. After you set the end point the line will be submitted for counting.
+            </p>
             <md-outlined-text-field
               label="Name"
               autofocus
               maxlength="18"
-              @keyup=${this.handleNameInputKeypress}
+              @keyup=${this.handleLineNameInputKeypress}
               @input=${this.handleMaskNameInput}
               .value=${this.mask_name}
               required
@@ -302,9 +337,45 @@ export class CanvasToolbox extends LitElement {
           </div>
         </form>
         <div slot="actions">
-          <md-text-button @click=${() => this.dialog?.close('cancel')}>Cancel</md-text-button>
+          <md-text-button @click=${() => this.lineDialog?.close('cancel')}>Cancel</md-text-button>
           <md-text-button
-            form="create-mask-form"
+            form="create-line-form"
+            .disabled=${this.mask_name.length === 0}
+            value="create"
+            >Create</md-text-button
+          >
+        </div>
+      </md-dialog> 
+
+      <md-dialog
+        @cancel=${this.onDialogCancel}
+        @close=${this.createZone}
+        id="zonedialog"
+        class="dialog"
+      >
+        <div slot="headline">Zone name</div>
+        <form slot="content" id="create-zone-form" method="dialog">
+          <div style="display: flex; flex-direction: column;">
+            <p>Enter a name for your zone. After you clicked create, this window closes and you can start
+              setting the corner points of your zone. When you click commit, the last point you set will automatically 
+              be connected to the first point to close the zone and the zone will be submitted for counting.
+            </p>
+            <md-outlined-text-field
+              label="Name"
+              autofocus
+              maxlength="18"
+              @keyup=${this.handleZoneNameInputKeypress}
+              @input=${this.handleMaskNameInput}
+              .value=${this.mask_name}
+              required
+            >
+            </md-outlined-text-field>
+          </div>
+        </form>
+        <div slot="actions">
+          <md-text-button @click=${() => this.zoneDialog?.close('cancel')}>Cancel</md-text-button>
+          <md-text-button
+            form="create-zone-form"
             .disabled=${this.mask_name.length === 0}
             value="create"
             >Create</md-text-button

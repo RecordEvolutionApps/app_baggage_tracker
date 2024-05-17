@@ -62,6 +62,7 @@ export class CameraPlayer extends LitElement {
         margin: 0 auto;
         padding: 23px 16px;
         box-sizing: border-box;
+        background: #fff;
       }
 
       h3 {

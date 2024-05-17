@@ -96,6 +96,11 @@ export class PolygonList extends LitElement {
         white-space: nowrap;
       }
 
+      .type {
+        color: #999;
+        font-size: 10px;
+      }
+
     `,
   ];
 
@@ -151,8 +156,10 @@ export class PolygonList extends LitElement {
                 class="colorIcon"
                 style="background-color: ${c.lineColor};"
               ></div>
-              <b title="${c.label}">${c.label}</b>
-            </div>
+              <b title="${c.label}">${c.label} 
+                <span class="type">(${c.type ?? 'ZONE'})</span>
+              </b>
+            </div>  
             <!-- <div slot="supporting-text">Points: ${c.points.length}</div> -->
             <md-icon slot="end" @click=${this.deletePolygon(c.id)}
               >delete</md-icon

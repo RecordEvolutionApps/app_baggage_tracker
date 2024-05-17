@@ -29,9 +29,7 @@ RESOLUTION_Y = int(os.environ.get('RESOLUTION_Y', 480))
 FRAMERATE = int(os.environ.get('FRAMERATE', 30))
 
 DEVICE_KEY = os.environ.get('DEVICE_KEY')
-DEVICE_NAME = os.environ.get('DEVICE_NAME')
 DEVICE_URL = os.environ.get('DEVICE_URL')
-TUNNEL_PORT = os.environ.get('TUNNEL_PORT')
 CONF = float(os.environ.get('CONF', '0.1'))
 IOU = float(os.environ.get('IOU', '0.8'))
 CLASS_LIST = os.environ.get('CLASS_LIST', '')
@@ -89,15 +87,7 @@ model = getModel(OBJECT_MODEL, MODEL_RESX, MODEL_RESY)
 
 # print("CUDA available:", torch.cuda.is_available(), 'GPUs', torch.cuda.device_count())
 
-outputFormat = " videoconvert ! vp8enc deadline=2 threads=4 keyframe-max-dist=6 ! video/x-vp8 ! rtpvp8pay pt=96"
-# outputFormat = "nvvidconv ! nvv4l2h264enc maxperf-enable=1 insert-sps-pps=true insert-vui=true ! h264parse ! rtph264pay"
-
-writerStream = "appsrc do-timestamp=true ! " + outputFormat + " ! udpsink host=janus port=" + str(portMap[args.camStream])
-# print(writerStream)
-
-out = cv2.VideoWriter(writerStream, 0, FRAMERATE, (RESOLUTION_X, RESOLUTION_Y))
-
-async def main():
+async def main(_saved_masks):
     try:
         print('starting main video loop...')
         fps_monitor = sv.FPSMonitor()
@@ -108,7 +98,13 @@ async def main():
         prev_frame_time = time.time()
         frame_skip_threshold = 1.0 / FRAMERATE  # Maximum allowed processing time per frame
 
-        global out
+        outputFormat = " videoconvert ! vp8enc deadline=2 threads=4 keyframe-max-dist=6 ! video/x-vp8 ! rtpvp8pay pt=96"
+        # outputFormat = "nvvidconv ! nvv4l2h264enc maxperf-enable=1 insert-sps-pps=true insert-vui=true ! h264parse ! rtph264pay"
+
+        writerStream = "appsrc do-timestamp=true ! " + outputFormat + " ! udpsink host=janus port=" + str(portMap[args.camStream])
+        # print(writerStream)
+
+        out = cv2.VideoWriter(writerStream, 0, FRAMERATE, (RESOLUTION_X, RESOLUTION_Y))
 
         while cap.isOpened():
             elapsed_time = time.time() - start_time
@@ -138,7 +134,7 @@ async def main():
             start_time2 = time.time()
             
             if len(results) > 0:
-                frame, counts = processFrame(frame, results, CLASS_LIST)
+                frame, counts = processFrame(frame, results, CLASS_LIST, _saved_masks)
 
             # Draw FPS and Timestamp
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
@@ -201,8 +197,8 @@ rw = Reswarm()
 
 if __name__ == "__main__":
     # run the main coroutine
-    task1 = get_event_loop().create_task(readMasksFromStdin())
-    task2 = get_event_loop().create_task(main())
+    task1 = get_event_loop().create_task(readMasksFromStdin(saved_masks))
+    task2 = get_event_loop().create_task(main(saved_masks))
 
     # run the reswarm component
     rw.run()

@@ -9,6 +9,7 @@ import os
 from asyncio import get_event_loop, sleep
 import sys
 import cv2
+import traceback
 
 OBJECT_MODEL = os.environ.get('OBJECT_MODEL')
 RESOLUTION_X = int(os.environ.get('RESOLUTION_X', 640))
@@ -22,15 +23,6 @@ else:
     bounding_box_annotator = sv.BoundingBoxAnnotator()
 # bounding_box_annotator = sv.DotAnnotator(radius=6)
 label_annotator = sv.LabelAnnotator(text_scale=0.4, text_thickness=1, text_padding=3)
-
-# START = sv.Point(10, 400)
-# END = sv.Point(1200, 400)
-# line_zone = sv.LineZone(start=START, end=END)
-
-# line_zone_annotator = sv.LineZoneAnnotator(
-#     thickness=1,
-#     text_thickness=1,
-#     text_scale=0.5)
 
 tracker = sv.ByteTrack()
 smoother = sv.DetectionsSmoother(length=5)
@@ -123,15 +115,17 @@ def count_detections(detections):
     return count_dict
 
 
-async def readMasksFromStdin():
+async def readMasksFromStdin(saved_masks):
     print("Reading STDIN")
-
     try:
         with open('/data/mask.json', 'r') as f:
             loaded_masks = json.load(f)
 
-        prepMasks(loaded_masks)
+        saved_masks[:] = []
+        saved_masks.extend(prepMasks(loaded_masks))
+
     except Exception as e:
+        traceback.print_exc()
         print('Failed to load masks initially', e)
 
     while True:
@@ -141,43 +135,70 @@ async def readMasksFromStdin():
             print("Got masks from stdin:", masksJSON)
 
             stdin_masks = json.loads(masksJSON)
-
-            prepMasks(stdin_masks)
+    
+            saved_masks[:] = []
+            saved_masks.extend(prepMasks(stdin_masks))
             
         except Exception as e:
             print(e)
         await sleep(0)
 
+def get_contrast_color(hex_color):
+    c = sv.Color.from_hex(hex_color)
+    luminance = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+
+    if luminance < 128:
+        return sv.Color(255, 255, 255)  # White for dark colors
+    else:
+        return sv.Color(0, 0, 0)  # Black for light colors
+
 def prepMasks(in_masks):
-    global saved_masks
 
     pre_masks = [
         {
             'label': mask['label'],
+            'type': mask.get('type', 'ZONE'),
             'points': [(int(point['x']), int(point['y'])) for point in mask['points'][:-1]],
             'color': mask['lineColor']
         }
         for mask in in_masks['polygons']
     ]
     out_masks = []
+
     for mask in pre_masks:
         polygon = np.array(mask['points'])
         polygon.astype(int)
 
-        polygon_zone = sv.PolygonZone(polygon=polygon, frame_resolution_wh=(RESOLUTION_X, RESOLUTION_Y), triggering_position=sv.Position.CENTER)
-        mask['zone'] = polygon_zone
-        zone_annotator = sv.PolygonZoneAnnotator(
-            zone=polygon_zone,
-            color=sv.Color.from_hex(mask['color']),
-        )
-        mask['annotator'] = zone_annotator
+        if mask['type'] == 'ZONE':
+            polygon_zone = sv.PolygonZone(polygon=polygon, frame_resolution_wh=(RESOLUTION_X, RESOLUTION_Y), triggering_position=sv.Position.CENTER)
+            mask['zone'] = polygon_zone
+            zone_annotator = sv.PolygonZoneAnnotator(
+                zone=polygon_zone,
+                text_color=get_contrast_color(mask['color']),
+                color=sv.Color.from_hex(mask['color']),
+            )
+            mask['annotator'] = zone_annotator
+        elif mask['type'] == 'LINE':
+            print('THE LINE', polygon)
+            START = sv.Point(polygon[0][0], polygon[0][1])
+            END = sv.Point(polygon[1][0], polygon[1][1])
+            line_zone = sv.LineZone(start=START, end=END, triggering_anchors=sv.Position.CENTER)
+
+            mask['line'] = line_zone
+
+            line_annotator = sv.LineZoneAnnotator(
+                thickness=1,
+                text_thickness=1,
+                text_scale=0.5,
+                text_color=get_contrast_color(mask['color']),
+                color=sv.Color.from_hex(mask['color']))
+            mask['annotator'] = line_annotator
 
         out_masks.append(mask)
-    saved_masks = out_masks
-    print('Refreshed Masks', saved_masks)
+    print('Refreshed Masks', out_masks)
+    return out_masks
 
-def processFrame(frame, results, class_list):
-    global saved_masks
+def processFrame(frame, results, class_list, saved_masks):
     if len(results) == 0:
         return frame, []
 
@@ -200,27 +221,38 @@ def processFrame(frame, results, class_list):
     # frame = line_zone_annotator.annotate(frame, line_counter=line_zone)
 
     for saved_mask in saved_masks:
-        zone = saved_mask['zone']
-        zone_annotator = saved_mask['annotator']
-        try:
-            zone_mask = zone.trigger(detections=detections)
-        except Exception as e:
-            print('Failed to get detections')
-            continue
+        if saved_mask['type'] == 'ZONE':
+            zone = saved_mask['zone']
+            zone_annotator = saved_mask['annotator']
+            try:
+                zone_mask = zone.trigger(detections=detections)
+            except Exception as e:
+                print('Failed to get detections')
+                continue
 
-        count = zone.current_count
-        zone_label = str(count) + ' - ' + saved_mask['label']
+            count = zone.current_count
+            zone_label = str(count) + ' - ' + saved_mask['label']
 
-        filtered_detections = detections[zone_mask]
-        
-        # labels = [f"{class_id_topic[str(class_id)]} #{tracker_id}" for class_id, tracker_id in zip(filtered_detections.class_id, filtered_detections.tracker_id)]
+            filtered_detections = detections[zone_mask]
+            
+            # labels = [f"{class_id_topic[str(class_id)]} #{tracker_id}" for class_id, tracker_id in zip(filtered_detections.class_id, filtered_detections.tracker_id)]
 
-        count_dict = count_polygon_zone(zone, class_list)
-        counts.append({'label': saved_mask['label'], 'count': count_dict})
+            count_dict = count_polygon_zone(zone, class_list)
+            counts.append({'label': saved_mask['label'], 'count': count_dict})
 
-        frame = bounding_box_annotator.annotate(scene=frame, detections=filtered_detections)
-        frame = label_annotator.annotate(scene=frame, detections=filtered_detections)
-        frame = zone_annotator.annotate(scene=frame, label=zone_label)
+            frame = bounding_box_annotator.annotate(scene=frame, detections=filtered_detections)
+            frame = label_annotator.annotate(scene=frame, detections=filtered_detections)
+            frame = zone_annotator.annotate(scene=frame, label=zone_label)
+        elif saved_mask['type'] == 'LINE':
+            line = saved_mask['line']
+            line_annotator = saved_mask['annotator']
+            try:
+                line_mask = line.trigger(detections=detections)
+            except Exception as e:
+                print('Failed to get line counts')
+                # continue
+
+            frame = line_annotator.annotate(frame, line_counter=line)
 
     # Annotate all detections if no masks are defined
     if len(saved_masks) == 0:

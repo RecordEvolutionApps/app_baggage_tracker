@@ -8,6 +8,7 @@ export let currentMaskData: {
     polygons: {
         id: number;
         label: string;
+        type: 'ZONE' | 'LINE';
         lineColor: string;
         fillColor: string;
         committed: boolean;

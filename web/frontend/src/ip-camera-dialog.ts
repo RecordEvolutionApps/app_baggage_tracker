@@ -170,9 +170,9 @@ export class IpCameraDialog extends LitElement {
         <div slot="headline">IP Camera Setup</div>
         <form slot="content" id="create-ip-form" method="dialog">
           <div class="column">
-            <p>Enter the address for your camera RTSP Stream</p>
+            <p>Enter the address for your camera stream. This can be an RTSP Stream, a Youtube URL or another URL e.g. rtsp://127.0.0.1:4000/streampath</p>
             <md-outlined-text-field
-                label="Camera IP address (127.0.0.1:4000/streampath)"
+                label="Camera IP address / Video URL"
                 value="${ this.camSetup?.camera.type === 'IP' ? (this.camSetup?.camera?.path ?? '') : '' }"
                 type="text"
                 id="ipaddress"

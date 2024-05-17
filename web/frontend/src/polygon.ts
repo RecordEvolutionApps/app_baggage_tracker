@@ -1,4 +1,4 @@
-import { PolygonState, getRandomColor, hexToTransparent } from './utils';
+import { PolygonState, getRandomColor, hexToTransparent, PolygonType } from './utils';
 
 const basepath = window.location.protocol + '//' + window.location.host;
 let polygonID = 0;
@@ -10,13 +10,14 @@ export class Polygon extends EventTarget {
   public fillColor: string;
   public label: string = '';
   public points: { x: number; y: number }[] = [];
+  public type: PolygonType = 'ZONE';
 
-  constructor() {
+  constructor(type: PolygonType) {
     super();
     this.id = polygonID++;
     this.lineColor = getRandomColor();
     this.fillColor = hexToTransparent(this.lineColor, 0.3);
-
+    this.type = type
     this.label = String(this.id);
   }
 
@@ -26,6 +27,11 @@ export class Polygon extends EventTarget {
     }
 
     this.points.push({ x, y });
+    if (this.type === 'LINE' && this.points.length == 2) {
+      const { x, y } = this.points[0];
+      this.add(x, y);
+      this.committed = true;
+    }
   }
 
   undo() {
@@ -80,6 +86,7 @@ export class Polygon extends EventTarget {
       lineColor: this.lineColor,
       fillColor: this.fillColor,
       points: this.points,
+      type: this.type
     };
   }
 
@@ -98,12 +105,14 @@ export class Polygon extends EventTarget {
     lineColor,
     fillColor,
     label,
+    type
   }: {
     label: string;
     lineColor: string;
     fillColor: string;
     committed: boolean;
     points: { x: number; y: number }[];
+    type: PolygonType
   }) {
 
     const polygon = new Polygon();
@@ -112,6 +121,7 @@ export class Polygon extends EventTarget {
     polygon.committed = committed;
     polygon.lineColor = lineColor;
     polygon.fillColor = fillColor;
+    polygon.type = type;
 
     return polygon;
   }
@@ -151,8 +161,8 @@ export class PolygonManager extends EventTarget {
     });
   }
 
-  create(label?: string) {
-    const polygon = new Polygon();
+  create(label?: string, type: PolygonType = 'ZONE') {
+    const polygon = new Polygon(type);
     this.polygons.push(polygon);
 
     if (label) {

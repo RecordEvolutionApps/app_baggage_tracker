@@ -120,6 +120,8 @@ export function hexToTransparent(hex: string, opacity: number) {
   return rgba;
 }
 
+export type PolygonType = 'ZONE' | 'LINE'
+
 export type PolygonState = {
   selectedPolygonId: number | undefined;
   polygons: {
@@ -128,6 +130,7 @@ export type PolygonState = {
     lineColor: string;
     fillColor: string;
     committed: boolean;
+    type: PolygonType;
     points: { x: number; y: number }[];
   }[];
 }
