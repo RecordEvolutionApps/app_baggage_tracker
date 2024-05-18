@@ -144,70 +144,6 @@ widgets:
         color: null
     version: 1.0.8
     layout_id: 5
-  - package_name: widget-linechart
-    chartdata:
-      settings:
-        timeseries: $bool:true
-        xAxisLabel: $str:Time
-        yAxisLabel: $str:Temperature
-        columnLayout: null
-        title: $str:Truck History
-        subTitle: null
-      dataseries:
-        - label: $str:Trucks
-          order: null
-          chartName: "$str:"
-          type: $str:line
-          radius: null
-          pointStyle: null
-          backgroundColor: $str:#75ccc2
-          borderColor: $str:#249487
-          borderWidth: $num:1
-          borderDash: null
-          fill: null
-          data:
-            tableRef:
-              tablename: detections
-              bufferSize: 500
-              format:
-                x: tsp
-                y: num_trucks
-                r: null
-                pivot: zonename
-    version: 1.4.15
-    layout_id: 6
-  - package_name: widget-linechart
-    chartdata:
-      settings:
-        timeseries: $bool:true
-        xAxisLabel: $str:Time
-        yAxisLabel: $str:Temperature
-        columnLayout: null
-        title: $str:Bus History
-        subTitle: null
-      dataseries:
-        - label: $str:Busses
-          order: null
-          chartName: "$str:"
-          type: $str:line
-          radius: null
-          pointStyle: null
-          backgroundColor: $str:#6c936f
-          borderColor: $str:#377d36
-          borderWidth: $num:1
-          borderDash: null
-          fill: null
-          data:
-            tableRef:
-              tablename: detections
-              bufferSize: 500
-              format:
-                x: tsp
-                y: num_buses
-                r: null
-                pivot: zonename
-    version: 1.4.15
-    layout_id: 7
   - package_name: widget-image
     chartdata:
       imageLink: $str:https://storage.googleapis.com/reswarm-images/prod/reswarm-0-1706095631331-Cam_icon-682decf0d8.png
@@ -246,6 +182,50 @@ widgets:
         color: $str:#5a6666
         backgroundColor: null
     layout_id: 10
+  - package_name: widget-barchart
+    chartdata:
+      settings:
+        horizontal: $bool:false
+        xAxisLabel: $str:Hour
+        yAxisLabel: $str:Counts
+        title: $str:Line counts
+        subTitle: null
+        columnLayout: null
+      dataseries:
+        - label: $str:Count In
+          chartName: $str:#pivot#
+          stack: $str:num
+          barThickness: $num:10
+          backgroundColor: $str:#35f84c
+          borderColor: null
+          borderWidth: $num:0
+          borderRadius: $num:0
+          data:
+            tableRef:
+              tablename: linecount_agg
+              bufferSize: 500
+              format:
+                x: day
+                y: num_in
+                pivot: linename
+        - label: $str:Count Out
+          chartName: $str:#pivot#
+          stack: $str:num
+          barThickness: $num:10
+          backgroundColor: $str:#f22c2c
+          borderColor: null
+          borderWidth: $num:0
+          borderRadius: $num:0
+          data:
+            tableRef:
+              tablename: linecount_agg
+              bufferSize: 500
+              format:
+                x: day
+                y: num_out
+                pivot: linename
+    version: 1.4.13
+    layout_id: 11
 layout:
   - w: 2
     h: 4
@@ -276,15 +256,10 @@ layout:
     x: 0
     y: 4
     id: 1
-  - w: 6
+  - w: 12
     h: 3
     x: 0
     y: 7
-    id: 6
-  - w: 6
-    h: 3
-    x: 6
-    y: 7
-    id: 7
+    id: 11
 background_color: "#e0dbe1"
 text_color: "#575062"

@@ -144,3 +144,41 @@ data:
           name: Device Link
           description: Link to device with camera
           dataType: string
+
+    - tablename: linecount_agg
+      materialize: true
+      schedule: "* * * * *" # crontab interface: Minute(1-60) Hour(1-24) MonthDay(1-31) Month(1-12) WeekDay(1-7)
+      sql: |
+        SELECT
+          devname,
+          linename,
+          time_bucket('1 hour', tsp) as period,
+          sum(num_in) AS num_in,
+          -sum(num_out) AS num_out
+        FROM 
+          linecounts
+        WHERE 
+          tsp > now() - INTERVAL '1 days'
+        GROUP BY
+          devname, linename, period
+      columns:
+        - id: devname
+          name: Device Name
+          description: Device Name
+          dataType: string # (string, numeric, boolean, timestamp)
+        - id: linename
+          name: Line Name
+          description: Name of the counter line
+          dataType: string
+        - id: period
+          name: Hour
+          description: Counting by Hour
+          dataType: string
+        - id: num_in
+          name: Count In
+          description: counts in per period
+          dataType: numeric
+        - id: num_out
+          name: Count Out
+          description: counts out per period
+          dataType: numeric
