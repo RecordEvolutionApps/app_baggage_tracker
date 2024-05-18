@@ -127,14 +127,15 @@ async def main(_saved_masks):
             # Update previous frame time for next iteration
             prev_frame_time = curr_frame_time
             
-            counts = {}
+            zoneCounts = {}
+            lineCounts = {}
             results = []
             fps_monitor.tick()
             results = model(frame, imgsz=(MODEL_RESY, MODEL_RESX), conf=CONF, iou=IOU, verbose=False, classes=CLASS_LIST)
             start_time2 = time.time()
             
             if len(results) > 0:
-                frame, counts = processFrame(frame, results, CLASS_LIST, _saved_masks)
+                frame, zoneCounts, lineCounts = processFrame(frame, results, CLASS_LIST, _saved_masks)
 
             # Draw FPS and Timestamp
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
@@ -143,10 +144,13 @@ async def main(_saved_masks):
 
             # Publish data
             if elapsed_time1 >= 2.0:
-                for item in counts:
+                for item in zoneCounts:
                     publishImage(frame)
-                    publishClassCount(item["count"], item["label"])
-                    start_time1 = time.time()
+                    publishClassCount(item["label"], item["count"])
+                start_time1 = time.time()
+            
+            for item in lineCounts:
+                publishLineCount(item["label"], item["num_in"], item["num_out"])
             
             if elapsed_time > 10.0:
                 publishCameras()
@@ -181,10 +185,12 @@ def publishCameras():
     payload["devicelink"] = DEVICE_URL
     get_event_loop().create_task(rw.publish_to_table('cameras', payload))
 
-def publishClassCount(result, zone_name):
+def publishClassCount(zone_name, result):
     now = datetime.now().astimezone().isoformat()
-    payload = {"tsp": now}
-    payload["zone_name"] = zone_name
+    payload = {
+        "tsp": now,
+        "zone_name": zone_name
+        }
 
     for class_id in CLASS_LIST:
         payload[class_id_topic[str(class_id)]] = result.get(class_id, 0)
@@ -192,6 +198,19 @@ def publishClassCount(result, zone_name):
     print(payload)
 
     get_event_loop().create_task(rw.publish_to_table('detections', payload))
+
+def publishLineCount(line_name, num_in, num_out):
+    now = datetime.now().astimezone().isoformat()
+    payload = {
+        "tsp": now,
+        "line_name": line_name,
+        "num_in": num_in,
+        "num_out": num_out
+    }
+
+    print(payload)
+    get_event_loop().create_task(rw.publish_to_table('linecounts', payload))
+
 
 rw = Reswarm()
 

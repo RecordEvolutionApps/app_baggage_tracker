@@ -45,9 +45,40 @@ data:
           path: kwargs.DEVICE_NAME
           dataType: string
 
+    - tablename: linecounts
+      chunkTimeInterval: 1 day
+      dropAfter: 30 day
+      columns:
+        - id: tsp
+          name: Timestamp
+          description: Timestamp of Detection
+          path: args[0].tsp
+          dataType: timestamp
+        - id: num_in
+          name: Number of Crossings In
+          description: Number of crossings from left to right
+          path: args[0].num_in
+          dataType: numeric
+        - id: num_out
+          name: Number of Crossings Out
+          description: Number of crossings from right to left
+          path: args[0].num_out
+          dataType: numeric
+        - id: linename
+          name: Line Name
+          description: Name of counter line
+          path: args[0].line_name
+          dataType: string
+        - id: devname
+          name: Device Name
+          description: Name of Device
+          path: kwargs.DEVICE_NAME
+          dataType: string
+
+
     - tablename: cameras
-      chunkTimeInterval: 1 hour # (optional) Sets the default partition size of this table. Users of the app can adjust this in their databackends.
-      dropAfter: 2 hour # (optional) All partitions older than this interval will be dropped from the table. (The system checks in a <dropAfter>/4 interval schedule.)
+      chunkTimeInterval: 1 hour
+      dropAfter: 2 hour
       columns:
         - id: tsp
           name: Timestamp

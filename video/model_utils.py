@@ -215,7 +215,8 @@ def processFrame(frame, results, class_list, saved_masks):
     except Exception as e:
         print('Error when smoothing detections', str(e))
 
-    counts = []
+    zoneCounts = []
+    lineCounts = []
 
     # line_zone.trigger(detections)
     # frame = line_zone_annotator.annotate(frame, line_counter=line_zone)
@@ -238,7 +239,7 @@ def processFrame(frame, results, class_list, saved_masks):
             # labels = [f"{class_id_topic[str(class_id)]} #{tracker_id}" for class_id, tracker_id in zip(filtered_detections.class_id, filtered_detections.tracker_id)]
 
             count_dict = count_polygon_zone(zone, class_list)
-            counts.append({'label': saved_mask['label'], 'count': count_dict})
+            zoneCounts.append({'label': saved_mask['label'], 'count': count_dict})
 
             frame = bounding_box_annotator.annotate(scene=frame, detections=filtered_detections)
             frame = label_annotator.annotate(scene=frame, detections=filtered_detections)
@@ -247,7 +248,13 @@ def processFrame(frame, results, class_list, saved_masks):
             lineZone = saved_mask['line']
             line_annotator = saved_mask['annotator']
             try:
-                line_mask = lineZone.trigger(detections=detections)
+                crossed_in, crossed_out = lineZone.trigger(detections=detections)
+                detections_in = detections[crossed_in]
+                detections_out = detections[crossed_out]
+                num_in = len(detections_in.xyxy)
+                num_out = len(detections_out.xyxy)
+                if num_in > 0 or num_out > 0:
+                    lineCounts.append({'label': saved_mask['label'], 'num_in': num_in, 'num_out': num_out})
             except Exception as e:
                 traceback.print_exc()
                 print('Failed to get line counts')
@@ -262,5 +269,5 @@ def processFrame(frame, results, class_list, saved_masks):
         frame = label_annotator.annotate(scene=frame, detections=detections)
 
         count_dict = count_detections(detections)
-        counts.append({'label': DEVICE_NAME + "_" + "default", 'count': count_dict})
-    return frame, counts
+        zoneCounts.append({'label': DEVICE_NAME + "_" + "default", 'count': count_dict})
+    return frame, zoneCounts, lineCounts
