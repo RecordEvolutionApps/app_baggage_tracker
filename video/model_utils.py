@@ -182,7 +182,7 @@ def prepMasks(in_masks):
             print('THE LINE', polygon)
             START = sv.Point(polygon[0][0], polygon[0][1])
             END = sv.Point(polygon[1][0], polygon[1][1])
-            line_zone = sv.LineZone(start=START, end=END, triggering_anchors=sv.Position.CENTER)
+            line_zone = sv.LineZone(start=START, end=END, triggering_anchors=[sv.Position.CENTER])
 
             mask['line'] = line_zone
 
@@ -244,18 +244,19 @@ def processFrame(frame, results, class_list, saved_masks):
             frame = label_annotator.annotate(scene=frame, detections=filtered_detections)
             frame = zone_annotator.annotate(scene=frame, label=zone_label)
         elif saved_mask['type'] == 'LINE':
-            line = saved_mask['line']
+            lineZone = saved_mask['line']
             line_annotator = saved_mask['annotator']
             try:
-                line_mask = line.trigger(detections=detections)
+                line_mask = lineZone.trigger(detections=detections)
             except Exception as e:
+                traceback.print_exc()
                 print('Failed to get line counts')
                 # continue
 
-            frame = line_annotator.annotate(frame, line_counter=line)
+            frame = line_annotator.annotate(frame, line_counter=lineZone)
 
-    # Annotate all detections if no masks are defined
-    if len(saved_masks) == 0:
+    # Annotate all detections if no zones are defined
+    if len([m for m in saved_masks if m['type'] == 'ZONE']) == 0:
         frame = bounding_box_annotator.annotate(scene=frame, detections=detections)
         # labels = [f"{class_id_topic[str(class_id)]} #{tracker_id}" for class_id, tracker_id in zip(detections.class_id, detections.tracker_id)]
         frame = label_annotator.annotate(scene=frame, detections=detections)
