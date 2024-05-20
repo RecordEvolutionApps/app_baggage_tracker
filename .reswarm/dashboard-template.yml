@@ -205,7 +205,7 @@ widgets:
               tablename: linecount_agg
               bufferSize: 500
               format:
-                x: day
+                x: period
                 y: num_in
                 pivot: linename
         - label: $str:Count Out
@@ -221,7 +221,7 @@ widgets:
               tablename: linecount_agg
               bufferSize: 500
               format:
-                x: day
+                x: period
                 y: num_out
                 pivot: linename
     version: 1.4.13
