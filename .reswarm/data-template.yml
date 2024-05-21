@@ -154,7 +154,7 @@ data:
           linename,
           time_bucket('1 hour', tsp) as period,
           sum(num_in) AS num_in,
-          -sum(num_out) AS num_out
+          sum(num_out) AS num_out
         FROM 
           linecounts
         WHERE 

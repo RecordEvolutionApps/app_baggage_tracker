@@ -182,24 +182,27 @@ widgets:
         color: $str:#5a6666
         backgroundColor: null
     layout_id: 10
-  - package_name: widget-barchart
+  - package_name: widget-linechart
     chartdata:
       settings:
-        horizontal: $bool:false
-        xAxisLabel: $str:Hour
-        yAxisLabel: $str:Counts
-        title: $str:Line counts
-        subTitle: null
+        timeseries: $bool:true
+        xAxisLabel: $str:Time
+        yAxisLabel: $str:Count
         columnLayout: null
+        title: null
+        subTitle: null
       dataseries:
-        - label: $str:Count In
+        - label: $str:In
+          order: null
           chartName: $str:#pivot#
-          stack: $str:num
-          barThickness: $num:10
-          backgroundColor: $str:#35f84c
+          type: $str:bar
+          radius: null
+          pointStyle: null
+          backgroundColor: $str:#8df88b
           borderColor: null
-          borderWidth: $num:0
-          borderRadius: $num:0
+          borderWidth: null
+          borderDash: null
+          fill: null
           data:
             tableRef:
               tablename: linecount_agg
@@ -207,25 +210,30 @@ widgets:
               format:
                 x: period
                 y: num_in
+                r: null
                 pivot: linename
-        - label: $str:Count Out
+        - label: $str:Out
+          order: null
           chartName: $str:#pivot#
-          stack: $str:num
-          barThickness: $num:10
-          backgroundColor: $str:#f22c2c
+          type: $str:bar
+          radius: null
+          pointStyle: null
+          backgroundColor: $str:#f07a7a
           borderColor: null
-          borderWidth: $num:0
-          borderRadius: $num:0
+          borderWidth: null
+          borderDash: null
+          fill: null
           data:
             tableRef:
               tablename: linecount_agg
-              bufferSize: 500
+              bufferSize: 100
               format:
                 x: period
                 y: num_out
+                r: null
                 pivot: linename
-    version: 1.4.13
-    layout_id: 11
+    version: 1.4.15
+    layout_id: 12
 layout:
   - w: 2
     h: 4
@@ -260,6 +268,6 @@ layout:
     h: 3
     x: 0
     y: 7
-    id: 11
+    id: 12
 background_color: "#e0dbe1"
 text_color: "#575062"
