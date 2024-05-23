@@ -98,13 +98,12 @@ async def main(_saved_masks):
         prev_frame_time = time.time()
         frame_skip_threshold = 1.0 / FRAMERATE  # Maximum allowed processing time per frame
 
-        outputFormat = " videoconvert ! vp8enc deadline=2 threads=4 keyframe-max-dist=6 ! video/x-vp8 ! rtpvp8pay pt=96"
-        # outputFormat = "nvvidconv ! nvv4l2h264enc maxperf-enable=1 insert-sps-pps=true insert-vui=true ! h264parse ! rtph264pay"
+        # outputFormat = " videoconvert ! vp8enc deadline=2 threads=4 keyframe-max-dist=6 ! video/x-vp8 ! rtpvp8pay pt=96"
+        outputFormat = "videoconvert ! nvvidconv ! video/x-raw(memory:NVMM), format=I420 ! nvv4l2h264enc maxperf-enable=true preset-level=1 insert-sps-pps=true insert-vui=true ! rtph264pay"
 
-        writerStream = "appsrc do-timestamp=true ! " + outputFormat + " ! udpsink host=janus port=" + str(portMap[args.camStream])
-        # print(writerStream)
-
-        out = cv2.VideoWriter(writerStream, 0, FRAMERATE, (RESOLUTION_X, RESOLUTION_Y))
+        writerStream = "appsrc ! " + outputFormat + " ! udpsink host=janus port=" + str(portMap[args.camStream])
+        print('-------------WRITE STREAM ---------------', writerStream)
+        out = cv2.VideoWriter(writerStream, cv2.CAP_GSTREAMER, 0, FRAMERATE, (RESOLUTION_X, RESOLUTION_Y), True)
 
         while cap.isOpened():
             elapsed_time = time.time() - start_time
@@ -141,9 +140,10 @@ async def main(_saved_masks):
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
             overlay_text(frame, f'Timestamp: {current_time}', position=(10, 30))
             overlay_text(frame, f'FPS: {fps_monitor.fps:.2f}', position=(10, 60))
-
+            
             # Publish data
             if elapsed_time1 >= 2.0:
+                # print('FPS:', str(fps_monitor.fps))
                 for item in zoneCounts:
                     publishImage(frame)
                     publishClassCount(item["label"], item["count"])
@@ -157,9 +157,6 @@ async def main(_saved_masks):
                 start_time = time.time()
 
             out.write(frame)
-
-            if cv2.waitKey(1) == ord('q'):
-                break
 
             await sleep(0) # Give other ask time to run, not a hack: https://superfastpython.com/what-is-asyncio-sleep-zero/#:~:text=You%20can%20force%20the%20current,before%20resuming%20the%20current%20task.
 

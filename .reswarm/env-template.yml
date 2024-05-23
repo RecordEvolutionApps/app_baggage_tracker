@@ -58,7 +58,7 @@ RESOLUTION_Y:
 FRAMERATE:
     label: Framerate
     type: numeric
-    defaultValue: 10
+    defaultValue: 30
     description: The Frame rate provided in the output video. (Should be a realistic estimate.)
     unit: frames per second
     max: 200

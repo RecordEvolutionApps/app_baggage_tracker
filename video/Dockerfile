@@ -1,6 +1,6 @@
 FROM ultralytics/ultralytics:8.2.11-jetson
 
-RUN apt-get -y update && apt-get -y upgrade && \
+RUN apt-get -y update && \
 	apt-get install -y \
 		libmicrohttpd-dev libjansson-dev \
 		libssl-dev libsofia-sip-ua-dev libglib2.0-dev \
@@ -38,5 +38,8 @@ COPY patch/polygon_zone.py /usr/local/lib/python3.8/dist-packages/supervision/de
 COPY . /app/video
 
 RUN echo "PubkeyAuthentication yes" >> /etc/ssh/sshd_config
+
+ENV LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libgomp.so.1
+ENV LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libGLdispatch.so.0
 
 ENTRYPOINT ["/app/video/entrypoint.sh"]
