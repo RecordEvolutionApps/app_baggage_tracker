@@ -89,48 +89,52 @@ model = getModel(OBJECT_MODEL, MODEL_RESX, MODEL_RESY)
 
 async def main(_saved_masks):
     try:
-        print('starting main video loop...')
         fps_monitor = sv.FPSMonitor()
         start_time = time.time()
         start_time1 = time.time()
         start_time2 = time.time()
 
-        prev_frame_time = time.time()
-        frame_skip_threshold = 1.0 / FRAMERATE  # Maximum allowed processing time per frame
-
         # outputFormat = " videoconvert ! vp8enc deadline=2 threads=4 keyframe-max-dist=6 ! video/x-vp8 ! rtpvp8pay pt=96"
-        outputFormat = "videoconvert ! nvvidconv ! video/x-raw(memory:NVMM), format=I420 ! nvv4l2h264enc maxperf-enable=true preset-level=1 insert-sps-pps=true insert-vui=true ! rtph264pay"
+        outputFormat = "videoconvert ! nvvidconv ! video/x-raw(memory:NVMM), format=I420 ! nvv4l2h264enc maxperf-enable=true preset-level=1 insert-sps-pps=true insert-vui=true iframeinterval=10 ! rtph264pay pt=96 config-interval=1"
 
-        writerStream = "appsrc ! " + outputFormat + " ! udpsink host=janus port=" + str(portMap[args.camStream])
-        print('-------------WRITE STREAM ---------------', writerStream)
+        writerStream = "appsrc ! " + outputFormat + " ! udpsink host=janus port=" + str(portMap[args.camStream]) + " sync=false async=false"
+        print('-------------CREATING WRITE STREAM:', writerStream)
         out = cv2.VideoWriter(writerStream, cv2.CAP_GSTREAMER, 0, FRAMERATE, (RESOLUTION_X, RESOLUTION_Y), True)
-
+        
+        print('starting main video loop...')
+        prev_frame_time = time.time()
+        frame_time = 1.0 / FRAMERATE  # Maximum allowed processing time per frame
+        success = True
+        frame = None
+        start = time.time()
+        real_ms = 0
+        video_ms = 0
         while cap.isOpened():
             elapsed_time = time.time() - start_time
             elapsed_time1 = time.time() - start_time1
             elapsed_time2 = time.time() - start_time2
 
-            success, frame = cap.read()
+            real_ms = (time.time() - start) * 1000
+            while real_ms >= video_ms:
+                success, frame = cap.read()
+                real_ms = (time.time() - start) * 1000
+                video_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
+                # print('real > vs', int(real_ms), int(video_ms), real_ms > video_ms)
+            video_ms = 0
+
+            prev_frame_time = time.time()
+
             if not success:
+                if elapsed_time >= 2.0:
+                    print('Video Frame could not be read from source', device)
+                    start_time = time.time()
                 continue
-
-            curr_frame_time = time.time()
-
-            # Check if processing time for previous frame exceeded threshold
-            if curr_frame_time - prev_frame_time > frame_skip_threshold:
-                # print("Skipping frame!", curr_frame_time - prev_frame_time)
-                prev_frame_time = curr_frame_time
-                continue
-
-            # print("process frame", curr_frame_time - prev_frame_time)
-            # Update previous frame time for next iteration
-            prev_frame_time = curr_frame_time
             
             zoneCounts = {}
             lineCounts = {}
             results = []
             fps_monitor.tick()
-            results = model(frame, imgsz=(MODEL_RESY, MODEL_RESX), conf=CONF, iou=IOU, verbose=False, classes=CLASS_LIST)
+            results = model(frame, device='cuda:0', imgsz=(MODEL_RESY, MODEL_RESX), conf=CONF, iou=IOU, verbose=False, classes=CLASS_LIST)
             start_time2 = time.time()
             
             if len(results) > 0:
@@ -160,6 +164,7 @@ async def main(_saved_masks):
 
             await sleep(0) # Give other ask time to run, not a hack: https://superfastpython.com/what-is-asyncio-sleep-zero/#:~:text=You%20can%20force%20the%20current,before%20resuming%20the%20current%20task.
 
+        print('WARNING: Video source is not open', device)
         cap.release()
         cv2.destroyAllWindows()
     except Exception as e:

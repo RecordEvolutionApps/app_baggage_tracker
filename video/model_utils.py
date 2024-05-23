@@ -211,7 +211,7 @@ def processFrame(frame, results, class_list, saved_masks):
 
     try:
         detections = tracker.update_with_detections(detections)
-        detections = smoother.update_with_detections(detections)
+        # detections = smoother.update_with_detections(detections)
     except Exception as e:
         print('Error when smoothing detections', str(e))
 
