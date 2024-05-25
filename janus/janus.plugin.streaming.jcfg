@@ -59,10 +59,10 @@ multistream: {
 			label = "Video stream Front"
 			port = 5004
 			pt = 96
-			# codec = "vp8"
-			codec = "h264"
-			rtpmap = "H264/90000"
-			fmtp = "profile-level-id=42e01f;packetization-mode=1"
+			codec = "vp8"
+			# codec = "h264"
+			# rtpmap = "H264/90000"
+			# fmtp = "profile-level-id=42e01f;packetization-mode=1;config-interval=1"
 		}
 #		{
 #			type = "video"
