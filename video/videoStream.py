@@ -94,10 +94,10 @@ async def main(_saved_masks):
         start_time1 = time.time()
         start_time2 = time.time()
 
-        # CPU encoding, but first frame shows immediately
-        outputFormat = " videoconvert ! vp8enc deadline=2 threads=4 keyframe-max-dist=10 ! video/x-vp8 ! rtpvp8pay pt=96"
-        # Hardware h264 encoding of jetson, but first frame takes 20seconds to show 
-        # outputFormat = "videoconvert ! nvvidconv ! video/x-raw(memory:NVMM), format=I420 ! nvv4l2h264enc maxperf-enable=true preset-level=1 insert-sps-pps=true insert-vui=true iframeinterval=10 ! rtph264pay pt=96 config-interval=1"
+        # CPU encoding
+        # outputFormat = " videoconvert ! vp8enc deadline=2 threads=4 keyframe-max-dist=10 ! video/x-vp8 ! rtpvp8pay pt=96"
+        # Hardware h264 encoding of jetson
+        outputFormat = "videoconvert ! nvvidconv ! video/x-raw(memory:NVMM), format=I420 ! nvv4l2h264enc maxperf-enable=true preset-level=1 insert-sps-pps=true insert-vui=true iframeinterval=10 idrinterval=10 ! rtph264pay pt=96 config-interval=1"
 
         writerStream = "appsrc ! " + outputFormat + " ! udpsink host=janus port=" + str(portMap[args.camStream]) + " sync=false async=false"
         print('-------------CREATING WRITE STREAM:', writerStream)
