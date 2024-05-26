@@ -16,6 +16,23 @@ OBJECT_MODEL = os.environ.get('OBJECT_MODEL')
 RESOLUTION_X = int(os.environ.get('RESOLUTION_X', 640))
 RESOLUTION_Y = int(os.environ.get('RESOLUTION_Y', 480))
 DEVICE_NAME = os.environ.get('DEVICE_NAME')
+CONF = float(os.environ.get('CONF', '0.1'))
+IOU = float(os.environ.get('IOU', '0.8'))
+CLASS_LIST = os.environ.get('CLASS_LIST', '')
+CLASS_LIST = CLASS_LIST.split(',')
+
+with open('/app/video/coco_classes.json', 'r') as f:
+  class_id_topic = json.load(f)
+
+try:
+    CLASS_LIST = [int(num.strip()) for num in CLASS_LIST]
+except Exception as err:
+    print('Invalid Class list given', CLASS_LIST)
+    CLASS_LIST = []
+
+if len(CLASS_LIST) <= 1:
+    CLASS_LIST = list(class_id_topic.keys())
+    CLASS_LIST = [int(item) for item in CLASS_LIST]
 
 # Supervision Annotations
 if (OBJECT_MODEL.endswith('obb')):
@@ -33,7 +50,7 @@ def downloadModel(model_name, model_path):
     urllib.request.urlretrieve(f'https://github.com/ultralytics/assets/releases/download/v8.2.0/{model_name}.pt', model_path)
     print(f'Download complete!')
 
-def getModel(model_name, model_resx, model_resy):
+def getModel(model_name, model_resx=640, model_resy=640):
     pytorch_model_path = f'/app/{model_name}.pt'
     tensorrt_initial_model_path = f'/app/{model_name}.engine'
 
@@ -202,22 +219,43 @@ def prepMasks(in_masks):
     print('Refreshed Masks', out_masks)
     return out_masks
 
-def processFrame(frame, results, class_list, saved_masks):
-    if len(results) == 0:
-        return frame, []
+def initSliceInferer(model):
+    computer = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
+    def inferSlice(image_slice: np.ndarray) -> sv.Detections:
+        result = model(image_slice, device=computer, conf=CONF, iou=IOU, verbose=False, classes=CLASS_LIST)
+        return sv.Detections.from_ultralytics(result[0])
+    
+    slicer = sv.InferenceSlicer(
+        callback=inferSlice, 
+        slice_wh=[640, 640], 
+        overlap_ratio_wh=[0.2, 0.2],
+        iou_threshold=IOU,
+        thread_workers=6
+        )
+    return slicer
+
+def infer(frame, model, model_resx, model_resy):
+    computer = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    results = model(frame, device=computer, imgsz=(model_resy, model_resx), conf=CONF, iou=IOU, verbose=False, classes=CLASS_LIST)
+    if len(results) == 0:
+        return false
     try:
         detections = sv.Detections.from_ultralytics(results[0])
     except Exception as e:
         print('Failed to extract detections from model result', e)
         traceback.print_exc()
-        return frame, []
+        return false
+    return detections
+
+def processFrame(frame, detections, saved_masks):
 
     try:
         detections = tracker.update_with_detections(detections)
         # detections = smoother.update_with_detections(detections)
     except Exception as e:
-        print('Error when smoothing detections', str(e))
+        print('Error when smoothing detections or updating tracker', str(e))
+        traceback.print_exc()
 
     zoneCounts = []
     lineCounts = []
@@ -242,7 +280,7 @@ def processFrame(frame, results, class_list, saved_masks):
             
             # labels = [f"{class_id_topic[str(class_id)]} #{tracker_id}" for class_id, tracker_id in zip(filtered_detections.class_id, filtered_detections.tracker_id)]
 
-            count_dict = count_polygon_zone(zone, class_list)
+            count_dict = count_polygon_zone(zone, CLASS_LIST)
             zoneCounts.append({'label': saved_mask['label'], 'count': count_dict})
 
             frame = bounding_box_annotator.annotate(scene=frame, detections=filtered_detections)

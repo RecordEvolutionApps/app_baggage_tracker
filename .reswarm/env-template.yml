@@ -19,7 +19,7 @@ OBJECT_MODEL:
     type: text
     defaultValue: "yolov8s"
     description: YOLO Object Detection Model 
-    valueList: ["yolov8n", "yolov8s", "yolov8m", "yolov8l", "yolov8x", "yolov9c", "yolov9e"]  # Renders a dropdown field allowing the selection from a list of values.  (number[] | string[])
+    valueList: ["yolov8n", "yolov8s", "yolov8m", "yolov8l", "yolov8x", "yolov10n", "yolov10s"]  # Renders a dropdown field allowing the selection from a list of values.  (number[] | string[])
 CLASS_LIST:
     label: Detection Classes
     type: text
