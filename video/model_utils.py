@@ -10,6 +10,7 @@ from asyncio import get_event_loop, sleep
 import sys
 import cv2
 import traceback
+import torch
 
 OBJECT_MODEL = os.environ.get('OBJECT_MODEL')
 RESOLUTION_X = int(os.environ.get('RESOLUTION_X', 640))
@@ -66,13 +67,16 @@ def getModel(model_name, model_resx, model_resy):
     
     print("Exporting Pytorch model from /app directory into TensorRT....")
     pytorch_model = YOLO(pytorch_model_path)
-    pytorch_model.export(format='engine', imgsz=(model_resy, model_resx))
-    print("Model exported!")
+    if not torch.cuda.is_available():
+        return pytorch_model
+    else:    
+        pytorch_model.export(format='engine', imgsz=(model_resy, model_resx))
+        print("Model exported!")
 
-    print(f'Moving exported TensorRT model {model_name} to data folder...')
-    shutil.move(tensorrt_initial_model_path, stored_tensorrt_model_path)
+        print(f'Moving exported TensorRT model {model_name} to data folder...')
+        shutil.move(tensorrt_initial_model_path, stored_tensorrt_model_path)
 
-    return YOLO(stored_tensorrt_model_path)
+        return YOLO(stored_tensorrt_model_path)
 
 def get_youtube_video(url, height):
     import yt_dlp

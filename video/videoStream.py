@@ -62,7 +62,7 @@ device = args.device
 print('CAMERA USED:' + device)
 
 if device.startswith('http'):
-    if device.startswith('https://youtu'):
+    if device.startswith('https://youtu') or device.startswith('https://www.youtube.com'):
         video = get_youtube_video(device, RESOLUTION_Y)
         RESOLUTION_X = video["width"]
         RESOLUTION_Y = video["height"]
@@ -96,8 +96,14 @@ async def main(_saved_masks):
 
         # CPU encoding
         # outputFormat = " videoconvert ! vp8enc deadline=2 threads=4 keyframe-max-dist=10 ! video/x-vp8 ! rtpvp8pay pt=96"
-        # Hardware h264 encoding of jetson
-        outputFormat = "videoconvert ! nvvidconv ! video/x-raw(memory:NVMM), format=I420 ! nvv4l2h264enc maxperf-enable=true preset-level=1 insert-sps-pps=true insert-vui=true iframeinterval=10 idrinterval=10 ! rtph264pay pt=96 config-interval=1"
+
+        if torch.cuda.is_available():
+            computer = 'cuda:0'
+            # Hardware h264 encoding of jetson
+            outputFormat = "videoconvert ! nvvidconv ! video/x-raw(memory:NVMM), format=I420 ! nvv4l2h264enc maxperf-enable=true preset-level=1 insert-sps-pps=true insert-vui=true iframeinterval=10 idrinterval=10 ! rtph264pay pt=96 config-interval=1"
+        else:
+            computer = 'cpu'
+            outputFormat = "videoconvert ! video/x-raw, format=I420 ! x264enc tune=zerolatency ! rtph264pay pt=96 config-interval=1"
 
         writerStream = "appsrc ! " + outputFormat + " ! udpsink host=janus port=" + str(portMap[args.camStream]) + " sync=false async=false"
         print('-------------CREATING WRITE STREAM:', writerStream)
@@ -136,7 +142,7 @@ async def main(_saved_masks):
             lineCounts = {}
             results = []
             fps_monitor.tick()
-            results = model(frame, imgsz=(MODEL_RESY, MODEL_RESX), conf=CONF, iou=IOU, verbose=False, classes=CLASS_LIST)
+            results = model(frame, device=computer, imgsz=(MODEL_RESY, MODEL_RESX), conf=CONF, iou=IOU, verbose=False, classes=CLASS_LIST)
             start_time2 = time.time()
             
             if len(results) > 0:
