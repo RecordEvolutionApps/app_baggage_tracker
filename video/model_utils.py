@@ -18,6 +18,8 @@ RESOLUTION_Y = int(os.environ.get('RESOLUTION_Y', 480))
 DEVICE_NAME = os.environ.get('DEVICE_NAME')
 CONF = float(os.environ.get('CONF', '0.1'))
 IOU = float(os.environ.get('IOU', '0.8'))
+SMOOTHING = (os.environ.get('SMOOTHING', 'true') == 'true')
+FRAME_BUFFER = int(os.environ.get('FRAME_BUFFER', 64))
 CLASS_LIST = os.environ.get('CLASS_LIST', '')
 CLASS_LIST = CLASS_LIST.split(',')
 
@@ -200,7 +202,6 @@ def prepMasks(in_masks):
             )
             mask['annotator'] = zone_annotator
         elif mask['type'] == 'LINE':
-            print('THE LINE', polygon)
             START = sv.Point(polygon[0][0], polygon[0][1])
             END = sv.Point(polygon[1][0], polygon[1][1])
             line_zone = sv.LineZone(start=START, end=END, triggering_anchors=[sv.Position.CENTER])
@@ -226,7 +227,7 @@ def get_extreme_points(masks):
     low_y = RESOLUTION_Y - 1
     high_x = -1
     high_y = -1
-    buf = 64
+    buf = FRAME_BUFFER
     for mask in masks:
         points = np.array(mask["points"])
         points.astype(int)
@@ -282,7 +283,8 @@ def processFrame(frame, detections, saved_masks):
 
     try:
         detections = tracker.update_with_detections(detections)
-        # detections = smoother.update_with_detections(detections)
+        if SMOOTHING:
+            detections = smoother.update_with_detections(detections)
     except Exception as e:
         print('Error when smoothing detections or updating tracker', str(e))
         traceback.print_exc()

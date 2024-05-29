@@ -101,7 +101,7 @@ async def main(_saved_masks):
 
         if torch.cuda.is_available():
             # Hardware h264 encoding of jetson
-            outputFormat = "videoconvert ! nvvidconv ! video/x-raw(memory:NVMM), format=I420 ! nvv4l2h264enc maxperf-enable=true preset-level=1 insert-sps-pps=true insert-vui=true iframeinterval=10 idrinterval=10 ! rtph264pay pt=96 config-interval=1"
+            outputFormat = "queue ! videoconvert ! nvvidconv ! queue ! video/x-raw(memory:NVMM), format=I420 ! nvv4l2h264enc maxperf-enable=true preset-level=1 insert-sps-pps=true insert-vui=true iframeinterval=10 idrinterval=10 ! rtph264pay pt=96 config-interval=1"
         else:
             outputFormat = "videoconvert ! video/x-raw, format=I420 ! x264enc tune=zerolatency ! rtph264pay pt=96 config-interval=1"
 
@@ -128,6 +128,7 @@ async def main(_saved_masks):
             real_ms = (time.time() - start) * 1000
             while real_ms >= video_ms:
                 success, frame = cap.read()
+                if not success: break
                 real_ms = (time.time() - start) * 1000
                 video_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
                 # print('real > vs', int(real_ms), int(video_ms), real_ms > video_ms)
@@ -136,6 +137,9 @@ async def main(_saved_masks):
             prev_frame_time = time.time()
 
             if not success:
+                print("################ RESTART VIDEO ####################")
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                start = time.time()
                 if elapsed_time >= 2.0:
                     print('Video Frame could not be read from source', device)
                     start_time = time.time()

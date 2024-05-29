@@ -28,8 +28,18 @@ CLASS_LIST:
 USE_SAHI:
     label: Use Image Slicing
     type: boolean
-    defaultValue: true
+    defaultValue: false
     description: SAHI is a method to slice a high resolution frame into chunks of 640x640. This improves the detection quality for small objects on high resolution images, but may slow down inference time.
+FRAME_BUFFER:
+    label: Extra space around detection frame
+    type: numeric
+    defaultValue: 180
+    description: When Image Slicing is enabled, the detection area is determined as the smallest rectangle (blue box) containing alls created zones and lines. Here you can provide a number of pixels that this frame will be extended to all sides.
+SMOOTHING:
+    label: Apply detection smoothing
+    type: boolean
+    defaultValue: false
+    description: Smoothing uses previous frames to determine the average detection box of an object in the current frame.
 CONF:
     label: Confidence
     type: numeric
@@ -40,7 +50,7 @@ CONF:
 IOU:
     label: Intersection over Union
     type: numeric
-    defaultValue: 0.7
+    defaultValue: 0.5
     description: Intersection Over Union (IoU) threshold for Non-Maximum Suppression (NMS). Lower values result in fewer detections by eliminating overlapping boxes, useful for reducing duplicates.
     max: 1
     min: 0

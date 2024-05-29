@@ -279,25 +279,25 @@ export class CanvasToolbox extends LitElement {
                 Zone
                 <md-icon slot="icon">add_circle</md-icon>
               </md-elevated-button>
-              <md-elevated-button @click=${this.onCreateLineClick}>
-                Line
-                <md-icon slot="icon">add_circle</md-icon>
+              <md-elevated-button
+                .disabled=${this.selectedPolygon?.committed || !this.selectedPolygon?.isCommitable}
+                @click=${this.commitPolygon}
+                >
+                Close Zone
+                <md-icon slot="icon">close_fullscreen</md-icon>
               </md-elevated-button>
             </div>
           </li>
-          <li class="mb16">
+          <!-- <li class="mb16">
             <md-elevated-button @click=${this.undoLastLine}>
               Undo
               <md-icon slot="icon">undo</md-icon>
             </md-elevated-button>
-          </li>
+          </li> -->
           <li>
-            <md-elevated-button
-              .disabled=${this.selectedPolygon?.committed || !this.selectedPolygon?.isCommitable}
-              @click=${this.commitPolygon}
-            >
-              Commit
-              <md-icon slot="icon">close_fullscreen</md-icon>
+            <md-elevated-button @click=${this.onCreateLineClick}>
+              Line
+              <md-icon slot="icon">add_circle</md-icon>
             </md-elevated-button>
           </li>
         </ul>
