@@ -16,7 +16,7 @@ import functools
 
 import traceback
 
-from model_utils import getModel, processFrame, initSliceInferer, infer, get_youtube_video, overlay_text, count_polygon_zone, count_detections, prepMasks, readMasksFromStdin
+from model_utils import getModel, processFrame, initSliceInferer, move_detections, get_extreme_points, infer, get_youtube_video, overlay_text, count_polygon_zone, count_detections, prepMasks, readMasksFromStdin
 
 print = functools.partial(print, flush=True)
 
@@ -27,6 +27,7 @@ OBJECT_MODEL = os.environ.get('OBJECT_MODEL')
 RESOLUTION_X = int(os.environ.get('RESOLUTION_X', 640))
 RESOLUTION_Y = int(os.environ.get('RESOLUTION_Y', 480))
 FRAMERATE = int(os.environ.get('FRAMERATE', 30))
+USE_SAHI = (os.environ.get('USE_SAHI', 'true') == "true")
 
 DEVICE_KEY = os.environ.get('DEVICE_KEY')
 DEVICE_URL = os.environ.get('DEVICE_URL')
@@ -81,7 +82,10 @@ cap.set(4, RESOLUTION_Y)
 
 MODEL_RESX = (RESOLUTION_X // 32) * 32 # must be multiple of max stride 32
 MODEL_RESY = (RESOLUTION_Y // 32) * 32
-model = getModel(OBJECT_MODEL, MODEL_RESX, MODEL_RESY)
+if USE_SAHI:
+    model = getModel(OBJECT_MODEL)
+else:
+    model = getModel(OBJECT_MODEL, MODEL_RESX, MODEL_RESY)
 
 # print("CUDA available:", torch.cuda.is_available(), 'GPUs', torch.cuda.device_count())
 
@@ -104,7 +108,7 @@ async def main(_saved_masks):
         writerStream = "appsrc ! " + outputFormat + " ! udpsink host=janus port=" + str(portMap[args.camStream]) + " sync=false async=false"
         print('-------------CREATING WRITE STREAM:', writerStream)
         out = cv2.VideoWriter(writerStream, cv2.CAP_GSTREAMER, 0, FRAMERATE, (RESOLUTION_X, RESOLUTION_Y), True)
-        
+
         print('starting main video loop...')
         prev_frame_time = time.time()
         frame_time = 1.0 / FRAMERATE  # Maximum allowed processing time per frame
@@ -114,7 +118,7 @@ async def main(_saved_masks):
         real_ms = 0
         video_ms = 0
 
-        slicer = initSliceInferer(model)
+        if USE_SAHI: slicer = initSliceInferer(model)
 
         while cap.isOpened():
             elapsed_time = time.time() - start_time
@@ -136,18 +140,25 @@ async def main(_saved_masks):
                     print('Video Frame could not be read from source', device)
                     start_time = time.time()
                 continue
-            
+
             zoneCounts = {}
             lineCounts = {}
             detections = False
             fps_monitor.tick()
 
-            # detections = slicer(frame)
-            # print('SLICER detections:', detections)
-            detections = infer(frame, model, MODEL_RESX, MODEL_RESY)
-            
+            if USE_SAHI:
+                low_x, low_y, high_x, high_y = get_extreme_points(_saved_masks)
+                # print('CROPPING', low_x, low_y, high_x, high_y)
+                frame_ = frame[low_y:high_y, low_x:high_x]
+                detections = slicer(frame_)
+                detections = move_detections(detections, low_x, low_y)
+                cv2.rectangle(frame, (low_x, low_y), (high_x, high_y), (255, 0, 0), 2)
+                # print('SLICER detections:', detections)
+            else:
+                detections = infer(frame, model, MODEL_RESX, MODEL_RESY)
+
             start_time2 = time.time()
-            
+
             if detections:
                 frame, zoneCounts, lineCounts = processFrame(frame, detections, _saved_masks)
 
@@ -155,7 +166,7 @@ async def main(_saved_masks):
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
             overlay_text(frame, f'Timestamp: {current_time}', position=(10, 30))
             overlay_text(frame, f'FPS: {fps_monitor.fps:.2f}', position=(10, 60))
-            
+
             # Publish data
             if elapsed_time1 >= 2.0:
                 # print('FPS:', str(fps_monitor.fps))
@@ -163,10 +174,10 @@ async def main(_saved_masks):
                     publishImage(frame)
                     publishClassCount(item["label"], item["count"])
                 start_time1 = time.time()
-            
+
             for item in lineCounts:
                 publishLineCount(item["label"], item["num_in"], item["num_out"])
-            
+
             if elapsed_time > 10.0:
                 publishCameras()
                 start_time = time.time()

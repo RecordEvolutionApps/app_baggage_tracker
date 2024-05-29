@@ -219,6 +219,26 @@ def prepMasks(in_masks):
     print('Refreshed Masks', out_masks)
     return out_masks
 
+def get_extreme_points(masks):
+    if len(masks) == 0:
+        return 0, 0, RESOLUTION_X, RESOLUTION_Y
+    low_x = RESOLUTION_X - 1
+    low_y = RESOLUTION_Y - 1
+    high_x = -1
+    high_y = -1
+    buf = 64
+    for mask in masks:
+        points = np.array(mask["points"])
+        points.astype(int)
+        for point in points:
+            low_x = point[0] if point[0] < low_x else low_x
+            low_y = point[1] if point[1] < low_y else low_y
+            high_x = point[0] if point[0] > high_x else high_x
+            high_y = point[1] if point[1] > high_y else high_y
+
+    return max(0, low_x - buf), max(0, low_y - buf), min(RESOLUTION_X - 1, high_x + buf), min(RESOLUTION_Y - 1, high_y + buf)
+
+
 def initSliceInferer(model):
     computer = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
@@ -247,6 +267,16 @@ def infer(frame, model, model_resx, model_resy):
         traceback.print_exc()
         return false
     return detections
+
+def move_detections(detections: sv.Detections, offset_x: int, offset_y: int) -> sv.Detections:
+  for i in range(len(detections.xyxy)):
+    box = detections.xyxy[i]
+    box[0] += offset_x  # xmin
+    box[1] += offset_y  # ymin
+    box[2] += offset_x  # xmax
+    box[3] += offset_y  # ymax
+
+  return detections
 
 def processFrame(frame, detections, saved_masks):
 
