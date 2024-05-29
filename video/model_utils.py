@@ -16,6 +16,23 @@ OBJECT_MODEL = os.environ.get('OBJECT_MODEL')
 RESOLUTION_X = int(os.environ.get('RESOLUTION_X', 640))
 RESOLUTION_Y = int(os.environ.get('RESOLUTION_Y', 480))
 DEVICE_NAME = os.environ.get('DEVICE_NAME')
+CONF = float(os.environ.get('CONF', '0.1'))
+IOU = float(os.environ.get('IOU', '0.8'))
+CLASS_LIST = os.environ.get('CLASS_LIST', '')
+CLASS_LIST = CLASS_LIST.split(',')
+
+with open('/app/video/coco_classes.json', 'r') as f:
+  class_id_topic = json.load(f)
+
+try:
+    CLASS_LIST = [int(num.strip()) for num in CLASS_LIST]
+except Exception as err:
+    print('Invalid Class list given', CLASS_LIST)
+    CLASS_LIST = []
+
+if len(CLASS_LIST) <= 1:
+    CLASS_LIST = list(class_id_topic.keys())
+    CLASS_LIST = [int(item) for item in CLASS_LIST]
 
 # Supervision Annotations
 if (OBJECT_MODEL.endswith('obb')):
@@ -33,7 +50,7 @@ def downloadModel(model_name, model_path):
     urllib.request.urlretrieve(f'https://github.com/ultralytics/assets/releases/download/v8.2.0/{model_name}.pt', model_path)
     print(f'Download complete!')
 
-def getModel(model_name, model_resx, model_resy):
+def getModel(model_name, model_resx=640, model_resy=640):
     pytorch_model_path = f'/app/{model_name}.pt'
     tensorrt_initial_model_path = f'/app/{model_name}.engine'
 
@@ -202,22 +219,73 @@ def prepMasks(in_masks):
     print('Refreshed Masks', out_masks)
     return out_masks
 
-def processFrame(frame, results, class_list, saved_masks):
-    if len(results) == 0:
-        return frame, []
+def get_extreme_points(masks):
+    if len(masks) == 0:
+        return 0, 0, RESOLUTION_X, RESOLUTION_Y
+    low_x = RESOLUTION_X - 1
+    low_y = RESOLUTION_Y - 1
+    high_x = -1
+    high_y = -1
+    buf = 64
+    for mask in masks:
+        points = np.array(mask["points"])
+        points.astype(int)
+        for point in points:
+            low_x = point[0] if point[0] < low_x else low_x
+            low_y = point[1] if point[1] < low_y else low_y
+            high_x = point[0] if point[0] > high_x else high_x
+            high_y = point[1] if point[1] > high_y else high_y
 
+    return max(0, low_x - buf), max(0, low_y - buf), min(RESOLUTION_X - 1, high_x + buf), min(RESOLUTION_Y - 1, high_y + buf)
+
+
+def initSliceInferer(model):
+    computer = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+
+    def inferSlice(image_slice: np.ndarray) -> sv.Detections:
+        result = model(image_slice, device=computer, conf=CONF, iou=IOU, verbose=False, classes=CLASS_LIST)
+        return sv.Detections.from_ultralytics(result[0])
+    
+    slicer = sv.InferenceSlicer(
+        callback=inferSlice, 
+        slice_wh=[640, 640], 
+        overlap_ratio_wh=[0.2, 0.2],
+        iou_threshold=IOU,
+        thread_workers=6
+        )
+    return slicer
+
+def infer(frame, model, model_resx, model_resy):
+    computer = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    results = model(frame, device=computer, imgsz=(model_resy, model_resx), conf=CONF, iou=IOU, verbose=False, classes=CLASS_LIST)
+    if len(results) == 0:
+        return false
     try:
         detections = sv.Detections.from_ultralytics(results[0])
     except Exception as e:
         print('Failed to extract detections from model result', e)
         traceback.print_exc()
-        return frame, []
+        return false
+    return detections
+
+def move_detections(detections: sv.Detections, offset_x: int, offset_y: int) -> sv.Detections:
+  for i in range(len(detections.xyxy)):
+    box = detections.xyxy[i]
+    box[0] += offset_x  # xmin
+    box[1] += offset_y  # ymin
+    box[2] += offset_x  # xmax
+    box[3] += offset_y  # ymax
+
+  return detections
+
+def processFrame(frame, detections, saved_masks):
 
     try:
         detections = tracker.update_with_detections(detections)
         # detections = smoother.update_with_detections(detections)
     except Exception as e:
-        print('Error when smoothing detections', str(e))
+        print('Error when smoothing detections or updating tracker', str(e))
+        traceback.print_exc()
 
     zoneCounts = []
     lineCounts = []
@@ -242,7 +310,7 @@ def processFrame(frame, results, class_list, saved_masks):
             
             # labels = [f"{class_id_topic[str(class_id)]} #{tracker_id}" for class_id, tracker_id in zip(filtered_detections.class_id, filtered_detections.tracker_id)]
 
-            count_dict = count_polygon_zone(zone, class_list)
+            count_dict = count_polygon_zone(zone, CLASS_LIST)
             zoneCounts.append({'label': saved_mask['label'], 'count': count_dict})
 
             frame = bounding_box_annotator.annotate(scene=frame, detections=filtered_detections)

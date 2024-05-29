@@ -19,12 +19,17 @@ OBJECT_MODEL:
     type: text
     defaultValue: "yolov8s"
     description: YOLO Object Detection Model 
-    valueList: ["yolov8n", "yolov8s", "yolov8m", "yolov8l", "yolov8x", "yolov9c", "yolov9e"]  # Renders a dropdown field allowing the selection from a list of values.  (number[] | string[])
+    valueList: ["yolov8n", "yolov8s", "yolov8m", "yolov8l", "yolov8x", "yolov8s-obb", "yolov8n-obb"]  # Renders a dropdown field allowing the selection from a list of values.  (number[] | string[])
 CLASS_LIST:
     label: Detection Classes
     type: text
     defaultValue: 0, 2, 3, 5, 7
     description: A list of class ids from the COCO dataset. If left empty, then all classes are used. See https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/datasets/coco.yaml
+USE_SAHI:
+    label: Use Image Slicing
+    type: boolean
+    defaultValue: true
+    description: SAHI is a method to slice a high resolution frame into chunks of 640x640. This improves the detection quality for small objects on high resolution images, but may slow down inference time.
 CONF:
     label: Confidence
     type: numeric
@@ -56,10 +61,10 @@ RESOLUTION_Y:
     min: 1
     max: 10000
 FRAMERATE:
-    label: Framerate
+    label: Max Framerate
     type: numeric
     defaultValue: 30
-    description: The Frame rate provided in the output video. (Should be a realistic estimate.)
+    description: The maximum framerate provided in the output video.
     unit: frames per second
-    max: 200
+    max: 500
     min: 1
