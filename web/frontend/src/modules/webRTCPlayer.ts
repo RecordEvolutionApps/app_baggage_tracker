@@ -1,15 +1,15 @@
 declare global {
   interface Window {
-      Janus: any,
-      bootbox: any,
-      streamsList: any,
-      initializing: boolean
+    Janus: any,
+    bootbox: any,
+    streamsList: any,
+    initializing: boolean
   }
 }
 
 let streaming: any
 const WEBRTC_PORT = '1200'
-const videoPlayer: any = {} 
+const videoPlayer: any = {}
 videoPlayer.frontCam = document.getElementById('frontCam')
 videoPlayer.backCam = document.getElementById('backCam')
 videoPlayer.leftCam = document.getElementById('leftCam')
@@ -17,29 +17,36 @@ videoPlayer.rightCam = document.getElementById('rightCam')
 
 const janusServerUrl = getJanusUrl(); // Replace with your Janus server URL
 const iceServers = [
-  {
-    urls: "stun:stun.l.google.com:19302",
-  },
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun.l.google.com:5349" },
+  { urls: "stun:stun1.l.google.com:3478" },
+  { urls: "stun:stun1.l.google.com:5349" },
+  { urls: "stun:stun2.l.google.com:19302" },
+  { urls: "stun:stun2.l.google.com:5349" },
+  { urls: "stun:stun3.l.google.com:3478" },
+  { urls: "stun:stun3.l.google.com:5349" },
+  { urls: "stun:stun4.l.google.com:19302" },
+  { urls: "stun:stun4.l.google.com:5349" },
   {
     urls: "turn:relay1.expressturn.com:3478",
     username: "ef8VXO351A31UJVGBY",
     credential: "PD1trsvPrgQ4uWAf",
   },
-  // {
-  //   urls: "turn:a.relay.metered.ca:80?transport=tcp",
-  //   username: "f63d4fc5ff93197d239f602f",
-  //   credential: "ZaHWKZRVcc1+8sKn",
-  // },
-  // {
-  //   urls: "turn:a.relay.metered.ca:443",
-  //   username: "f63d4fc5ff93197d239f602f",
-  //   credential: "ZaHWKZRVcc1+8sKn",
-  // },
-  // {
-  //   urls: "turn:a.relay.metered.ca:443?transport=tcp",
-  //   username: "f63d4fc5ff93197d239f602f",
-  //   credential: "ZaHWKZRVcc1+8sKn",
-  // },
+  {
+    urls: "turn:a.relay.metered.ca:80?transport=tcp",
+    username: "f63d4fc5ff93197d239f602f",
+    credential: "ZaHWKZRVcc1+8sKn",
+  },
+  {
+    urls: "turn:a.relay.metered.ca:443",
+    username: "f63d4fc5ff93197d239f602f",
+    credential: "ZaHWKZRVcc1+8sKn",
+  },
+  {
+    urls: "turn:a.relay.metered.ca:443?transport=tcp",
+    username: "f63d4fc5ff93197d239f602f",
+    credential: "ZaHWKZRVcc1+8sKn",
+  },
 ]
 
 // Initialize Janus
@@ -68,7 +75,7 @@ function initJanus(videoPlayer: any) {
             },
             onmessage: function (msg: any, jsep: any) {
               // Handle msg, if needed, and check jsep
-              console.log('<<<<<<<<< Got Message', msg.result, jsep )
+              console.log('<<<<<<<<< Got Message', msg.result, jsep)
               if (jsep) {
                 // We have the ANSWER from the plugin
                 console.log('>>>>>>>>>> creating answer ...')
@@ -78,9 +85,10 @@ function initJanus(videoPlayer: any) {
                     success: function (jsep: any) {
                       // window.Janus.debug("Got SDP!", jsep);
                       console.log('<<<<<<< answer created, now sending start >>>>>>>')
-                      streaming.send({ message: { request: "start" }, jsep: jsep,
+                      streaming.send({
+                        message: { request: "start" }, jsep: jsep,
                         success: (result: any) => console.log('<<<<<<< start result', result)
-                        });
+                      });
                     },
                     error: function (error: any) {
                       window.Janus.error("WebRTC error:", error);
@@ -90,7 +98,7 @@ function initJanus(videoPlayer: any) {
             },
 
             onremotetrack: function (track: any, mid: any, on: any, metadata: any) {
-              console.log('>>>>> Got remote track', mid, {on}, metadata)
+              console.log('>>>>> Got remote track', mid, { on }, metadata)
               if (!on || metadata?.reason !== 'created') return
               console.log('>>>>>>>>> attaching stream to video-tag')
               const stream = new MediaStream([track]);
@@ -202,9 +210,9 @@ function getJanusUrl() {
 
 function startStream(selectedStream: any) {
   window.Janus.log(">>>>>> Starting watch for video id #" + selectedStream);
-  
+
   // Prepare the request to start streaming and send it
-  streaming.send({ 
+  streaming.send({
     message: { request: "watch", id: selectedStream },
     success: (result: any) => console.log('<<<<<<< watch result', result)
   });
