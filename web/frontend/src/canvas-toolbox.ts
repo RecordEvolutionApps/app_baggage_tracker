@@ -237,7 +237,7 @@ export class CanvasToolbox extends LitElement {
 
   render() {
     return html`<div>
-        <h3>Vehicle Counter</h3>
+        <h3>Baggage Vision</h3>
         <ul>
           <li>
             <h4>Camera</h4>

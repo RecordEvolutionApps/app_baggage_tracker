@@ -4,7 +4,7 @@
 
 # End-To-End Smart Baggage Tracking System​ - Selective object detection for automotive
 
-Interactive camera application for selective object detection. Real-time object counting is available in user-defined areas of the video image. The application can differentiate between vehicles such as trucks, cars, buses, and motorcycles.
+Interactive camera application for selective object detection. Real-time object counting is available in user-defined areas of the video image.
 
 Users can interact with the live video and select areas of interest. Object detection and counting will be isolated to the detection zones specified by the user. Multiple areas can be defined, and the number of objects will be displayed for each zone.
 

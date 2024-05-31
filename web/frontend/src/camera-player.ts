@@ -84,7 +84,7 @@ export class CameraPlayer extends LitElement {
 
   render() {
     return html`
-      <h3>Vehicle Counter</h3>
+      <h3>Baggage Vision</h3>
       <video-canvas
         .video=${this.videoElement}
         .camSetup=${this.camSetup}

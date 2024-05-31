@@ -6,14 +6,6 @@
 # NOTE: Template entries without a label property will not be displayed
 # NOTE: the "label" and "type" must be present on each variable
 
-# CAM_NUM:
-#     label: Camera USB Device Number
-#     type: numeric
-#     defaultValue: 1
-#     description: The device path number of the camera. (e.g. in case the camera is attached to /dev/video0 then the number would be 0)
-#     min: 0
-
-
 OBJECT_MODEL:
     label: Model
     type: text
@@ -23,7 +15,7 @@ OBJECT_MODEL:
 CLASS_LIST:
     label: Detection Classes
     type: text
-    defaultValue: 0, 2, 3, 5, 7
+    defaultValue: 24, 26, 28
     description: A list of class ids from the COCO dataset. If left empty, then all classes are used. See https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/datasets/coco.yaml
 USE_SAHI:
     label: Use Image Slicing

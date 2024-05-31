@@ -35,7 +35,7 @@ widgets:
   - package_name: widget-value
     chartdata:
       settings:
-        title: $str:Current Vehicle Counts
+        title: $str:Current Baggage Counts
         subTitle: null
       dataseries:
         - label: $str:Cars
