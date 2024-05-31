@@ -1,4 +1,4 @@
-name: Traffic
+name: BaggageTracker
 widgets:
   - package_name: widget-linechart
     chartdata:

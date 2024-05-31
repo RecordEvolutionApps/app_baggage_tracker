@@ -2,7 +2,7 @@
     <img src="https://res.cloudinary.com/dotw7ar1m/image/upload/v1714483863/carAppVideo.png" width="800px">
 </div>
 
-# End-To-End Smart Traffic Detection System​ - Selective object detection for automotive
+# End-To-End Smart Baggage Tracking System​ - Selective object detection for automotive
 
 Interactive camera application for selective object detection. Real-time object counting is available in user-defined areas of the video image. The application can differentiate between vehicles such as trucks, cars, buses, and motorcycles.
 
