@@ -126,6 +126,17 @@ async function killVideoStream(camPath: string, camStream: string) {
         streams.delete(camPath)
         proc.kill()
         await proc.exited
+
+        const rproc = Bun.spawn(["ssh", "-o", "StrictHostKeyChecking=no", "video", "pkill", "-9", "python3"], {
+            env: { ...process.env },
+            onExit: async (proc, exitCode, signalCode, error) => {
+                console.log("Proccess killed with", { exitCode, signalCode, error })
+            },
+            stderr: "inherit",
+            stdout: "inherit",
+            stdin: "pipe",
+        });
+        await rproc.exited
     }
 
     const pproc: Subprocess = ports.get(camStream)
@@ -135,6 +146,17 @@ async function killVideoStream(camPath: string, camStream: string) {
         ports.delete(camStream)
         pproc.kill()
         await pproc.exited
+
+        const rproc = Bun.spawn(["ssh", "-o", "StrictHostKeyChecking=no", "video", "pkill", "-9", "python3"], {
+            env: { ...process.env },
+            onExit: async (proc, exitCode, signalCode, error) => {
+                console.log("Proccess killed with", { exitCode, signalCode, error })
+            },
+            stderr: "inherit",
+            stdout: "inherit",
+            stdin: "pipe",
+        });
+        await rproc.exited
     }
 }
 
