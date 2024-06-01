@@ -1,95 +1,33 @@
 name: BaggageTracker
 widgets:
-  - package_name: widget-linechart
-    chartdata:
-      settings:
-        timeseries: true
-        xAxisLabel: Time
-        yAxisLabel: $str:Count
-        columnLayout: null
-        title: $str:Parking Occupation History
-        subTitle: null
-      dataseries:
-        - label: $str:Count
-          order: null
-          chartName: $str:num#pivot#
-          type: $str:line
-          radius: null
-          pointStyle: null
-          backgroundColor: $str:#db8b1a
-          borderColor: $str:#db8b1a
-          borderWidth: $num:1
-          borderDash: null
-          data:
-            tableRef:
-              tablename: detections
-              bufferSize: "3000"
-              format:
-                x: tsp
-                y: num_cars
-                r: null
-                pivot: zonename
-          fill: null
-    version: 1.4.15
-    layout_id: 1
   - package_name: widget-value
     chartdata:
       settings:
         title: $str:Current Baggage Counts
         subTitle: null
       dataseries:
-        - label: $str:Cars
+        - label: $str:#
           unit: null
           precision: null
-          labelColor: $str:#f2b46e
-          valueColor: $str:#cb873a
+          labelColor: $str:#000000
+          valueColor: $str:#2b90fd
           averageLatest: "$num:"
           maxLatency: null
           data:
             tableRef:
-              tablename: detections
-              bufferSize: 10
+              tablename: linecount_agg
+              bufferSize: 500
               format:
-                tsp: tsp
-                value: num_cars
-                pivot: zonename
-        - label: $str:Buses
-          unit: null
-          precision: null
-          labelColor: $str:#9cd695
-          valueColor: $str:#49983e
-          averageLatest: null
-          maxLatency: null
-          data:
-            tableRef:
-              tablename: detections
-              bufferSize: 10
-              format:
-                tsp: tsp
-                value: num_buses
-                pivot: zonename
-        - label: $str:Trucks
-          unit: null
-          precision: null
-          labelColor: $str:#56a49b
-          valueColor: $str:#249487
-          averageLatest: null
-          maxLatency: null
-          data:
-            tableRef:
-              tablename: detections
-              bufferSize: 10
-              format:
-                tsp: tsp
-                value: num_trucks
-                pivot: zonename
+                tsp: null
+                value: num_out
+                pivot: linename
     version: 1.0.27
     layout_id: 3
   - package_name: widget-table
     chartdata:
       settings:
         headerFontSize: $str:16px
-        headerBackground: $str:#c9c9c9
+        headerBackground: $str:#cce6ff
         rowHeight: $str:40px
         title: "$str:"
         subTitle: null
@@ -123,6 +61,20 @@ widgets:
               tablename: device_agg
               bufferSize: 500
               format: videolink
+        - header: $str:Belt
+          type: $str:string
+          precision: null
+          width: null
+          fontSize: null
+          fontWeight: null
+          color: null
+          border: null
+          stateMap: null
+          values:
+            tableRef:
+              tablename: device_agg
+              bufferSize: 500
+              format: devname
     version: 1.0.12
     layout_id: 4
   - package_name: widget-image
@@ -192,33 +144,13 @@ widgets:
         title: null
         subTitle: null
       dataseries:
-        - label: $str:In
+        - label: $str:Count
           order: null
-          chartName: $str:#pivot#
+          chartName: "$str:"
           type: $str:bar
           radius: null
           pointStyle: null
-          backgroundColor: $str:#8df88b
-          borderColor: null
-          borderWidth: null
-          borderDash: null
-          fill: null
-          data:
-            tableRef:
-              tablename: linecount_agg
-              bufferSize: 500
-              format:
-                x: period
-                y: num_in
-                r: null
-                pivot: linename
-        - label: $str:Out
-          order: null
-          chartName: $str:#pivot#
-          type: $str:bar
-          radius: null
-          pointStyle: null
-          backgroundColor: $str:#f07a7a
+          backgroundColor: $str:#338bff
           borderColor: null
           borderWidth: null
           borderDash: null
@@ -234,6 +166,29 @@ widgets:
                 pivot: linename
     version: 1.4.15
     layout_id: 12
+  - package_name: widget-value
+    chartdata:
+      settings:
+        title: null
+        subTitle: null
+      dataseries:
+        - label: $str:Total
+          unit: null
+          precision: null
+          labelColor: null
+          valueColor: null
+          averageLatest: null
+          maxLatency: null
+          data:
+            tableRef:
+              tablename: linecount_agg
+              bufferSize: 500
+              format:
+                tsp: null
+                value: num_out_dev
+                pivot: devname
+    version: 1.0.27
+    layout_id: 13
 layout:
   - w: 2
     h: 4
@@ -241,33 +196,34 @@ layout:
     y: 0
     id: 8
   - w: 2
+    h: 4
     x: 2
     y: 0
-    id: 4
+    id: 10
   - w: 4
     h: 4
     x: 4
     y: 0
     id: 5
   - w: 4
-    h: 4
+    h: 2
     x: 8
     y: 0
     id: 3
-  - w: 2
-    h: 3
-    x: 2
-    y: 1
-    id: 10
-  - w: 12
-    h: 3
+  - w: 4
+    h: 2
+    x: 8
+    y: 2
+    id: 13
+  - w: 4
+    h: 4
     x: 0
     y: 4
-    id: 1
-  - w: 12
-    h: 3
-    x: 0
-    y: 7
+    id: 4
+  - w: 8
+    h: 4
+    x: 4
+    y: 4
     id: 12
-background_color: "#e0dbe1"
+background_color: "#ffffff"
 text_color: "#575062"

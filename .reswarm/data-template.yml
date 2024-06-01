@@ -150,6 +150,10 @@ data:
       schedule: "* * * * *" # crontab interface: Minute(1-60) Hour(1-24) MonthDay(1-31) Month(1-12) WeekDay(1-7)
       sql: |
         SELECT
+          *,
+          sum(num_in) over (partition by devname, period) as num_in_dev,  
+          sum(num_out) over (partition by devname, period) as num_out_dev
+        FROM (SELECT
           devname,
           linename,
           time_bucket('1 hour', tsp) as period,
@@ -161,6 +165,7 @@ data:
           tsp > now() - INTERVAL '1 days'
         GROUP BY
           devname, linename, period
+          ) x
       columns:
         - id: devname
           name: Device Name
@@ -176,9 +181,17 @@ data:
           dataType: string
         - id: num_in
           name: Count In
-          description: counts in per period
+          description: counts in per period per line
           dataType: numeric
         - id: num_out
           name: Count Out
-          description: counts out per period
+          description: counts out per period per line
+          dataType: numeric
+        - id: num_in_dev
+          name: Count In Total
+          description: counts in per period per device
+          dataType: numeric
+        - id: num_out_dev
+          name: Count Out Total
+          description: counts out per period per device
           dataType: numeric
