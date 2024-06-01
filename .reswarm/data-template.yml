@@ -153,18 +153,19 @@ data:
           *,
           sum(num_in) over (partition by devname, period) as num_in_dev,  
           sum(num_out) over (partition by devname, period) as num_out_dev
-        FROM (SELECT
-          devname,
-          linename,
-          time_bucket('1 hour', tsp) as period,
-          sum(num_in) AS num_in,
-          sum(num_out) AS num_out
-        FROM 
-          linecounts
-        WHERE 
-          tsp > now() - INTERVAL '1 days'
-        GROUP BY
-          devname, linename, period
+        FROM (
+          SELECT
+            devname,
+            linename,
+            time_bucket('1 hour', tsp) as period,
+            sum(num_in) AS num_in,
+            sum(num_out) AS num_out
+          FROM 
+            linecounts
+          WHERE 
+            tsp > now() - INTERVAL '1 days'
+          GROUP BY
+            devname, linename, period
           ) x
       columns:
         - id: devname
