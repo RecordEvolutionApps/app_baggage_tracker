@@ -110,14 +110,12 @@ async def main(_saved_masks):
         out = cv2.VideoWriter(writerStream, cv2.CAP_GSTREAMER, 0, FRAMERATE, (RESOLUTION_X, RESOLUTION_Y), True)
 
         print('starting main video loop...')
-        prev_frame_time = time.time()
-        frame_time = 1.0 / FRAMERATE  # Maximum allowed processing time per frame
         success = True
         frame = None
         start = time.time()
         real_ms = 0
         video_ms = 0
-
+        aggCounts = []
         if USE_SAHI: slicer = initSliceInferer(model)
 
         while cap.isOpened():
@@ -133,8 +131,6 @@ async def main(_saved_masks):
                 video_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
                 # print('real > vs', int(real_ms), int(video_ms), real_ms > video_ms)
             video_ms = 0
-
-            prev_frame_time = time.time()
 
             if not success:
                 print("################ RESTART VIDEO ####################")
@@ -171,16 +167,26 @@ async def main(_saved_masks):
             overlay_text(frame, f'Timestamp: {current_time}', position=(10, 30))
             overlay_text(frame, f'FPS: {fps_monitor.fps:.2f}', position=(10, 60))
 
+            # aggregate line counts for later publish
+            for item in lineCounts:
+                agg = next((agg for agg in aggCounts if agg["label"] == item["label"]), None)
+                if not agg:
+                    agg = {"label": item["label"]}
+                    aggCounts.append(agg)
+                agg["num_in"] = agg.get("num_in", 0) + item["num_in"] 
+                agg["num_out"] = agg.get("num_out", 0) + item["num_out"] 
+
             # Publish data
             if elapsed_time1 >= 2.0:
                 # print('FPS:', str(fps_monitor.fps))
+                publishImage(frame)
                 for item in zoneCounts:
-                    publishImage(frame)
                     publishClassCount(item["label"], item["count"])
-                start_time1 = time.time()
+                for item in aggCounts:
+                    publishLineCount(item["label"], item["num_in"], item["num_out"])
+                aggCounts = []
 
-            for item in lineCounts:
-                publishLineCount(item["label"], item["num_in"], item["num_out"])
+                start_time1 = time.time()
 
             if elapsed_time > 10.0:
                 publishCameras()
@@ -188,7 +194,7 @@ async def main(_saved_masks):
 
             out.write(frame)
 
-            await sleep(0) # Give other ask time to run, not a hack: https://superfastpython.com/what-is-asyncio-sleep-zero/#:~:text=You%20can%20force%20the%20current,before%20resuming%20the%20current%20task.
+            await sleep(0) # Give other task time to run, not a hack: https://superfastpython.com/what-is-asyncio-sleep-zero/#:~:text=You%20can%20force%20the%20current,before%20resuming%20the%20current%20task.
 
         print('WARNING: Video source is not open', device)
         cap.release()
