@@ -78,6 +78,11 @@ export class CameraSelector extends LitElement {
       :host {
         display: block;
       }
+
+      md-outlined-select {
+        min-width: 242px;
+      }
+      
       :root {
         --md-filled-select-text-field-container-shape: 0px;
         --md-filled-select-text-field-container-color: #f7faf9;

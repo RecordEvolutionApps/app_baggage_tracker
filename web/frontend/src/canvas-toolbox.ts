@@ -58,15 +58,21 @@ export class CanvasToolbox extends LitElement {
         color: var(--md-sys-color-on-primary);
       }
 
+      .wrapper {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
       .paging:not([active]) { display: none !important; }
 
-      ul {
-        list-style-type: none;
-        margin-block-start: 0;
-        margin-block-end: 0;
-        margin-inline-start: 0px;
-        margin-inline-end: 0px;
-        padding-inline-start: 0;
+      .control {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 8px;
+        border-radius: 4px;
+        border: 1px solid #aaa;
       }
 
       md-elevated-button, md-text-button {
@@ -81,7 +87,7 @@ export class CanvasToolbox extends LitElement {
 
       h4 {
         color: #5e5f61;
-        margin: 11px 0;
+        margin: 16px 0px 0px;
       }
 
       .dialog {
@@ -99,6 +105,11 @@ export class CanvasToolbox extends LitElement {
         display: flex;
         flex-direction: column;
         gap: 12px;
+      }
+
+      .column > div {
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       form {
@@ -236,13 +247,11 @@ export class CanvasToolbox extends LitElement {
   }
 
   render() {
-    return html`<div>
-        <h3>Baggage Vision</h3>
-        <ul>
-          <li>
-            <h4>Camera</h4>
-          </li>
-          <li>
+    return html`
+      <div class="wrapper">
+        <h4>Camera Setup</h4>
+        <div class="control">
+          <div>
             <div class="mb16">
               <md-radio id="usb" value="USB" aria-label="USB" 
                 @change=${ () => this.selectCameraType('USB')}
@@ -255,25 +264,26 @@ export class CanvasToolbox extends LitElement {
                 ></md-radio>
               <label for="ip">IP Camera</label>
             </div>
-          </li>
-          <li class="paging" ?active=${this.selectedCamType === 'USB'}>
+          </div>
+          <div class="paging" ?active=${this.selectedCamType === 'USB'}>
             <camera-selector
               .camStream=${this.camStream}
               .camSetup=${this.camSetup}
             ></camera-selector>
-          </li>
+          </div>
 
-          <li class="column paging" ?active=${this.selectedCamType === 'IP'}>
+          <div class="column paging" ?active=${this.selectedCamType === 'IP'}>
             <div>${this.camSetup?.camera.type === 'IP' ? this.camSetup?.camera?.path ?? '' : ''}</div>
             <md-elevated-button @click=${this.onCreateIPClick}>
               Setup IP Camera
               <md-icon slot="icon">edit</md-icon>
             </md-elevated-button>
-          </li>
-          <li>
-            <h4>Detection Zones and Lines</h4>
-          </li>
-          <li class="mb16">
+          </div>
+        </div>
+
+        <h4>Detection Zones and Lines</h4>
+        <div class="control">
+          <div class="mb16">
             <div class="button-row">
               <md-elevated-button @click=${this.onCreateZoneClick}>
                 Zone
@@ -287,20 +297,20 @@ export class CanvasToolbox extends LitElement {
                 <md-icon slot="icon">close_fullscreen</md-icon>
               </md-elevated-button>
             </div>
-          </li>
-          <!-- <li class="mb16">
+          </div>
+          <!-- <div class="mb16">
             <md-elevated-button @click=${this.undoLastLine}>
               Undo
               <md-icon slot="icon">undo</md-icon>
             </md-elevated-button>
-          </li> -->
-          <li>
+          </div> -->
+          <div>
             <md-elevated-button @click=${this.onCreateLineClick}>
               Line
               <md-icon slot="icon">add_circle</md-icon>
             </md-elevated-button>
-          </li>
-        </ul>
+          </div>
+        </div>
       </div>
 
       <ip-camera-dialog
@@ -318,11 +328,11 @@ export class CanvasToolbox extends LitElement {
         id="linedialog"
         class="dialog"
       >
-        <div slot="headline">Line name</div>
+        <div slot="headline">Counter-Line Name</div>
         <form slot="content" id="create-line-form" method="dialog">
           <div style="display: flex; flex-direction: column;">
-            <p>Enter a name for your counter line. After you clicked create, this window closes and you can start
-              setting the beginning and end points of your line. After you set the end point the line will be submitted for counting.
+            <p>Enter a name for your counter line. After you clicked create, this panel closes and you can start
+              setting the start and end points of your line. After you set the end point the line will automatically be submitted for counting.
             </p>
             <md-outlined-text-field
               label="Name"
@@ -353,11 +363,11 @@ export class CanvasToolbox extends LitElement {
         id="zonedialog"
         class="dialog"
       >
-        <div slot="headline">Zone name</div>
+        <div slot="headline">Zone Name</div>
         <form slot="content" id="create-zone-form" method="dialog">
           <div style="display: flex; flex-direction: column;">
-            <p>Enter a name for your zone. After you clicked create, this window closes and you can start
-              setting the corner points of your zone. When you click commit, the last point you set will automatically 
+            <p>Enter a name for your zone. After you clicked create, this panel closes and you can start
+              setting the corner points of your zone. When you click the "Close Zone" Button, the last point will automatically 
               be connected to the first point to close the zone and the zone will be submitted for counting.
             </p>
             <md-outlined-text-field

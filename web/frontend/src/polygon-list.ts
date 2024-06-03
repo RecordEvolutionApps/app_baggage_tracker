@@ -41,26 +41,23 @@ export class PolygonList extends LitElement {
       }
 
       .selected {
-        background-color: #e8e8ee;
+        background-color: #d7d7ff;
       }
 
       md-list {
         padding: 0;
         min-width: 170px;
         border-radius: 4px;
+        overflow: hidden;
         --md-list-container-color: #f7faf9;
         --md-list-item-label-text-color: #005353;
         --md-list-item-supporting-text-color: #005353;
         --md-list-item-trailing-supporting-text-color: #005353;
       }
 
-      md-list-item {
-        border-radius: 4px;
-      }
-
       md-list-item:hover {
         cursor: pointer;
-        background-color: #e1e1e1;
+        background-color: #e9e9ff;
       }
 
       md-icon {
@@ -90,7 +87,7 @@ export class PolygonList extends LitElement {
 
       b {
         font-size: 15px;
-        max-width: 90px;
+        width: 190px;
         text-overflow: ellipsis;
         overflow: hidden;
         white-space: nowrap;

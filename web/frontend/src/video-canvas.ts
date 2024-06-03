@@ -161,8 +161,8 @@ export class VideoCanvas extends LitElement {
       }
 
       .sidebar {
-        min-width: 230px;
-        margin-right: 24px;
+        max-width: 280px;
+        margin-right: 16px;
         height: 100%;
         padding: 10px;
         box-sizing: border-box;
@@ -184,6 +184,7 @@ export class VideoCanvas extends LitElement {
         }
         .sidebar {
           display: flex;
+          max-width: fit-content;
           justify-content: space-between;
           width: 100%;
         }
