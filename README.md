@@ -2,7 +2,9 @@
     <img src="https://res.cloudinary.com/dotw7ar1m/image/upload/v1717493714/baggaeAppBanner.png" width="650px">
 </div>
 
-# End-To-End Smart Baggage Tracking System​ - Selective object detection for automotive
+<br>
+
+# End-To-End Smart Baggage Tracking System with custom detection zones
 
 Interactive camera application for selective luggage detection. Real-time object counting is available in user-defined areas of the video image.
 
@@ -53,7 +55,9 @@ Each camera can also be configured by external parameters in the app settings on
 Parameter | Default | Description
 -|-|-
 Model | Yolov8s | Select a version for one of the YOLO Object Detection Models
-Detection Classes | 0,2,3,5,7 | A list of class ids from the COCO dataset. If left empty, then all classes are used. See [here](https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/datasets/coco.yaml)
+Detection Classes | 24, 26, 28 | A list of class ids from the COCO dataset. If left empty, then all classes are used. See [here](https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/datasets/coco.yaml)
+Smoothing | false | Smoothing uses previous frames to determine the average detection box of an object in the current frame.
+USE_SAHI | false | SAHI is a method to slice a high resolution frame into chunks of 640x640. This improves the detection quality for small objects on high resolution images, but may slow down inference time.
 Confidence | 0.1 | (0 - 1) Sets the minimum confidence threshold for detections. Objects detected with confidence below this threshold will be disregarded. Adjusting this value can help reduce false positives.
 Intersection over Union | 0.7 | (0 - 1) Intersection Over Union (IoU) threshold for Non-Maximum Suppression (NMS). Lower values result in fewer detections by eliminating overlapping boxes, useful for reducing duplicates.
 Width | 1280 | Horizontal Resolution in pixel of the camera stream. The camera should support the selected resolution.
