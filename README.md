@@ -1,12 +1,12 @@
 <div style="display:flex;flex-direction:row;align-items:center;justify-content:center;">
-    <img src="https://res.cloudinary.com/dotw7ar1m/image/upload/v1714483863/carAppVideo.png" width="800px">
+    <img src="https://res.cloudinary.com/dotw7ar1m/image/upload/v1717493714/baggaeAppBanner.png" width="650px">
 </div>
 
 # End-To-End Smart Baggage Tracking System​ - Selective object detection for automotive
 
-Interactive camera application for selective object detection. Real-time object counting is available in user-defined areas of the video image.
+Interactive camera application for selective luggage detection. Real-time object counting is available in user-defined areas of the video image.
 
-Users can interact with the live video and select areas of interest. Object detection and counting will be isolated to the detection zones specified by the user. Multiple areas can be defined, and the number of objects will be displayed for each zone.
+Users can interact with the live video and select areas of interest. The detection and counting will be isolated to the detection zones specified by the user. Multiple areas can be defined, and the number of objects will be displayed for each zone.
 
 ## Hardware
 
@@ -28,8 +28,9 @@ The detection data of all cameras in your swarm will be available in the app das
 ## Dashboarding Insights
 
 <div style="display:flex;flex-direction:row;align-items:center;justify-content:center;">
-    <img src="https://res.cloudinary.com/dotw7ar1m/image/upload/v1714118606/Video_app_Dashboard.png" width="800px">
+    <img src="https://res.cloudinary.com/dotw7ar1m/image/upload/v1717494096/baggageAppScreenshotDashboard.png" width="600px">
 </div>
+<br>
 
 This app provides a dashboard summarizing detection data from all swarm cameras into a common view. Collected data histories, such as the number of detected objects per class and the current video frame, will be displayed in the dashboard. The history of detections is persisted, providing a summary in different graphs.
 
@@ -42,7 +43,7 @@ The detection data history is collected in the cloud storage backend of the app.
 The app additionally provides a web interface on each individual camera that allows users to view the low latency live video stream from that camera. This interface also allows users to configure the video and detection model for the camera.
 
 <div style="display:flex;flex-direction:row;align-items:center;justify-content:center;">
-    <img src="https://res.cloudinary.com/dotw7ar1m/image/upload/v1714482490/videoApp.png" width="600px">
+    <img src="https://res.cloudinary.com/dotw7ar1m/image/upload/v1717494386/tunnelBaggageApp.png" width="600px">
 </div>
 
 ## App Parameters

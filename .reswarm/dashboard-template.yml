@@ -191,39 +191,38 @@ widgets:
     layout_id: 13
 layout:
   - w: 2
-    h: 4
+    h: 2
     x: 0
     y: 0
     id: 8
-  - w: 2
-    h: 4
+  - w: 5
+    h: 5
     x: 2
     y: 0
-    id: 10
-  - w: 4
-    h: 4
-    x: 4
-    y: 0
     id: 5
-  - w: 4
-    h: 2
-    x: 8
+  - w: 5
+    h: 3
+    x: 7
     y: 0
     id: 3
-  - w: 4
-    h: 2
-    x: 8
+  - w: 2
+    h: 3
+    x: 0
     y: 2
+    id: 10
+  - w: 5
+    h: 3
+    x: 7
+    y: 3
     id: 13
-  - w: 4
+  - w: 7
+    x: 0
+    y: 5
+    id: 4
+  - w: 12
     h: 4
     x: 0
-    y: 4
-    id: 4
-  - w: 8
-    h: 4
-    x: 4
-    y: 4
+    y: 6
     id: 12
-background_color: "#ffffff"
+background_color: "#ffc77e"
 text_color: "#575062"
