@@ -134,6 +134,7 @@ async def main(_saved_masks):
 
             if not success:
                 print("################ RESTART VIDEO ####################")
+                await sleep(1)
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 start = time.time()
                 if elapsed_time >= 2.0:

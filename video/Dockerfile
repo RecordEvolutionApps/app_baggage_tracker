@@ -1,4 +1,4 @@
-FROM ultralytics/ultralytics:8.2.22-jetson
+FROM ultralytics/ultralytics:8.2.28-jetson
 
 RUN apt-get -y update && \
 	apt-get install -y \
