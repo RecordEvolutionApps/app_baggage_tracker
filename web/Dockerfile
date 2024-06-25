@@ -1,11 +1,11 @@
-FROM oven/bun:debian
+FROM oven/bun:1.0-debian
 
-RUN apt-get update && apt-get install -y openssh-client python3
+RUN apt-get update && apt-get install -y openssh-client
 
 WORKDIR /app
 
 COPY backend/package.json /app/backend/
-RUN cd /app/backend && bun i --production
+RUN cd /app/backend && bun i
 COPY backend/* /app/backend/
 COPY entrypoint.sh .
 COPY frontend /app/frontend
