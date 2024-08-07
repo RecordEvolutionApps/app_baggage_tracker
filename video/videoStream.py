@@ -7,7 +7,7 @@ import os
 import argparse
 import time
 from datetime import datetime
-from reswarm import Reswarm
+from ironflock import IronFlock
 
 from pprint import pprint
 import base64
@@ -247,7 +247,7 @@ def publishLineCount(line_name, num_in, num_out):
     get_event_loop().create_task(rw.publish_to_table('linecounts', payload))
 
 
-rw = Reswarm()
+rw = IronFlock()
 
 if __name__ == "__main__":
     # run the main coroutine

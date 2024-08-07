@@ -1,4 +1,4 @@
-reswarm==0.0.19
+ironflock==1.0.1
 # torchvision==0.15
 matplotlib>=3.6.0
 pyyaml>=5.3
