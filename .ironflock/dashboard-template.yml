@@ -20,7 +20,7 @@ widgets:
               queryParams:
                 limit: 100
           unit: "$str:"
-          precision: $num:2
+          precision: $num:0
           advanced:
             averageLatest: $num:1
           styling:
@@ -146,7 +146,7 @@ widgets:
               queryParams:
                 limit: 100
           unit: "$str:"
-          precision: $num:2
+          precision: $num:0
           advanced:
             averageLatest: $num:1
     version: 1.1.4
