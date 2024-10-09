@@ -216,7 +216,7 @@ def publishImage(frame):
 def publishCameras():
     now = datetime.now().astimezone().isoformat()
     payload = {"tsp": now}
-    payload["videolink"] = f"https://{DEVICE_KEY}-baggagetracker-1100.app.record-evolution.com"
+    payload["videolink"] = f"https://{DEVICE_KEY}-baggagetracker-1100.app.ironflock.com"
     payload["devicelink"] = DEVICE_URL
     get_event_loop().create_task(rw.publish_to_table('cameras', payload))
 

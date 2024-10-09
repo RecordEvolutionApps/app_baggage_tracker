@@ -19,7 +19,7 @@ widgets:
                 tsp: period
               queryParams:
                 limit: 100
-          unit: $str:°C
+          unit: "$str:"
           precision: $num:2
           advanced:
             averageLatest: $num:1
@@ -145,7 +145,7 @@ widgets:
                 pivot: devname
               queryParams:
                 limit: 100
-          unit: $str:°C
+          unit: "$str:"
           precision: $num:2
           advanced:
             averageLatest: $num:1
