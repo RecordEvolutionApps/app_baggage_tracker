@@ -1,160 +1,123 @@
 name: BaggageTracker
 widgets:
   - package_name: widget-value
-    chartdata:
+    chartconfig:
       settings:
         title: $str:Current Baggage Counts
-        subTitle: null
       dataseries:
         - label: $str:#
-          unit: null
-          precision: null
           labelColor: $str:#000000
           valueColor: $str:#2b90fd
           averageLatest: "$num:"
-          maxLatency: null
           data:
             tableRef:
               tablename: linecount_agg
               bufferSize: 500
               format:
-                tsp: null
                 value: num_out
                 pivot: linename
-    version: 1.0.27
+                tsp: period
+              queryParams:
+                limit: 100
+          unit: $str:°C
+          precision: $num:2
+          advanced:
+            averageLatest: $num:1
+          styling:
+            labelColor: $str:#ff9b9b
+            valueColor: $str:#e15656
+      title: "$str:"
+    version: 1.1.4
     layout_id: 3
   - package_name: widget-table
-    chartdata:
+    chartconfig:
       settings:
         headerFontSize: $str:16px
         headerBackground: $str:#cce6ff
         rowHeight: $str:40px
         title: "$str:"
-        subTitle: null
-        rowBorder: null
       columns:
         - header: $str:Camera
           type: $str:button
-          precision: null
-          width: null
-          fontSize: null
-          fontWeight: null
           color: $str:#252627
-          border: null
-          stateMap: null
           values:
+            "0": devicelink
             tableRef:
               tablename: device_agg
               bufferSize: 500
               format: devicelink
+              queryParams:
+                limit: 100
         - header: $str:Live Stream
           type: $str:button
-          precision: null
-          width: null
-          fontSize: null
-          fontWeight: null
           color: $str:#252627
-          border: null
-          stateMap: null
           values:
+            "0": videolink
             tableRef:
               tablename: device_agg
               bufferSize: 500
               format: videolink
+              queryParams:
+                limit: 100
         - header: $str:Belt
           type: $str:string
-          precision: null
-          width: null
-          fontSize: null
-          fontWeight: null
-          color: null
-          border: null
-          stateMap: null
           values:
+            "0": devname
             tableRef:
               tablename: device_agg
               bufferSize: 500
               format: devname
-    version: 1.0.12
+              queryParams:
+                limit: 100
+      title: "$str:"
+    version: 1.1.2
     layout_id: 4
   - package_name: widget-image
-    chartdata:
+    chartconfig:
       imageLink:
         valueRef:
           tablename: images
           column: image
       title:
         text: $str:Camera Feed
-        fontSize: null
-        fontWeight: null
-        color: null
-        backgroundColor: null
       subTitle:
         text: "$str:"
-        fontSize: null
-        fontWeight: null
-        color: null
-    version: 1.0.8
+    version: 1.1.1
     layout_id: 5
   - package_name: widget-image
-    chartdata:
+    chartconfig:
       imageLink: $str:https://storage.googleapis.com/reswarm-images/prod/reswarm-0-1706095631331-Cam_icon-682decf0d8.png
       title:
         text: $str:Revis
-        fontSize: null
-        fontWeight: null
-        color: null
-        backgroundColor: null
       subTitle:
         text: $str:Nvidia Jetson AGX Xavier
-        fontSize: null
-        fontWeight: null
-        color: null
-    version: 1.0.8
+    version: 1.1.1
     layout_id: 8
-  - version: 1.0.12
-    package_name: widget-textbox
-    chartdata:
+  - package_name: widget-textbox
+    chartconfig:
       title:
-        text: "$str:"
-        fontSize: null
-        fontWeight: null
         color: $str:#5a6666
-        backgroundColor: null
+        text: $str:A Textbox Demo
       subTitle:
         text: $str:About the Smart Camera System​
-        fontSize: null
-        fontWeight: null
         color: $str:#5a6666
       body:
         text: "$str:The Smart Camera System relies on Hardware from NVIDIA. Any USB or IP Camera can be used with the
           NVIDIA PC. "
-        fontSize: null
-        fontWeight: null
         color: $str:#5a6666
-        backgroundColor: null
+    version: 1.1.1
     layout_id: 10
   - package_name: widget-linechart
-    chartdata:
+    chartconfig:
       settings:
         timeseries: $bool:true
         xAxisLabel: $str:Time
         yAxisLabel: $str:Count
-        columnLayout: null
-        title: null
-        subTitle: null
       dataseries:
         - label: $str:Count
-          order: null
           chartName: "$str:"
           type: $str:bar
-          radius: null
-          pointStyle: null
           backgroundColor: $str:#338bff
-          borderColor: null
-          borderWidth: null
-          borderDash: null
-          fill: null
           data:
             tableRef:
               tablename: linecount_agg
@@ -162,32 +125,31 @@ widgets:
               format:
                 x: period
                 y: num_out
-                r: null
                 pivot: linename
-    version: 1.4.15
+                r: $num:1
+              queryParams:
+                limit: 100
+          borderColor: $str:#147272
+    version: 1.5.3
     layout_id: 12
   - package_name: widget-value
-    chartdata:
-      settings:
-        title: null
-        subTitle: null
+    chartconfig:
       dataseries:
         - label: $str:Total
-          unit: null
-          precision: null
-          labelColor: null
-          valueColor: null
-          averageLatest: null
-          maxLatency: null
           data:
             tableRef:
               tablename: linecount_agg
               bufferSize: 500
               format:
-                tsp: null
                 value: num_out_dev
                 pivot: devname
-    version: 1.0.27
+              queryParams:
+                limit: 100
+          unit: $str:°C
+          precision: $num:2
+          advanced:
+            averageLatest: $num:1
+    version: 1.1.4
     layout_id: 13
 layout:
   - w: 2
