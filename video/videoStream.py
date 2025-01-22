@@ -72,6 +72,8 @@ if device.startswith('http'):
 
 elif device.startswith('rtsp:'):
     cap = cv2.VideoCapture(device)
+elif device.startswith('demoVideo'):
+    cap = cv2.VideoCapture('/app/video/luggage.mp4')
 else:
     device = int(device[-1])
     cap = cv2.VideoCapture(device)

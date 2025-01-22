@@ -26,7 +26,7 @@ FRAME_BUFFER:
     label: Extra space around detection frame
     type: numeric
     defaultValue: 180
-    description: When Image Slicing is enabled, the detection area is determined as the smallest rectangle (blue box) containing alls created zones and lines. Here you can provide a number of pixels that this frame will be extended to all sides.
+    description: When Image Slicing is enabled, the detection area is determined as the smallest rectangle (blue box) containing all created zones and lines. Here you can provide a number of pixels that this frame will be extended to all sides.
 SMOOTHING:
     label: Apply detection smoothing
     type: boolean
