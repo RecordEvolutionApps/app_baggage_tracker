@@ -16,7 +16,7 @@ import functools
 
 import traceback
 
-from model_utils import getModel, processFrame, initSliceInferer, move_detections, get_extreme_points, infer, get_youtube_video, overlay_text, count_polygon_zone, count_detections, prepMasks, readMasksFromStdin
+from model_utils import getModel, processFrame, initSliceInferer, move_detections, get_extreme_points, infer, get_youtube_video, overlay_text, count_polygon_zone, count_detections, readMasksFromStdin
 
 print = functools.partial(print, flush=True)
 
@@ -43,6 +43,8 @@ if len(CLASS_LIST) <= 1:
     CLASS_LIST = list(class_id_topic.keys())
     CLASS_LIST = [int(item) for item in CLASS_LIST]
 
+print('########## USING CLASS LIST:', CLASS_LIST)
+
 saved_masks = []
 
 parser = argparse.ArgumentParser(description='Start a Video Stream for the given Camera Device')
@@ -60,23 +62,33 @@ portMap = {"frontCam": 5004,
 device = args.device
 print('CAMERA USED:' + device)
 
-if device.startswith('http'):
-    if device.startswith('https://youtu') or device.startswith('https://www.youtube.com'):
-        video = get_youtube_video(device, RESOLUTION_Y)
-        RESOLUTION_X = video["width"]
-        RESOLUTION_Y = video["height"]
-        device = video.get('url')
-    cap = cv2.VideoCapture(device)
-    # device = f"uridecay url='{device}' ! nvenc-hwaccel=true ! nvdec_hwaccel ! videoconvert ! appsink"
-    # cap = cv2.VideoCapture(device, cv2.CAP_GSTREAMER)
+def setVideoSource(device):
+    global RESOLUTION_X
+    global RESOLUTION_Y
+    if device.startswith('http'):
+        if device.startswith('https://youtu') or device.startswith('https://www.youtube.com'):
+            video = get_youtube_video(device, RESOLUTION_Y)
+            RESOLUTION_X = video["width"]
+            RESOLUTION_Y = video["height"]
+            device = video.get('url')
+        cap = cv2.VideoCapture(device)
+        # device = f"uridecay url='{device}' ! nvenc-hwaccel=true ! nvdec_hwaccel ! videoconvert ! appsink"
+        # cap = cv2.VideoCapture(device, cv2.CAP_GSTREAMER)
 
-elif device.startswith('rtsp:'):
-    cap = cv2.VideoCapture(device)
-elif device.startswith('demoVideo'):
-    cap = cv2.VideoCapture('/app/video/luggage.mp4')
-else:
-    device = int(device[-1])
-    cap = cv2.VideoCapture(device)
+    elif device.startswith('rtsp:'):
+        cap = cv2.VideoCapture(device)
+    elif device.startswith('demoVideo'):
+        cap = cv2.VideoCapture('/app/video/luggagebelt.m4v')
+        RESOLUTION_X = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        RESOLUTION_Y = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        # RESOLUTION_X = 1280
+        # RESOLUTION_Y = 720
+    else:
+        device = int(device[-1])
+        cap = cv2.VideoCapture(device)
+    return cap
+
+cap = setVideoSource(device)
 
 print('RESOLUTION', RESOLUTION_X, RESOLUTION_Y, device)
 cap.set(3, RESOLUTION_X)
@@ -92,6 +104,7 @@ else:
 # print("CUDA available:", torch.cuda.is_available(), 'GPUs', torch.cuda.device_count())
 
 async def main(_saved_masks):
+    global cap
     try:
         fps_monitor = sv.FPSMonitor()
         start_time = time.time()
@@ -137,7 +150,8 @@ async def main(_saved_masks):
             if not success:
                 print("################ RESTART VIDEO ####################")
                 await sleep(1)
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                cap = setVideoSource(device)
+                # cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 start = time.time()
                 if elapsed_time >= 2.0:
                     print('Video Frame could not be read from source', device)

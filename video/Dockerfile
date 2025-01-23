@@ -16,17 +16,20 @@ RUN apt-get -y update && \
 		ffmpeg \
 		openssh-server \
 		unzip nginx procps v4l-utils git \
-		usbutils udev && \
+		usbutils udev \
+		python3.8-dev \
+		build-essential && \
 	apt-get clean && \
 	rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app/video
 
 COPY requirements.txt requirements.txt
+RUN pip uninstall -y setuptools && pip install setuptools==65.5.0
 RUN python3 -m pip install -r requirements.txt
 
 # needs to be done seperately cus you can't install with no deps in requirements.txt
-RUN python3 -m pip install supervision --no-deps
+RUN python3 -m pip install supervision==0.25.0 --no-deps
 
 
 RUN mkdir -p /app/download

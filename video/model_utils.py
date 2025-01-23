@@ -40,7 +40,7 @@ if len(CLASS_LIST) <= 1:
 if (OBJECT_MODEL.endswith('obb')):
     bounding_box_annotator = sv.OrientedBoxAnnotator()
 else:
-    bounding_box_annotator = sv.BoundingBoxAnnotator()
+    bounding_box_annotator = sv.BoxAnnotator()
 # bounding_box_annotator = sv.DotAnnotator(radius=6)
 label_annotator = sv.LabelAnnotator(text_scale=0.4, text_thickness=1, text_padding=3)
 
@@ -260,13 +260,13 @@ def infer(frame, model, model_resx, model_resy):
     computer = 'cuda:0' if torch.cuda.is_available() else 'cpu'
     results = model(frame, device=computer, imgsz=(model_resy, model_resx), conf=CONF, iou=IOU, verbose=False, classes=CLASS_LIST)
     if len(results) == 0:
-        return false
+        return False
     try:
         detections = sv.Detections.from_ultralytics(results[0])
     except Exception as e:
         print('Failed to extract detections from model result', e)
         traceback.print_exc()
-        return false
+        return False
     return detections
 
 def move_detections(detections: sv.Detections, offset_x: int, offset_y: int) -> sv.Detections:
@@ -295,8 +295,19 @@ def processFrame(frame, detections, saved_masks):
     # line_zone.trigger(detections)
     # frame = line_zone_annotator.annotate(frame, line_counter=line_zone)
 
-    for saved_mask in saved_masks:
-        if saved_mask['type'] == 'ZONE':
+    zoneMasks = [m for m in saved_masks if m['type'] == 'ZONE']
+    lineMasks = [m for m in saved_masks if m['type'] == 'LINE']
+
+    # Annotate all detections if no zones are defined
+    if len(zoneMasks) == 0:
+        frame = bounding_box_annotator.annotate(scene=frame, detections=detections)
+        # labels = [f"{class_id_topic[str(class_id)]} #{tracker_id}" for class_id, tracker_id in zip(detections.class_id, detections.tracker_id)]
+        frame = label_annotator.annotate(scene=frame, detections=detections)
+
+        count_dict = count_detections(detections)
+        zoneCounts.append({'label': DEVICE_NAME + "_" + "default", 'count': count_dict})
+    else:
+        for saved_mask in zoneMasks:
             zone = saved_mask['zone']
             zone_annotator = saved_mask['annotator']
             try:
@@ -318,30 +329,24 @@ def processFrame(frame, detections, saved_masks):
             frame = bounding_box_annotator.annotate(scene=frame, detections=filtered_detections)
             frame = label_annotator.annotate(scene=frame, detections=filtered_detections)
             frame = zone_annotator.annotate(scene=frame, label=zone_label)
-        elif saved_mask['type'] == 'LINE':
-            lineZone = saved_mask['line']
-            line_annotator = saved_mask['annotator']
-            try:
-                crossed_in, crossed_out = lineZone.trigger(detections=detections)
-                detections_in = detections[crossed_in]
-                detections_out = detections[crossed_out]
-                num_in = len(detections_in.xyxy)
-                num_out = len(detections_out.xyxy)
-                if num_in > 0 or num_out > 0:
-                    lineCounts.append({'label': saved_mask['label'], 'num_in': num_in, 'num_out': num_out})
-            except Exception as e:
-                traceback.print_exc()
-                print('Failed to get line counts')
-                # continue
 
-            frame = line_annotator.annotate(frame, line_counter=lineZone)
+    for saved_mask in lineMasks:
+        lineZone = saved_mask['line']
+        line_annotator = saved_mask['annotator']
+        try:
+            crossed_in, crossed_out = lineZone.trigger(detections=detections)
+            detections_in = detections[crossed_in]
+            detections_out = detections[crossed_out]
+            num_in = len(detections_in.xyxy)
+            num_out = len(detections_out.xyxy)
+            if num_in > 0 or num_out > 0:
+                lineCounts.append({'label': saved_mask['label'], 'num_in': num_in, 'num_out': num_out})
+        except Exception as e:
+            traceback.print_exc()
+            print('Failed to get line counts')
+            # continue
 
-    # Annotate all detections if no zones are defined
-    if len([m for m in saved_masks if m['type'] == 'ZONE']) == 0:
-        frame = bounding_box_annotator.annotate(scene=frame, detections=detections)
-        # labels = [f"{class_id_topic[str(class_id)]} #{tracker_id}" for class_id, tracker_id in zip(detections.class_id, detections.tracker_id)]
-        frame = label_annotator.annotate(scene=frame, detections=detections)
+        frame = line_annotator.annotate(frame, line_counter=lineZone)
 
-        count_dict = count_detections(detections)
-        zoneCounts.append({'label': DEVICE_NAME + "_" + "default", 'count': count_dict})
+    
     return frame, zoneCounts, lineCounts
