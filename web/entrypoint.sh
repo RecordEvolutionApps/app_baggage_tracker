@@ -12,4 +12,5 @@ fi
 cp -a /data/ssh/* ~/.ssh
 
 # sleep infinity
+bun run /app/backend/webrtc.ts &
 exec bun run /app/backend/index.ts

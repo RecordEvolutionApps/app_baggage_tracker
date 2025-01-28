@@ -3,6 +3,7 @@ import { property, customElement, state } from 'lit/decorators.js';
 import './video-canvas.js';
 import { mainStyles, CamSetup } from './utils.js';
 
+const WEBRTC_PORT = '1200'
 @customElement('camera-player')
 export class CameraPlayer extends LitElement {
   @property({ type: String }) label = 'Front';
@@ -44,10 +45,97 @@ export class CameraPlayer extends LitElement {
     this.videoElement = this.shadowRoot?.getElementById(
       'video',
     ) as HTMLVideoElement;
-
+    this.initializeWebRTC();
     this.getCameraMetadata();
 
     this.dispatchEvent(new CustomEvent('video-ready'));
+  }
+
+  getSignalingServerUrl() {
+    let pa = location.host.split('-');
+    let jns = pa[2]?.split('.') ?? [];
+    jns[0] = WEBRTC_PORT ?? 1111;
+    let jjns = jns.join('.');
+    pa[2] = jjns;
+    let jpa = pa.join('-');
+    return 'wss://' + jpa;
+  }
+
+  async initializeWebRTC() {
+    const ssurl = this.getSignalingServerUrl()
+    console.log('ssurl', ssurl)
+    // WebSocket-Verbindung zum Signaling-Server
+    const ws = new WebSocket(ssurl);
+
+    // WebRTC-Verbindung erstellen
+    this.peerConnection = new RTCPeerConnection({
+      iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun.l.google.com:5349" },
+          { urls: "stun:stun1.l.google.com:3478" },
+          { urls: "stun:stun1.l.google.com:5349" },
+          { urls: "stun:stun2.l.google.com:19302" },
+          { urls: "stun:stun2.l.google.com:5349" },
+          { urls: "stun:stun3.l.google.com:3478" },
+          { urls: "stun:stun3.l.google.com:5349" },
+          { urls: "stun:stun4.l.google.com:19302" },
+          { urls: "stun:stun4.l.google.com:5349" },
+          {
+              urls: "turn:relay1.expressturn.com:3478",
+              username: "ef8VXO351A31UJVGBY",
+              credential: "PD1trsvPrgQ4uWAf",
+          },
+          {
+              urls: "turn:a.relay.metered.ca:80?transport=tcp",
+              username: "f63d4fc5ff93197d239f602f",
+              credential: "ZaHWKZRVcc1+8sKn",
+          },
+          {
+              urls: "turn:a.relay.metered.ca:443",
+              username: "f63d4fc5ff93197d239f602f",
+              credential: "ZaHWKZRVcc1+8sKn",
+          },
+          {
+              urls: "turn:a.relay.metered.ca:443?transport=tcp",
+              username: "f63d4fc5ff93197d239f602f",
+              credential: "ZaHWKZRVcc1+8sKn",
+          },
+      ],
+    });
+
+    // Remote-Stream verarbeiten
+    this.peerConnection.ontrack = (event) => {
+      if (event.streams && event.streams[0]) {
+        this.videoElement.srcObject = event.streams[0];
+      }
+    };
+
+    // ICE-Candidate an den Signaling-Server senden
+    this.peerConnection.onicecandidate = (event) => {
+      if (event.candidate) {
+        ws.send(JSON.stringify({ type: 'ice_candidate', candidate: event.candidate }));
+      }
+    };
+
+    // Nachrichten vom Signaling-Server verarbeiten
+    ws.onmessage = async (event) => {
+      const message = JSON.parse(event.data);
+
+      if (message.type === 'offer') {
+        // Remote-Beschreibung setzen
+        await this.peerConnection.setRemoteDescription(new RTCSessionDescription(message.offer));
+
+        // Antwort (Answer) erstellen
+        const answer = await this.peerConnection.createAnswer();
+        await this.peerConnection.setLocalDescription(answer);
+
+        // Answer an den Signaling-Server senden
+        ws.send(JSON.stringify({ type: 'answer', answer }));
+      } else if (message.type === 'ice_candidate') {
+        // ICE-Candidate hinzufügen
+        await this.peerConnection.addIceCandidate(new RTCIceCandidate(message.candidate));
+      }
+    };
   }
 
   static styles = [

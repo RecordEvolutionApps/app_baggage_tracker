@@ -1,4 +1,4 @@
-FROM oven/bun:1.0-debian
+FROM oven/bun:1.2-debian
 
 RUN apt-get update && apt-get install -y openssh-client
 
@@ -11,7 +11,7 @@ COPY entrypoint.sh .
 COPY frontend /app/frontend
 RUN cd frontend && bun i 
 RUN cd frontend && bun build ./src/camera-shell.ts --outdir ./dist
-RUN cp -a frontend/src/modules/janus.js frontend/dist/janus.js
+# RUN cp -a frontend/src/modules/janus.js frontend/dist/janus.js
 RUN cp -a frontend/index.html frontend/dist/index.html
 
 ENTRYPOINT ["/app/entrypoint.sh"]

@@ -1,15 +1,15 @@
 services:
-    janus:
-        build: ./janus
-        ports:
-            - 1200:1200
+    # janus:
+    #     build: ./janus
+    #     ports:
+    #         - 1200:1200
         # entrypoint: "sleep infinity"
     video:
         build: ./video
         volumes:
             - data:/data
-        depends_on:
-            - janus
+        # depends_on:
+        #     - janus
         privileged: true  # **WARNING: Security Risk**
         devices:
             - /dev/bus/usb:/dev/bus/usb
@@ -20,6 +20,7 @@ services:
         build: ./web
         ports:
             - 1100:1100
+            - 1200:1200
         volumes:
             - data:/data
         depends_on: 
