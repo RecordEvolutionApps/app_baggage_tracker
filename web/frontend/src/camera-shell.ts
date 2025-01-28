@@ -1,7 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement } from 'lit/decorators.js';
 import './camera-player.js';
-import { initJanus } from './modules/webRTCPlayer.js';
+// import { initJanus } from './modules/webRTCPlayer.js';
 import { CameraPlayer } from './camera-player.js';
 import { mainStyles } from './utils.js';
 
