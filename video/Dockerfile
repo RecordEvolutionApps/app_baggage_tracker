@@ -18,6 +18,7 @@ RUN apt-get -y update && \
 		unzip nginx procps v4l-utils git \
 		usbutils udev \
 		python3.8-dev \
+		gstreamer1.0-plugins-bad \
 		build-essential && \
 	apt-get clean && \
 	rm -rf /var/lib/apt/lists/*
@@ -25,11 +26,12 @@ RUN apt-get -y update && \
 WORKDIR /app/video
 
 COPY requirements.txt requirements.txt
-RUN pip uninstall -y setuptools && pip install setuptools==65.5.0
+RUN pip install -U pip && pip uninstall -y setuptools && pip install setuptools==65.5.0
 RUN python3 -m pip install -r requirements.txt
 
 # needs to be done seperately cus you can't install with no deps in requirements.txt
 RUN python3 -m pip install supervision==0.25.0 --no-deps
+RUN pip install -U sympy
 
 
 RUN mkdir -p /app/download

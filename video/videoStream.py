@@ -120,8 +120,8 @@ async def main(_saved_masks):
         else:
             outputFormat = "videoconvert ! video/x-raw, format=I420 ! x264enc tune=zerolatency ! rtph264pay pt=96 config-interval=1"
 
-        writerStream = "appsrc ! " + outputFormat + " ! udpsink host=janus port=" + str(portMap[args.camStream]) + " sync=false async=false"
-        # writerStream = "appsrc ! " + outputFormat + " ! webrtcsink name=webrtcsink stun-server=stun.l.google.com:19302 signaling-server=ws://localhost:1200"
+        # writerStream = "appsrc ! " + outputFormat + " ! udpsink host=janus port=" + str(portMap[args.camStream]) + " sync=false async=false"
+        writerStream = "appsrc ! " + outputFormat + " ! webrtcsink name=webrtcsink stun-server=stun.l.google.com:19302 signaling-server=ws://localhost:1200"
 
         print('-------------CREATING WRITE STREAM:', writerStream)
         out = cv2.VideoWriter(writerStream, cv2.CAP_GSTREAMER, 0, FRAMERATE, (RESOLUTION_X, RESOLUTION_Y), True)

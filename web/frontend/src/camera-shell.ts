@@ -25,7 +25,7 @@ export class CameraShell extends LitElement {
     };
     console.log('videoPlayers', frontCam, videoPlayers);
 
-    initJanus(videoPlayers);
+    //initJanus(videoPlayers);
   }
 
   static styles = [
