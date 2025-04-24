@@ -449,6 +449,7 @@ Janus.init = function(options) {
 		};
 		// Helper methods to attach/reattach a stream to a video element (previously part of adapter.js)
 		Janus.attachMediaStream = function(element, stream) {
+			console.warn('ATTACHING MEDIA STREAM TO ELEMENT', element, stream)
 			try {
 				element.srcObject = stream;
 			} catch (e) {
@@ -460,6 +461,7 @@ Janus.init = function(options) {
 			}
 		};
 		Janus.reattachMediaStream = function(to, from) {
+			console.warn('REATTACHING MEDIA STREAM TO ELEMENT', to, from)
 			try {
 				to.srcObject = from.srcObject;
 			} catch (e) {
@@ -1941,7 +1943,7 @@ function Janus(gatewayCallbacks) {
 			if(!event.track)
 				return;
 			// Notify about the new track event
-			let mid = event.transceiver ? event.transceiver.mid : event.track.id;
+			let mid = event.transceiver?.mid ?? event.track.id.split("janus")?.[1] ?? event.track.id.split("janus")?.[0];
 			try {
 				pluginHandle.onremotetrack(event.track, mid, true, { reason: 'created' });
 			} catch(e) {

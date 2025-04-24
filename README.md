@@ -19,13 +19,15 @@ The Revis box is an End-to-End solution that can be configured for your needs. T
 
 To use the app on your own devices:
 
-1. Register an NVIDIA Jetson PC in your device swarm on this platform
-2. Plug any USB-Cameras into your device
-3. Access your device in the swarm and install this app on it
+1. Register an NVIDIA Jetson PC in your device fleet on IronFlock
+2. Install this app on the device.
+3. Enable remote access in the app settings to access the app's home page for camera configuration and live stream.
 
 To create a multi camera setup, just repeat the steps above with as many devices as you like.
 
 The detection data of all cameras in your swarm will be available in the app dashboard.
+
+> There is a demo video included in the app. You can use this video by choosing IP Camera in the app configuration and then using `demoVideo` as the url.
 
 ## Dashboarding Insights
 

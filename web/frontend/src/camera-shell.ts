@@ -7,10 +7,19 @@ import { mainStyles } from './utils.js';
 
 @customElement('camera-shell')
 export class CameraShell extends LitElement {
-  protected startJanus(): void {
+
+  protected startJanus(event: CustomEvent): void {
+    
+    const videoElement = event.detail?.videoElement as HTMLVideoElement | undefined;
+    if (!videoElement) {
+      console.error("[camera-shell] videoElement received from event detail is undefined or null! Cannot start Janus.");
+      return; // Stop here if no video element
+    }
+
     const frontCam = this.shadowRoot?.getElementById(
       'frontCam',
     ) as CameraPlayer;
+
     const leftCam = this.shadowRoot?.getElementById('leftCam') as CameraPlayer;
     const backCam = this.shadowRoot?.getElementById('backCam') as CameraPlayer;
     const rightCam = this.shadowRoot?.getElementById(

@@ -98,10 +98,18 @@ function initJanus(videoPlayer: any) {
             },
 
             onremotetrack: function (track: any, mid: any, on: any, metadata: any) {
-              console.log('>>>>> Got remote track', mid, { on }, metadata)
-              if (!on || metadata?.reason !== 'created') return
+              console.log('>>>>> Got remote track', track, mid, { on }, metadata)
+              if (!videoPlayer[mid]) {
+                console.warn('No videoPlayer for track', mid)
+                return
+              }
+              if (!on || !['created', 'unmute'].includes(metadata?.reason)) {
+                console.warn('Failed check for attaching media stream')
+                return
+              }
               console.log('>>>>>>>>> attaching stream to video-tag')
               const stream = new MediaStream([track]);
+              
               window.Janus.attachMediaStream(videoPlayer[mid], stream);
               try {
                 console.log('>>>>>>>>>>playing video now...')

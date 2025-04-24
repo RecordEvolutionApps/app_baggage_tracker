@@ -13,12 +13,15 @@ export class CameraPlayer extends LitElement {
   camSetup?: CamSetup;
 
   animation_handle: any;
-  videoElement?: HTMLVideoElement;
   canvasElement?: HTMLCanvasElement;
 
   constructor() {
     super();
     this.basepath = window.location.protocol + '//' + window.location.host;
+  }
+
+  get videoElement() {
+     return this.shadowRoot?.getElementById('video') as HTMLVideoElement;
   }
 
   async getCameraMetadata() {
@@ -40,15 +43,21 @@ export class CameraPlayer extends LitElement {
     }
   }
 
-  protected async firstUpdated() {
-    this.videoElement = this.shadowRoot?.getElementById(
-      'video',
-    ) as HTMLVideoElement;
+protected async firstUpdated() {
+  const videoElement = this.shadowRoot?.getElementById('video') as HTMLVideoElement;
+  // this.videoElement = videoElement; // Still set the property internally
 
-    this.getCameraMetadata();
+  this.getCameraMetadata();
 
-    this.dispatchEvent(new CustomEvent('video-ready'));
+  if (videoElement) { // Only dispatch if the element was found
+    this.dispatchEvent(new CustomEvent('video-ready', {
+      detail: { videoElement: videoElement } // Pass the element in detail
+    }));
+    console.log(`[camera-player ${this.id}] Dispatched video-ready with element in detail.`);
+  } else {
+     console.error(`[camera-player ${this.id}] Video element not found in firstUpdated!`);
   }
+}
 
   static styles = [
     mainStyles,
