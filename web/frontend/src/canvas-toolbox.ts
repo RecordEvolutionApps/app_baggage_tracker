@@ -46,7 +46,6 @@ export class CanvasToolbox extends LitElement {
     mainStyles,
     css`
       :host {
-        min-width: 64px;
         --md-sys-color-primary: #002e6a;
         --md-sys-color-on-primary: #FFFFFF;
         --md-sys-color-primary-container: #2986cc;

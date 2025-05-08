@@ -155,14 +155,16 @@ export class VideoCanvas extends LitElement {
       .container {
         height: 100%;
         display: flex;
+        gap: 16px;
         flex-direction: row;
         align-items: start;
         justify-content: space-between;
       }
 
       .sidebar {
-        max-width: 280px;
-        margin-right: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
         height: 100%;
         padding: 10px;
         box-sizing: border-box;
@@ -183,14 +185,13 @@ export class VideoCanvas extends LitElement {
           flex-direction: column-reverse;
         }
         .sidebar {
-          display: flex;
-          max-width: fit-content;
+          flex-direction: row;
+          flex-wrap: wrap;
           justify-content: space-between;
           width: 100%;
+          gap: 12px;
         }
-        .surface {
-          margin-bottom: 16px;
-        }
+
       }
 
 

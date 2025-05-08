@@ -27,8 +27,8 @@ export class PolygonList extends LitElement {
     mainStyles,
     css`
       :host {
-        margin: 16px 0 0 24px;
         color: #47484c;
+        flex: 1;
       }
 
       ul {
@@ -46,7 +46,6 @@ export class PolygonList extends LitElement {
 
       md-list {
         padding: 0;
-        min-width: 170px;
         border-radius: 4px;
         overflow: hidden;
         --md-list-container-color: #f7faf9;
@@ -87,7 +86,6 @@ export class PolygonList extends LitElement {
 
       b {
         font-size: 15px;
-        width: 190px;
         text-overflow: ellipsis;
         overflow: hidden;
         white-space: nowrap;
