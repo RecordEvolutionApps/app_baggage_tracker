@@ -15,7 +15,7 @@ import torch
 OBJECT_MODEL = os.environ.get('OBJECT_MODEL')
 RESOLUTION_X = int(os.environ.get('RESOLUTION_X', 640))
 RESOLUTION_Y = int(os.environ.get('RESOLUTION_Y', 480))
-DEVICE_NAME = os.environ.get('DEVICE_NAME')
+DEVICE_NAME = os.environ.get('DEVICE_NAME', 'UNKNOWN_DEVICE')
 CONF = float(os.environ.get('CONF', '0.1'))
 IOU = float(os.environ.get('IOU', '0.8'))
 SMOOTHING = (os.environ.get('SMOOTHING', 'true') == 'true')

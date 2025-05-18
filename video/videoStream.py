@@ -110,7 +110,7 @@ async def main(_saved_masks):
         start_time = time.time()
         start_time1 = time.time()
         start_time2 = time.time()
-
+        
         # CPU encoding
         # outputFormat = " videoconvert ! vp8enc deadline=2 threads=4 keyframe-max-dist=10 ! video/x-vp8 ! rtpvp8pay pt=96"
 
@@ -134,6 +134,7 @@ async def main(_saved_masks):
         if USE_SAHI: slicer = initSliceInferer(model)
 
         while cap.isOpened():
+            await sleep(0) # Give other task time to run, not a hack: https://superfastpython.com/what-is-asyncio-sleep-zero/#:~:text=You%20can%20force%20the%20current,before%20resuming%20the%20current%20task.
             elapsed_time = time.time() - start_time
             elapsed_time1 = time.time() - start_time1
             elapsed_time2 = time.time() - start_time2
@@ -211,7 +212,6 @@ async def main(_saved_masks):
 
             out.write(frame)
 
-            await sleep(0) # Give other task time to run, not a hack: https://superfastpython.com/what-is-asyncio-sleep-zero/#:~:text=You%20can%20force%20the%20current,before%20resuming%20the%20current%20task.
 
         print('WARNING: Video source is not open', device)
         cap.release()
@@ -227,14 +227,14 @@ def publishImage(frame):
     base64_encoded_frame = base64.b64encode(encoded_frame.tobytes()).decode('utf-8')
     now = datetime.now().astimezone().isoformat()
 
-    get_event_loop().create_task(rw.publish_to_table('images', {"tsp": now, "image": 'data:image/jpeg;base64,' + base64_encoded_frame}))
+    get_event_loop().create_task(ironflock.publish_to_table('images', {"tsp": now, "image": 'data:image/jpeg;base64,' + base64_encoded_frame}))
 
 def publishCameras():
     now = datetime.now().astimezone().isoformat()
     payload = {"tsp": now}
     payload["videolink"] = f"https://{DEVICE_KEY}-baggagetracker-1100.app.ironflock.com"
     payload["devicelink"] = DEVICE_URL
-    get_event_loop().create_task(rw.publish_to_table('cameras', payload))
+    get_event_loop().create_task(ironflock.publish_to_table('cameras', payload))
 
 def publishClassCount(zone_name, result):
     now = datetime.now().astimezone().isoformat()
@@ -248,7 +248,7 @@ def publishClassCount(zone_name, result):
 
     print(payload)
 
-    get_event_loop().create_task(rw.publish_to_table('detections', payload))
+    get_event_loop().create_task(ironflock.publish_to_table('detections', payload))
 
 def publishLineCount(line_name, num_in, num_out):
     now = datetime.now().astimezone().isoformat()
@@ -260,15 +260,13 @@ def publishLineCount(line_name, num_in, num_out):
     }
 
     print(payload)
-    get_event_loop().create_task(rw.publish_to_table('linecounts', payload))
+    get_event_loop().create_task(ironflock.publish_to_table('linecounts', payload))
 
-
-rw = IronFlock()
 
 if __name__ == "__main__":
-    # run the main coroutine
+    ironflock = IronFlock()
+    
     task1 = get_event_loop().create_task(readMasksFromStdin(saved_masks))
     task2 = get_event_loop().create_task(main(saved_masks))
 
-    # run the reswarm component
-    rw.run()
+    ironflock.run()
