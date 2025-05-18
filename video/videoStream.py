@@ -227,14 +227,14 @@ def publishImage(frame):
     base64_encoded_frame = base64.b64encode(encoded_frame.tobytes()).decode('utf-8')
     now = datetime.now().astimezone().isoformat()
 
-    get_event_loop().create_task(ironflock.publish_to_table('images', {"tsp": now, "image": 'data:image/jpeg;base64,' + base64_encoded_frame}))
+    ironflock.publish_to_table('images', {"tsp": now, "image": 'data:image/jpeg;base64,' + base64_encoded_frame})
 
 def publishCameras():
     now = datetime.now().astimezone().isoformat()
     payload = {"tsp": now}
     payload["videolink"] = f"https://{DEVICE_KEY}-baggagetracker-1100.app.ironflock.com"
     payload["devicelink"] = DEVICE_URL
-    get_event_loop().create_task(ironflock.publish_to_table('cameras', payload))
+    ironflock.publish_to_table('cameras', payload)
 
 def publishClassCount(zone_name, result):
     now = datetime.now().astimezone().isoformat()
@@ -248,7 +248,7 @@ def publishClassCount(zone_name, result):
 
     print(payload)
 
-    get_event_loop().create_task(ironflock.publish_to_table('detections', payload))
+    ironflock.publish_to_table('detections', payload)
 
 def publishLineCount(line_name, num_in, num_out):
     now = datetime.now().astimezone().isoformat()
@@ -260,7 +260,7 @@ def publishLineCount(line_name, num_in, num_out):
     }
 
     print(payload)
-    get_event_loop().create_task(ironflock.publish_to_table('linecounts', payload))
+    ironflock.publish_to_table('linecounts', payload)
 
 
 if __name__ == "__main__":
