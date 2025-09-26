@@ -78,6 +78,7 @@ data:
 
     - tablename: cameras
       chunkTimeInterval: 1 hour
+      maintainLatestFlagFor: [devname]
       dropAfter: 2 hour
       columns:
         - id: tsp
