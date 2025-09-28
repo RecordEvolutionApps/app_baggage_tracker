@@ -3,56 +3,56 @@ layout:
   gridLayout:
     - x: 0
       y: 0
-      w: 2
-      h: 2
+      w: 8
+      h: 5
       id: a176e5b9-eeeb-4173-b2f7-91a319edc8ef
-    - x: 2
+    - x: 8
       y: 0
-      w: 5
-      h: 8
+      w: 20
+      h: 20
       id: "13"
-    - x: 7
+    - x: 28
       y: 0
-      w: 5
-      h: 8
+      w: 20
+      h: 20
       id: "3"
     - x: 0
-      y: 2
-      w: 2
-      h: 22
+      y: 5
+      w: 8
+      h: 43
       id: 6c7855ab-d64e-4738-8315-964cc34e5b3f
-    - x: 2
-      y: 8
-      w: 10
-      h: 16
+    - x: 8
+      y: 20
+      w: 40
+      h: 28
       id: "12"
   subRoutes:
     "*":
       gridLayout:
         - x: 0
           y: 0
-          w: 2
-          h: 2
-          id: a176e5b9-eeeb-4173-b2f7-91a319edc8ef
-        - x: 2
-          y: 0
-          w: 2
-          h: 4
-          id: "8"
-        - x: 4
-          y: 0
           w: 8
-          h: 4
+          h: 5
+          id: a176e5b9-eeeb-4173-b2f7-91a319edc8ef
+        - x: 8
+          y: 0
+          w: 15
+          h: 12
+          id: "8"
+        - x: 23
+          y: 0
+          w: 25
+          h: 12
           id: "10"
         - x: 0
-          y: 2
-          w: 2
-          h: 22
+          y: 5
+          w: 8
+          h: 43
           id: 6c7855ab-d64e-4738-8315-964cc34e5b3f
-        - x: 2
-          y: 4
-          w: 10
-          h: 20
+        - x: 8
+          y: 12
+          w: 40
+          h: 36
           id: 2a14ba2f-568c-43f2-a5bb-123277502f79
 background_color: "#ffc77e"
 text_color: "#575062"
@@ -253,9 +253,11 @@ widgets:
   - package_name: widget-navbutton
     chartconfig:
       title: $str:Baggage Vision
-      iconName: arrow_back
+      iconName: $str:home
       route: $str:/
       style:
         fontSize: $num:16
-    version: 1.0.4
+      leadingSlash: null
+      trailingSlash: null
+    version: 1.0.5
     layout_id: a176e5b9-eeeb-4173-b2f7-91a319edc8ef
