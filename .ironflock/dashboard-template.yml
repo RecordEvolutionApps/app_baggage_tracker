@@ -36,12 +36,12 @@ layout:
           id: a176e5b9-eeeb-4173-b2f7-91a319edc8ef
         - x: 8
           y: 0
-          w: 15
+          w: 8
           h: 12
           id: "8"
-        - x: 23
+        - x: 16
           y: 0
-          w: 25
+          w: 32
           h: 12
           id: "10"
         - x: 0
@@ -69,14 +69,22 @@ widgets:
     chartconfig:
       title:
         color: $str:#5a6666
-        text: $str:A Textbox Demo
+        text: $str:Live Video Stream
+        fontSize: null
+        fontWeight: null
+        backgroundColor: ""
       subTitle:
-        text: $str:About the Smart Camera System​
+        text: $str:including YOLO Model inception
         color: $str:#5a6666
+        fontSize: null
+        fontWeight: null
       body:
-        text: "$str:The Smart Camera System relies on Hardware from NVIDIA. Any USB or IP Camera can be used with the
-          NVIDIA PC. "
+        text: "$str:Video Latency at around 200ms. Any USB or IP Camera can be used with the NVIDIA PC. "
         color: $str:#5a6666
+        fontSize: null
+        fontWeight: null
+        backgroundColor: ""
+    version: 1.1.8
     layout_id: "10"
   - package_name: widget-linechart
     chartconfig:
@@ -98,24 +106,32 @@ widgets:
                 r: $num:1
               queryParams:
                 limit: 100
+          backgroundColor: ""
+          borderColor: ""
+          styling: {}
+          advanced: {}
+      title: $str:History of Counted Bags
+      subTitle: null
+      axis: {}
+    version: 1.6.23
     layout_id: "12"
   - package_name: widget-value
     chartconfig:
       dataseries:
         - label: $str:Total
-          data:
-            tableRef:
-              tablename: linecount_agg
-              format:
-                value: num_out_dev
-                pivot: devname
-              queryParams:
-                limit: 100
           unit: "$str:"
           precision: $num:0
           advanced:
             averageLatest: $num:1
           styling: {}
+          value:
+            valueRef:
+              tablename: linecount_agg
+              column: num_out_dev
+          multiChart: null
+      title: $str:Total Number of Suitcases
+      subTitle: $str:Accross all cameras
+    version: 1.1.20
     layout_id: "13"
   - package_name: widget-embed
     chartconfig:
@@ -142,21 +158,30 @@ widgets:
           labelColor: $str:#000000
           valueColor: $str:#2b90fd
           averageLatest: "$num:"
-          data:
-            tableRef:
-              tablename: linecount_agg
-              format:
-                value: num_out
-                pivot: linename
-                tsp: period
-              queryParams:
-                limit: 100
           unit: "$str:"
           precision: $num:0
           advanced:
             averageLatest: $num:1
           styling: {}
+          multiChart: $bool:true
+          data:
+            tableRef:
+              tablename: linecount_agg
+              queryParams:
+                limit: 50
+                filterAnd:
+                  - column: devname
+                    operator: =
+                    value: "1"
+                    dataType: string
+                    useRoute: true
+              format:
+                tsp: null
+                value: num_out_dev
+                pivot: linename
       title: "$str:"
+      subTitle: null
+    version: 1.1.20
     layout_id: "3"
   - package_name: widget-table
     chartconfig:
@@ -245,9 +270,20 @@ widgets:
     chartconfig:
       imageLink: $str:https://storage.googleapis.com/reswarm-images/prod/reswarm-0-1706095631331-Cam_icon-682decf0d8.png
       title: $str:Revis
-      subTitle: $str:Nvidia Jetson AGX Xavier
-      imageUrl: $str:https://res.cloudinary.com/dk8bhmsdz/image/upload/v1750163313/estaamic_machine_ohg3zo.png
+      subTitle:
+        valueRef:
+          tablename: cameras
+          column: devname
+          queryParams:
+            filterAnd:
+              - column: devname
+                operator: =
+                value: "1"
+                dataType: string
+                useRoute: true
+            limit: 1
       useUpload: $bool:false
+      imageUrl: $str:https://storage.googleapis.com/reswarm-images/prod/reswarm-0-1706095631331-Cam_icon-682decf0d8.png
     version: 1.1.12
     layout_id: "8"
   - package_name: widget-navbutton
