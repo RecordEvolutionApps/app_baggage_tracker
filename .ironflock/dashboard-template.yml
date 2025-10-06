@@ -172,7 +172,7 @@ widgets:
                 filterAnd: []
               format:
                 tsp: null
-                value: num_out_dev
+                value: num_out
                 pivot: linename
       title: "$str:"
       subTitle: null
