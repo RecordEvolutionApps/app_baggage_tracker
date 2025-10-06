@@ -169,12 +169,7 @@ widgets:
               tablename: linecount_agg
               queryParams:
                 limit: 50
-                filterAnd:
-                  - column: devname
-                    operator: =
-                    value: "1"
-                    dataType: string
-                    useRoute: true
+                filterAnd: []
               format:
                 tsp: null
                 value: num_out_dev
