@@ -239,17 +239,17 @@ widgets:
       route: $str:/
       leadingSlash: null
       trailingSlash: null
-    version: 1.0.9
+    version: 1.0.10
     layout_id: 6c7855ab-d64e-4738-8315-964cc34e5b3f
   - package_name: widget-image
     chartconfig:
       imageLink: $str:https://storage.googleapis.com/reswarm-images/prod/reswarm-0-1706095631331-Cam_icon-682decf0d8.png
-      title:
-        text: $str:Revis
-      subTitle:
-        text: $str:Nvidia Jetson AGX Xavier
+      title: $str:Revis
+      subTitle: $str:Nvidia Jetson AGX Xavier
+      imageUrl: $str:https://res.cloudinary.com/dk8bhmsdz/image/upload/v1750163313/estaamic_machine_ohg3zo.png
+      useUpload: $bool:false
+    version: 1.1.12
     layout_id: "8"
-    version: 1.1.7
   - package_name: widget-navbutton
     chartconfig:
       title: $str:Baggage Vision
