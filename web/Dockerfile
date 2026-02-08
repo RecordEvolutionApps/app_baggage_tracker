@@ -1,4 +1,4 @@
-FROM oven/bun:1.0-debian
+FROM oven/bun:1.3-debian
 
 RUN apt-get update && apt-get install -y openssh-client
 

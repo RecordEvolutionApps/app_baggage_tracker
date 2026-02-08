@@ -3,57 +3,75 @@ layout:
   gridLayout:
     - x: 0
       y: 0
-      w: 8
-      h: 5
+      w: 12
+      h: 4
       id: a176e5b9-eeeb-4173-b2f7-91a319edc8ef
-    - x: 8
+      z: 1000
+      fixedWidth: true
+      fixedHeight: true
+    - x: 12
       y: 0
-      w: 20
+      w: 16
       h: 20
       id: "13"
+      z: 1001
     - x: 28
       y: 0
       w: 20
       h: 20
       id: "3"
+      z: 1002
     - x: 0
-      y: 5
-      w: 8
-      h: 43
+      y: 4
+      w: 12
+      h: 44
       id: 6c7855ab-d64e-4738-8315-964cc34e5b3f
-    - x: 8
+      z: 999
+      fixedWidth: true
+    - x: 12
       y: 20
-      w: 40
+      w: 36
       h: 28
       id: "12"
+      z: 1004
   subRoutes:
     "*":
       gridLayout:
         - x: 0
-          y: 0
-          w: 8
-          h: 5
-          id: a176e5b9-eeeb-4173-b2f7-91a319edc8ef
-        - x: 8
+          y: 4
+          w: 12
+          h: 44
+          id: 6c7855ab-d64e-4738-8315-964cc34e5b3f
+          z: 1000
+          fixedWidth: true
+        - x: 12
           y: 0
           w: 8
           h: 12
           id: "8"
-        - x: 16
+          z: 1001
+          fixedHeight: true
+        - x: 20
           y: 0
-          w: 32
+          w: 28
           h: 12
           id: "10"
-        - x: 0
-          y: 5
-          w: 8
-          h: 43
-          id: 6c7855ab-d64e-4738-8315-964cc34e5b3f
-        - x: 8
+          z: 1002
+          fixedHeight: true
+        - x: 12
           y: 12
-          w: 40
+          w: 36
           h: 36
           id: 2a14ba2f-568c-43f2-a5bb-123277502f79
+          z: 1003
+        - x: 0
+          y: 0
+          w: 12
+          h: 4
+          id: a176e5b9-eeeb-4173-b2f7-91a319edc8ef
+          z: 1004
+          fixedWidth: true
+          fixedHeight: true
 background_color: "#ffc77e"
 text_color: "#575062"
 style:
@@ -70,19 +88,13 @@ widgets:
       title:
         color: $str:#5a6666
         text: $str:Live Video Stream
-        fontSize: null
-        fontWeight: null
         backgroundColor: ""
       subTitle:
         text: $str:including YOLO Model inception
         color: $str:#5a6666
-        fontSize: null
-        fontWeight: null
       body:
         text: "$str:Video Latency at around 200ms. Any USB or IP Camera can be used with the NVIDIA PC. "
         color: $str:#5a6666
-        fontSize: null
-        fontWeight: null
         backgroundColor: ""
     version: 1.1.8
     layout_id: "10"
@@ -113,7 +125,7 @@ widgets:
       title: $str:History of Counted Bags
       subTitle: null
       axis: {}
-    version: 1.6.23
+    version: 1.6.31
     layout_id: "12"
   - package_name: widget-value
     chartconfig:
@@ -131,7 +143,7 @@ widgets:
           multiChart: null
       title: $str:Total Number of Suitcases
       subTitle: $str:Accross all cameras
-    version: 1.1.20
+    version: 1.1.25
     layout_id: "13"
   - package_name: widget-embed
     chartconfig:
@@ -147,7 +159,7 @@ widgets:
                 dataType: string
                 useRoute: true
             limit: 1
-    version: 1.0.3
+    version: 1.0.7
     layout_id: 2a14ba2f-568c-43f2-a5bb-123277502f79
   - package_name: widget-value
     chartconfig:
@@ -176,7 +188,7 @@ widgets:
                 pivot: linename
       title: "$str:"
       subTitle: null
-    version: 1.1.20
+    version: 1.1.25
     layout_id: "3"
   - package_name: widget-table
     chartconfig:
@@ -259,12 +271,12 @@ widgets:
       route: $str:/
       leadingSlash: null
       trailingSlash: null
-    version: 1.0.10
+    version: 1.0.13
     layout_id: 6c7855ab-d64e-4738-8315-964cc34e5b3f
   - package_name: widget-image
     chartconfig:
       imageLink: $str:https://storage.googleapis.com/reswarm-images/prod/reswarm-0-1706095631331-Cam_icon-682decf0d8.png
-      title: $str:Revis
+      title: "$str:"
       subTitle:
         valueRef:
           tablename: cameras
@@ -279,7 +291,11 @@ widgets:
             limit: 1
       useUpload: $bool:false
       imageUrl: $str:https://storage.googleapis.com/reswarm-images/prod/reswarm-0-1706095631331-Cam_icon-682decf0d8.png
-    version: 1.1.12
+      stretchToFit: null
+      multiImage: null
+      labelFontSize: null
+    custom_style: null
+    version: 1.1.17
     layout_id: "8"
   - package_name: widget-navbutton
     chartconfig:
@@ -290,5 +306,5 @@ widgets:
         fontSize: $num:16
       leadingSlash: null
       trailingSlash: null
-    version: 1.0.5
+    version: 1.0.7
     layout_id: a176e5b9-eeeb-4173-b2f7-91a319edc8ef
