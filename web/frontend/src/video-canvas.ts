@@ -14,25 +14,28 @@ export class VideoCanvas extends LitElement {
   animationFrameId: number = -1;
 
   @property({ type: Object })
-  video?: HTMLVideoElement;
+  declare video?: HTMLVideoElement;
 
   @property({ type: Number })
-  width: number = 0;
+  declare width: number;
 
   @property({ type: Number })
-  height: number = 0;
+  declare height: number;
 
   @property({ type: String})
-  camStream: string = 'frontCam'
+  declare camStream: string
 
   @property({ type: Object })
-  camSetup?: CamSetup;
+  declare camSetup?: CamSetup;
 
   initialized = false;
 
   constructor() {
     super();
     this.polygonManager = new PolygonManager();
+    this.width = 0;
+    this.height = 0;
+    this.camStream = 'frontCam';
 
     this.getCursorPosition = this.getCursorPosition.bind(this);
   }

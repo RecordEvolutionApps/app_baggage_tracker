@@ -15,32 +15,41 @@ import { IpCameraDialog } from './ip-camera-dialog.js';
 @customElement('canvas-toolbox')
 export class CanvasToolbox extends LitElement {
   @property({ type: Object })
-  canvas?: HTMLCanvasElement;
+  declare canvas?: HTMLCanvasElement;
 
   @property({ type: Object })
-  polygonManager?: PolygonManager;
+  declare polygonManager?: PolygonManager;
 
   @property({ type: String })
-  camStream: string = 'frontCam'
+  declare camStream: string
 
   @property({ type: Object })
-  camSetup?: CamSetup
+  declare camSetup?: CamSetup
 
   @state()
-  polygons: Polygon[] = [];
+  declare polygons: Polygon[];
 
   @state()
-  selectedPolygon: Polygon | null = null;
+  declare selectedPolygon: Polygon | null;
 
   @state()
-  mask_name: string = '';
+  declare mask_name: string;
 
   @state()
-  selectedCamType: 'USB' | 'IP' = 'USB'
+  declare selectedCamType: 'USB' | 'IP'
 
   zoneDialog?: MdDialog;
   lineDialog: MdDialog;
   cameraDialog?: IpCameraDialog;
+
+  constructor() {
+    super();
+    this.camStream = 'frontCam';
+    this.polygons = [];
+    this.selectedPolygon = null;
+    this.mask_name = '';
+    this.selectedCamType = 'USB';
+  }
 
   static styles = [
     mainStyles,
@@ -272,7 +281,7 @@ export class CanvasToolbox extends LitElement {
           </div>
 
           <div class="column paging" ?active=${this.selectedCamType === 'IP'}>
-            <div>${this.camSetup?.camera.type === 'IP' ? this.camSetup?.camera?.path ?? '' : ''}</div>
+            <div>${this.camSetup?.camera?.type === 'IP' ? this.camSetup?.camera?.path ?? '' : ''}</div>
             <md-elevated-button @click=${this.onCreateIPClick}>
               Setup IP Camera
               <md-icon slot="icon">edit</md-icon>

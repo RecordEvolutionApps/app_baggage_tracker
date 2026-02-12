@@ -1,0 +1,14 @@
+services:
+  web:
+    build: ./web
+    environment:
+      - DISABLE_VIDEO_SSH=1
+    volumes:
+      - ./web/backend:/app/backend
+      - ./web/frontend:/app/frontend
+      - ./web/entrypoint.dev.sh:/app/entrypoint.dev.sh
+      - ./data:/data
+    ports:
+      - 1100:1100
+      - 5173:5173
+    entrypoint: ["/app/entrypoint.dev.sh"]

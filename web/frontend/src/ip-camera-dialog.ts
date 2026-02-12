@@ -15,13 +15,13 @@ import { MdOutlinedTextField } from '@material/web/textfield/outlined-text-field
 export class IpCameraDialog extends LitElement {
 
   @property({ type: String })
-  camStream: string = 'frontCam'
+  declare camStream: string
 
   @property({ type: Object })
-  camSetup?: CamSetup
+  declare camSetup?: CamSetup
 
   @state()
-  private camList: Camera[] = [];
+  declare private camList: Camera[];
 
   dialog?: MdDialog;
   basepath: string;
@@ -32,6 +32,8 @@ export class IpCameraDialog extends LitElement {
   constructor() {
     super();
     this.basepath = window.location.protocol + '//' + window.location.host;
+    this.camStream = 'frontCam';
+    this.camList = [];
   }
 
   static styles = [
@@ -173,7 +175,7 @@ export class IpCameraDialog extends LitElement {
             <p>Enter the address for your camera stream. This can be an RTSP Stream, a Youtube URL or another URL e.g. rtsp://127.0.0.1:4000/streampath</p>
             <md-outlined-text-field
                 label="Camera IP address / Video URL"
-                value="${ this.camSetup?.camera.type === 'IP' ? (this.camSetup?.camera?.path ?? '') : '' }"
+                value="${ this.camSetup?.camera?.type === 'IP' ? (this.camSetup?.camera?.path ?? '') : '' }"
                 type="text"
                 id="ipaddress"
                 >

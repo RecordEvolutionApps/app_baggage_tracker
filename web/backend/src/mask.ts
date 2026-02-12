@@ -2,6 +2,8 @@
 import type { Context } from "elysia";
 import { streams } from "./cameras";
 import { FileSink } from "bun";
+import { dirname } from "path";
+import { mkdir } from "node:fs/promises";
 
 export let currentMaskData: {
     selectedPolygonId: number | undefined;
@@ -16,7 +18,7 @@ export let currentMaskData: {
     }[]
 } = { polygons: [] };
 
-const maskPath = "/data/mask.json"
+const maskPath = Bun.env.MASK_PATH || "/data/mask.json";
 
 export const updateStreamsWithMask = () => {
     for (const stream of streams.values()) {
@@ -35,7 +37,7 @@ export const saveMask = async (ctx: Context) => {
         const state = JSON.parse(ctx.body as any)
 
         currentMaskData = state
-
+        await mkdir(dirname(maskPath), { recursive: true });
         await Bun.write(maskPath, ctx.body)
 
         updateStreamsWithMask()

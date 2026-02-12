@@ -11,18 +11,20 @@ import { mainStyles, Camera, CamSetup } from './utils';
 export class CameraSelector extends LitElement {
 
   @property({ type: String}) 
-  camStream: string = 'frontCam'
+  declare camStream: string
 
   @property({ type: Object })
-  camSetup?: CamSetup
+  declare camSetup?: CamSetup
 
   @state()
-  private camList: Camera[] = [];
+  declare private camList: Camera[];
   basepath: string;
   selector?: MdOutlinedSelect;
   constructor() {
     super();
     this.basepath = window.location.protocol + '//' + window.location.host;
+    this.camStream = 'frontCam'
+    this.camList = [];
   }
 
   async firstUpdated() {
