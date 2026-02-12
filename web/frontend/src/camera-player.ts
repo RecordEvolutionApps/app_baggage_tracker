@@ -5,12 +5,12 @@ import { mainStyles, CamSetup } from './utils.js';
 
 @customElement('camera-player')
 export class CameraPlayer extends LitElement {
-  @property({ type: String }) label = 'Front';
-  @property({ type: String }) id = 'frontCam';
+  @property({ type: String }) declare label: string;
+  @property({ type: String }) declare id: string;
   basepath: string;
 
   @state()
-  camSetup?: CamSetup;
+  declare camSetup?: CamSetup;
 
   animation_handle: any;
   canvasElement?: HTMLCanvasElement;
@@ -18,6 +18,8 @@ export class CameraPlayer extends LitElement {
   constructor() {
     super();
     this.basepath = window.location.protocol + '//' + window.location.host;
+    this.label = 'Front';
+    this.id = 'frontCam';
   }
 
   get videoElement() {

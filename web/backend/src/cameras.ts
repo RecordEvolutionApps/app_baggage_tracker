@@ -10,6 +10,7 @@ const ports = new Map()
 let streamSetup: Record<string, Camera> = {}
 const streamSetupFile: BunFile = Bun.file("/data/streamSetup.json");
 const camStreams = ['frontCam', 'backCam', 'leftCam', 'rightCam']
+const disableVideoSsh = Bun.env.DISABLE_VIDEO_SSH === '1' || Bun.env.DISABLE_VIDEO_SSH === 'true';
 
 
 type Camera = {
@@ -23,7 +24,12 @@ type Camera = {
   }
 
 async function initStreams() {
-    const camList = await getUSBCameras()
+    let camList: Camera[] = []
+    try {
+        camList = await getUSBCameras()
+    } catch (error) {
+        console.error('Failed to load USB cameras', error)
+    }
     console.log("CAMERA LIST", { camList })
 
     const firstCam = camList?.[0]
@@ -78,6 +84,10 @@ export const selectCamera = async (ctx: Context) => {
 }
 
 async function startVideoStream(cam: Camera, camStream: string) {
+    if (disableVideoSsh) {
+        console.log('Video SSH disabled; skipping stream start for', camStream)
+        return
+    }
     if (!camStreams.includes(camStream)) {
         console.error('Error camStream is illegal:', camStream)
         return
@@ -117,6 +127,10 @@ async function startVideoStream(cam: Camera, camStream: string) {
 }
 
 async function killVideoStream(camPath: string, camStream: string) {
+    if (disableVideoSsh) {
+        console.log('Video SSH disabled; skipping stream stop for', camStream)
+        return
+    }
     console.log('Killing video stream (if exists) on ', camPath, camStream)
 
     const proc: Subprocess = streams.get(camPath)
@@ -161,6 +175,9 @@ async function killVideoStream(camPath: string, camStream: string) {
 }
 
 export async function getUSBCameras(): Promise<Camera[]> {
+    if (disableVideoSsh) {
+        return []
+    }
     const camerasOutput = await $`ssh -o StrictHostKeyChecking=no video /app/video/list-cameras.sh`.text()
     return camerasOutput.split("\n").slice(0, -1).map((v: any) => {
         const [path, name, DEVPATH] = v.split(":")

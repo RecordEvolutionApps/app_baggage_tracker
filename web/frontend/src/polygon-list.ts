@@ -12,16 +12,22 @@ import { mainStyles } from './utils.js';
 @customElement('polygon-list')
 export class PolygonList extends LitElement {
   @property({ type: Object })
-  canvas?: HTMLCanvasElement;
+  declare canvas?: HTMLCanvasElement;
 
   @property({ type: Object })
-  polygonManager?: PolygonManager;
+  declare polygonManager?: PolygonManager;
 
   @state()
-  polygons: Polygon[] = [];
+  declare polygons: Polygon[];
 
   @state()
-  selectedPolygon: Polygon | null = null;
+  declare selectedPolygon: Polygon | null;
+
+  constructor() {
+    super();
+    this.polygons = [];
+    this.selectedPolygon = null;
+  }
 
   static styles = [
     mainStyles,
