@@ -1,4 +1,4 @@
-FROM ultralytics/ultralytics:8.2.42-jetson-jetpack5
+FROM ultralytics/ultralytics:8.4.12-jetson-jetpack5
 
 RUN apt-get -y update && \
 	apt-get install -y \
@@ -24,9 +24,9 @@ RUN apt-get -y update && \
 
 WORKDIR /app/video
 
-COPY requirements.txt requirements.txt
+COPY requirements.txt /app/video/requirements.txt
 RUN pip uninstall -y setuptools && pip install setuptools==65.5.0
-RUN python3 -m pip install -r requirements.txt
+RUN python3 -m pip install -r /app/video/requirements.txt
 
 # needs to be done seperately cus you can't install with no deps in requirements.txt
 RUN python3 -m pip install supervision==0.25.0 --no-deps
