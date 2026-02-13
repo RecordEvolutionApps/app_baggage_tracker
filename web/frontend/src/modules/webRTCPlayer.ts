@@ -3,6 +3,45 @@ import type { Transport, Consumer } from 'mediasoup-client/lib/types';
 
 const SIGNALING_PORT = '1200';
 
+// ── STUN / TURN servers ────────────────────────────────────────────────────
+const iceServers = [
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun.l.google.com:5349" },
+  { urls: "stun:stun1.l.google.com:3478" },
+  { urls: "stun:stun1.l.google.com:5349" },
+  { urls: "stun:stun2.l.google.com:19302" },
+  { urls: "stun:stun2.l.google.com:5349" },
+  { urls: "stun:stun3.l.google.com:3478" },
+  { urls: "stun:stun3.l.google.com:5349" },
+  { urls: "stun:stun4.l.google.com:19302" },
+  { urls: "stun:stun4.l.google.com:5349" },
+  {
+    urls: "turn:relay1.expressturn.com:3478",
+    username: "ef8VXO351A31UJVGBY",
+    credential: "PD1trsvPrgQ4uWAf",
+  },
+  {
+    urls: "turn:a.relay.metered.ca:80?transport=tcp",
+    username: "f63d4fc5ff93197d239f602f",
+    credential: "ZaHWKZRVcc1+8sKn",
+  },
+  {
+    urls: "turn:a.relay.metered.ca:443",
+    username: "f63d4fc5ff93197d239f602f",
+    credential: "ZaHWKZRVcc1+8sKn",
+  },
+  {
+    urls: "turn:a.relay.metered.ca:443?transport=tcp",
+    username: "f63d4fc5ff93197d239f602f",
+    credential: "ZaHWKZRVcc1+8sKn",
+  },
+];
+
+// Detect if running behind ironflock tunnel (needs TURN relay)
+function needsTurnRelay(): boolean {
+  return location.host.split('-').length >= 3;
+}
+
 interface VideoPlayers {
   [camId: string]: HTMLVideoElement | undefined;
 }
@@ -192,6 +231,8 @@ async function subscribeToCamera(
     iceParameters:  transportData.iceParameters,
     iceCandidates:  transportData.iceCandidates,
     dtlsParameters: transportData.dtlsParameters,
+    iceServers,
+    iceTransportPolicy: needsTurnRelay() ? 'relay' : 'all',
   });
   transports.set(camId, transport);
 
