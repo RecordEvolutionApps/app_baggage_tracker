@@ -1,48 +1,68 @@
-FROM ultralytics/ultralytics:8.2.42-jetson-jetpack5
+# Multi-platform Dockerfile for Jetson AGX (CUDA/TensorRT) and CPU-only dev
+ARG BASE_IMAGE=nvcr.io/nvidia/l4t-pytorch:r35.2.1-pth2.0-py3
 
+FROM ${BASE_IMAGE}
+
+# Install uv for fast package management
+COPY --from=ghcr.io/astral-sh/uv:0.4.20 /uv /usr/local/bin/uv
+
+# Install system dependencies
 RUN apt-get -y update && \
 	apt-get install -y \
-		# libmicrohttpd-dev libjansson-dev \
-		# libssl-dev libsofia-sip-ua-dev libglib2.0-dev \
-		# libopus-dev libogg-dev libcurl4-openssl-dev liblua5.3-dev \
-		# libconfig-dev pkg-config libtool automake \
-		# libavutil-dev \
-		# libavformat-dev \
-		# libavcodec-dev \
-		# libwebsockets-dev \
-		# meson \
-		# libgtk-3-dev \
 		curl \
 		ffmpeg \
-		openssh-server \
-		unzip nginx procps v4l-utils git \
-		usbutils udev \
-		python3.8-dev \
+		unzip \
+		procps \
+		v4l-utils \
+		git \
+		usbutils \
+		udev \
+		libgl1 \
+		libglib2.0-0 \
+		libgomp1 \
+		libsm6 \
+		libxext6 \
+		libxrender-dev \
 		build-essential && \
 	apt-get clean && \
 	rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app/video
 
+# Install Python dependencies (split into layers for better caching)
 COPY requirements.txt requirements.txt
-RUN pip uninstall -y setuptools && pip install setuptools==65.5.0
-RUN python3 -m pip install -r requirements.txt
 
-# needs to be done seperately cus you can't install with no deps in requirements.txt
-RUN python3 -m pip install supervision==0.25.0 --no-deps
-RUN pip install -U sympy
+# Install MMDetection stack first (slow, but cached)
+RUN uv pip install --system openmim==0.3.9 && \
+	mim install mmcv==2.1.0
 
-RUN mkdir -p /app/download
+RUN uv pip install --system mmengine==0.10.4 mmdet==3.3.0
 
-RUN rm -rf /usr/src/ultralytics/ultralytics/assets/*
+# Install remaining dependencies (changes more frequently)
+RUN uv pip install --system ironflock==1.0.6 matplotlib==3.8.4 pyyaml==6.0.1 defusedxml==0.7.1 \
+				pillow==10.3.0 lapx==0.5.5 yt_dlp==2024.4.9 opencv-python==4.8.1.78 numpy==1.26.4 \
+				fastapi==0.115.0 "uvicorn[standard]==0.30.6"
 
-COPY patch/polygon_zone.py /usr/local/lib/python3.8/dist-packages/supervision/detection/tools/polygon_zone.py
+# Install supervision separately (version compatibility)
+RUN uv pip install --system supervision==0.27.0 --no-deps
 
+# Create model cache directory
+RUN mkdir -p /app/download /data/mmdet
+
+# Copy patch file and apply before copying all source
+COPY patch/polygon_zone.py /app/video/patch/polygon_zone.py
+RUN SITE_PACKAGES=$(python3 -c "import site; print(site.getsitepackages()[0])") && \
+    cp /app/video/patch/polygon_zone.py ${SITE_PACKAGES}/supervision/detection/tools/polygon_zone.py
+
+# Copy application code (changes frequently — keep last)
 COPY . /app/video
 
-RUN echo "PubkeyAuthentication yes" >> /etc/ssh/sshd_config
+# Make entrypoint executable
+RUN chmod +x /app/video/entrypoint.sh
 
+# Environment for CUDA/OpenGL on Jetson
 ENV LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libgomp.so.1
-ENV LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libGLdispatch.so.0
+
+EXPOSE 8000
 
 ENTRYPOINT ["/app/video/entrypoint.sh"]

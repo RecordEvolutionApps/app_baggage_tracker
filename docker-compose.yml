@@ -1,20 +1,25 @@
 services:
-    janus:
-        build: ./janus
+    mediasoup:
+        build: ./mediasoup
         ports:
             - 1200:1200
         # entrypoint: "sleep infinity"
     video:
-        build: ./video
+        build:
+            context: ./video
+            dockerfile: Dockerfile
         volumes:
             - data:/data
         depends_on:
-            - janus
+            - mediasoup
+        network_mode: service:mediasoup
         privileged: true  # **WARNING: Security Risk**
         devices:
             - /dev/bus/usb:/dev/bus/usb
             - /dev/nvidia*:/dev/nvidia*
         runtime: nvidia
+        environment:
+            - MEDIASOUP_URL=http://127.0.0.1:1200
         # entrypoint: "sleep infinity"
     web:
         build: ./web
@@ -24,6 +29,8 @@ services:
             - data:/data
         depends_on: 
             - video
+        environment:
+            - VIDEO_API=http://mediasoup:8000
         # entrypoint: "sleep infinity"
 volumes:
     data:

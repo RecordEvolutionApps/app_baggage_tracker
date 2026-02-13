@@ -103,6 +103,11 @@ export class VideoCanvas extends LitElement {
       return;
     }
 
+    if (!this.video?.videoWidth || !this.video?.videoHeight) {
+      this.animationFrameId = window.requestAnimationFrame(this.step.bind(this));
+      return;
+    }
+
     // Draw Image
     const context = this.canvasElement?.getContext('2d', { alpha: false })!;
     context.drawImage(this.video!, 0, 0, this.width, this.height);
@@ -140,6 +145,13 @@ export class VideoCanvas extends LitElement {
           this.step.bind(this),
         );
       });
+
+      // If video is already playing (we missed the play event), start immediately
+      if (!this.video.paused && !this.video.ended) {
+        this.animationFrameId = window.requestAnimationFrame(
+          this.step.bind(this),
+        );
+      }
 
       this.initialized = true;
     }

@@ -1,9 +1,12 @@
 ironflock==1.0.6
-# torchvision==0.15
-matplotlib>=3.6.0
-pyyaml>=5.3
-# scipy==1.10.0
+matplotlib==3.8.4
+pyyaml==6.0.1
 defusedxml==0.7.1
-pillow>=9.4
+pillow==10.3.0
 lapx==0.5.5
-yt_dlp
+yt_dlp==2024.10.22
+opencv-python==4.8.1.78
+numpy==1.26.4
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+# Note: mmdet, mmengine, and mmcv are installed via openmim in Dockerfile

@@ -1,4 +1,3 @@
-from ultralytics import YOLO
 import supervision as sv
 import numpy as np
 import urllib.request
@@ -6,13 +5,16 @@ from pathlib import Path
 import shutil
 import json
 import os
+import subprocess
 from asyncio import get_event_loop, sleep
 import sys
 import cv2
 import traceback
 import torch
+from typing import Dict, Any, Optional
 
-OBJECT_MODEL = os.environ.get('OBJECT_MODEL')
+OBJECT_MODEL = os.environ.get('OBJECT_MODEL', 'rtmdet_tiny_8xb32-300e_coco')
+DETECT_BACKEND = os.environ.get('DETECT_BACKEND', 'mmdet')
 RESOLUTION_X = int(os.environ.get('RESOLUTION_X', 640))
 RESOLUTION_Y = int(os.environ.get('RESOLUTION_Y', 480))
 DEVICE_NAME = os.environ.get('DEVICE_NAME', 'UNKNOWN_DEVICE')
@@ -36,70 +38,86 @@ if len(CLASS_LIST) <= 1:
     CLASS_LIST = list(class_id_topic.keys())
     CLASS_LIST = [int(item) for item in CLASS_LIST]
 
-# Supervision Annotations
-if (OBJECT_MODEL.endswith('obb')):
-    bounding_box_annotator = sv.OrientedBoxAnnotator()
-else:
-    bounding_box_annotator = sv.BoxAnnotator()
-# bounding_box_annotator = sv.DotAnnotator(radius=6)
+# Supervision Annotations (RTMDet does not use OBB, always use BoxAnnotator)
+bounding_box_annotator = sv.BoxAnnotator()
 label_annotator = sv.LabelAnnotator(text_scale=0.4, text_thickness=1, text_padding=3)
 
 tracker = sv.ByteTrack()
 smoother = sv.DetectionsSmoother(length=5)
 
-def downloadModel(model_name, model_path):
-    print(f'Downloading Pytorch model {model_name}...')
-    urllib.request.urlretrieve(f'https://github.com/ultralytics/assets/releases/download/v8.2.0/{model_name}.pt', model_path)
-    print(f'Download complete!')
+def empty_detections() -> sv.Detections:
+    return sv.Detections(
+        xyxy=np.empty((0, 4), dtype=np.float32),
+        confidence=np.empty((0,), dtype=np.float32),
+        class_id=np.empty((0,), dtype=np.int64),
+    )
 
-def getModel(model_name, model_resx=640, model_resy=640):
-    pytorch_model_path = f'/app/{model_name}.pt'
-    tensorrt_initial_model_path = f'/app/{model_name}.engine'
+MMDET_MODEL_ZOO = {
+    "rtmdet_tiny_8xb32-300e_coco": {
+        "config": "https://raw.githubusercontent.com/open-mmlab/mmdetection/v3.3.0/configs/rtmdet/rtmdet_tiny_8xb32-300e_coco.py",
+        "checkpoint": "https://download.openmmlab.com/mmdetection/v3.0/rtmdet/rtmdet_tiny_8xb32-300e_coco/rtmdet_tiny_8xb32-300e_coco_20220902_112414-78e30dcc.pth",
+    },
+    "rtmdet_s_8xb32-300e_coco": {
+        "config": "https://raw.githubusercontent.com/open-mmlab/mmdetection/v3.3.0/configs/rtmdet/rtmdet_s_8xb32-300e_coco.py",
+        "checkpoint": "https://download.openmmlab.com/mmdetection/v3.0/rtmdet/rtmdet_s_8xb32-300e_coco/rtmdet_s_8xb32-300e_coco_20220905_161602-387a891e.pth",
+    },
+    "rtmdet_m_8xb32-300e_coco": {
+        "config": "https://raw.githubusercontent.com/open-mmlab/mmdetection/v3.3.0/configs/rtmdet/rtmdet_m_8xb32-300e_coco.py",
+        "checkpoint": "https://download.openmmlab.com/mmdetection/v3.0/rtmdet/rtmdet_m_8xb32-300e_coco/rtmdet_m_8xb32-300e_coco_20220719_112220-229f527c.pth",
+    },
+}
 
-    stored_pytorch_model_path = f'/data/{model_name}.pt'
-    stored_tensorrt_model_path = f'/data/{model_name}-{model_resy}-{model_resx}.engine'
-    model_download_path = f'/app/download/{model_name}.pt'
+def download_file(url: str, destination: str) -> None:
+    print(f'Downloading {url}...')
+    Path(destination).parent.mkdir(parents=True, exist_ok=True)
+    urllib.request.urlretrieve(url, destination)
+    print('Download complete!')
 
-    stored_tensorrt_file = Path(stored_tensorrt_model_path)
-    if stored_tensorrt_file.is_file():
-        print(f'Found existing TensorRT Model for {model_name}')
-        return YOLO(stored_tensorrt_model_path)
+def getModel(model_name: str, model_resx: int = 640, model_resy: int = 640) -> Dict[str, Any]:
+    backend = DETECT_BACKEND.lower()
+    if backend == 'mmdet':
+        return get_mmdet_model(model_name)
+    raise ValueError(f'Unsupported DETECT_BACKEND: {backend}. Only mmdet is supported.')
 
-    pytorch_model_file = Path(stored_pytorch_model_path)
-    if not pytorch_model_file.is_file():
-        print('Original Pytorch model was not found, will download model')
+def get_mmdet_model(model_name: str) -> Dict[str, Any]:
+    if model_name not in MMDET_MODEL_ZOO:
+        raise ValueError(f'Unknown MMDetection model: {model_name}. Available: {", ".join(MMDET_MODEL_ZOO.keys())}')
 
-        downloadModel(model_name, model_download_path)
+    cache_root = Path('/data/mmdet')
+    checkpoint_path = cache_root / 'checkpoints' / f'{model_name}.pth'
 
-        print('Copying downloaded Pytorch model to /app directory')
-        # Move to /app directory to then export it, in case the export fails we don't have any bad data in the /data folder
-        shutil.copy(model_download_path, pytorch_model_path)
+    # Pre-download checkpoint for caching (configs are resolved by DetInferencer
+    # using the model name + metafile, which properly handles _base_ imports)
+    if not checkpoint_path.is_file():
+        download_file(MMDET_MODEL_ZOO[model_name]['checkpoint'], str(checkpoint_path))
 
-        print('Moving downloaded Pytorch model to /data directory')
-        shutil.move(model_download_path, stored_pytorch_model_path)
-    else:
-        print('Original Pytorch model was found, copying to main directory to avoid corrupted items in /data')
+    try:
+        from mmdet.apis import DetInferencer
+    except Exception as exc:
+        raise RuntimeError('MMDetection is not installed. Install mmdet, mmengine, and mmcv for DETECT_BACKEND=mmdet.') from exc
 
-        print('Copying existing Pytorch model to /app directory')
-        # Copy to /app directory to then export it, in case the export fails we don't have any bad data in the /data folder
-        shutil.copyfile(stored_pytorch_model_path, pytorch_model_path)
-    
-    print("Exporting Pytorch model from /app directory into TensorRT....")
-    pytorch_model = YOLO(pytorch_model_path)
-    if not torch.cuda.is_available():
-        return pytorch_model
-    else:    
-        pytorch_model.export(format='engine', imgsz=(model_resy, model_resx))
-        print("Model exported!")
-
-        print(f'Moving exported TensorRT model {model_name} to data folder...')
-        shutil.move(tensorrt_initial_model_path, stored_tensorrt_model_path)
-
-        return YOLO(stored_tensorrt_model_path)
+    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    # Pass the model name (not a config file path) so DetInferencer resolves
+    # the full config from its metafile, properly handling _base_ inheritance.
+    inferencer = DetInferencer(model=model_name, weights=str(checkpoint_path), device=device)
+    return {
+        'backend': 'mmdet',
+        'inferencer': inferencer,
+        'model_name': model_name,
+    }
 
 def get_youtube_video(url, height):
     import yt_dlp
-    with yt_dlp.YoutubeDL() as ydl:
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['web'],
+            },
+        },
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info_dict = ydl.extract_info(url, download=False)
         formats = info_dict.get('formats', [])
         output_resolution = {"height": 0, "width": 0}
@@ -112,6 +130,11 @@ def get_youtube_video(url, height):
                 break
             elif output_resolution is None or resolution > output_resolution['height']:
                 output_resolution = format
+        if output_resolution is None:
+            output_resolution = {}
+        output_resolution['http_headers'] = info_dict.get('http_headers', {})
+        if 'Referer' not in output_resolution['http_headers']:
+            output_resolution['http_headers']['Referer'] = 'https://www.youtube.com/'
         return output_resolution
 
 # Function to display frame rate and timestamp on the frame
@@ -240,34 +263,63 @@ def get_extreme_points(masks):
     return max(0, low_x - buf), max(0, low_y - buf), min(RESOLUTION_X - 1, high_x + buf), min(RESOLUTION_Y - 1, high_y + buf)
 
 
-def initSliceInferer(model):
-    computer = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+def initSliceInferer(model_bundle: Dict[str, Any]):
+    def inferSlice(image_slice: np.ndarray) -> Optional[sv.Detections]:
+        detections = infer_frame(image_slice, model_bundle, model_resx=None, model_resy=None)
+        return detections if detections is not False else empty_detections()
 
-    def inferSlice(image_slice: np.ndarray) -> sv.Detections:
-        result = model(image_slice, device=computer, conf=CONF, iou=IOU, verbose=False, classes=CLASS_LIST)
-        return sv.Detections.from_ultralytics(result[0])
-    
     slicer = sv.InferenceSlicer(
-        callback=inferSlice, 
-        slice_wh=[640, 640], 
-        overlap_ratio_wh=[0.2, 0.2],
+        callback=inferSlice,
+        slice_wh=[640, 640],
+        overlap_wh=[int(0.2 * 640), int(0.2 * 640)],
         iou_threshold=IOU,
         thread_workers=6
-        )
+    )
     return slicer
 
-def infer(frame, model, model_resx, model_resy):
-    computer = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-    results = model(frame, device=computer, imgsz=(model_resy, model_resx), conf=CONF, iou=IOU, verbose=False, classes=CLASS_LIST)
-    if len(results) == 0:
-        return False
+def infer(frame, model_bundle, model_resx, model_resy):
+    return infer_frame(frame, model_bundle, model_resx=model_resx, model_resy=model_resy)
+
+def infer_frame(frame: np.ndarray, model_bundle: Dict[str, Any], model_resx: Optional[int], model_resy: Optional[int]):
+    backend = model_bundle.get('backend')
+    if backend == 'mmdet':
+        return infer_mmdet(frame, model_bundle['inferencer'])
+    raise ValueError(f'Unsupported backend in model bundle: {backend}')
+
+def infer_mmdet(frame: np.ndarray, inferencer) -> Optional[sv.Detections]:
     try:
-        detections = sv.Detections.from_ultralytics(results[0])
+        results = inferencer(frame, return_vis=False)
+        predictions = results.get('predictions', [])
+        if not predictions:
+            return False
+        pred = predictions[0]
+        bboxes = np.array(pred.get('bboxes', []), dtype=np.float32)
+        scores = np.array(pred.get('scores', []), dtype=np.float32)
+        labels = np.array(pred.get('labels', []), dtype=np.int64)
+        if bboxes.size == 0:
+            return False
+
+        keep = scores >= CONF
+        if CLASS_LIST:
+            class_mask = np.isin(labels, CLASS_LIST)
+            keep = np.logical_and(keep, class_mask)
+
+        bboxes = bboxes[keep]
+        scores = scores[keep]
+        labels = labels[keep]
+
+        if bboxes.size == 0:
+            return False
+
+        return sv.Detections(
+            xyxy=bboxes,
+            confidence=scores,
+            class_id=labels,
+        )
     except Exception as e:
-        print('Failed to extract detections from model result', e)
+        print('Failed to extract detections from MMDetection result', e)
         traceback.print_exc()
         return False
-    return detections
 
 def move_detections(detections: sv.Detections, offset_x: int, offset_y: int) -> sv.Detections:
   for i in range(len(detections.xyxy)):

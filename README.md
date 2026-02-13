@@ -56,8 +56,9 @@ Each camera can also be configured by external parameters in the app settings on
 
 Parameter | Default | Description
 -|-|-
-Model | Yolov8s | Select a version for one of the YOLO Object Detection Models
-Detection Classes | 24, 26, 28 | A list of class ids from the COCO dataset. If left empty, then all classes are used. See [here](https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/datasets/coco.yaml)
+Detection Backend | mmdet | Select the detection backend (MMDetection is the default open-source pipeline).
+Model | RTMDet Tiny | Select a version for one of the MMDetection RTMDet models.
+Detection Classes | 24, 26, 28 | A list of class ids from the COCO dataset. If left empty, then all classes are used.
 Smoothing | false | Smoothing uses previous frames to determine the average detection box of an object in the current frame.
 USE_SAHI | false | SAHI is a method to slice a high resolution frame into chunks of 640x640. This improves the detection quality for small objects on high resolution images, but may slow down inference time.
 Confidence | 0.1 | (0 - 1) Sets the minimum confidence threshold for detections. Objects detected with confidence below this threshold will be disregarded. Adjusting this value can help reduce false positives.
@@ -67,6 +68,6 @@ Height | 720 | Vertical Resolution in pixel of the camera stream. The camera sho
 
 ## Requirements
 
-This app can currently only be used NVIDIA Jetson systems.
+This app is optimized for NVIDIA Jetson systems. A CPU-only fallback is available for development, but will be significantly slower.
 
 Any USB or IP camera connected to the Nvidia PC can be used with the app.

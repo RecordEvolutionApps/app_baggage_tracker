@@ -5,11 +5,18 @@ import cv2
 import numpy as np
 
 from supervision import Detections
-from supervision.detection.utils import clip_boxes, polygon_to_mask
 from supervision.draw.color import Color
 from supervision.draw.utils import draw_polygon, draw_text
 from supervision.geometry.core import Position
 from supervision.geometry.utils import get_polygon_center
+
+
+def _polygon_to_mask(polygon: np.ndarray, resolution_wh: Tuple[int, int]) -> np.ndarray:
+    """Create a binary mask from a polygon (replaces removed supervision utility)."""
+    width, height = resolution_wh
+    mask = np.zeros((height, width), dtype=np.uint8)
+    cv2.fillPoly(mask, [polygon.astype(int)], color=1)
+    return mask.astype(bool)
 
 
 class PolygonZone:
@@ -50,7 +57,7 @@ class PolygonZone:
         self.class_out_total_count = {}
 
         width, height = frame_resolution_wh
-        self.mask = polygon_to_mask(
+        self.mask = _polygon_to_mask(
             polygon=polygon, resolution_wh=(width + 1, height + 1)
         )
 
@@ -102,6 +109,16 @@ class PolygonZone:
 
         self.current_count = int(np.sum(is_in_zone))
         return is_in_zone
+
+
+def clip_boxes(xyxy: np.ndarray, resolution_wh: Tuple[int, int]) -> np.ndarray:
+    width, height = resolution_wh
+    clipped = xyxy.copy()
+    clipped[:, 0] = np.clip(clipped[:, 0], 0, width - 1)
+    clipped[:, 2] = np.clip(clipped[:, 2], 0, width - 1)
+    clipped[:, 1] = np.clip(clipped[:, 1], 0, height - 1)
+    clipped[:, 3] = np.clip(clipped[:, 3], 0, height - 1)
+    return clipped
 
 
 class PolygonZoneAnnotator:

@@ -1,7 +1,6 @@
 
 import type { Context } from "elysia";
-import { streams } from "./cameras";
-import { FileSink } from "bun";
+import { updateStreamMask } from "./cameras";
 import { dirname } from "path";
 import { mkdir } from "node:fs/promises";
 
@@ -21,14 +20,7 @@ export let currentMaskData: {
 const maskPath = Bun.env.MASK_PATH || "/data/mask.json";
 
 export const updateStreamsWithMask = () => {
-    for (const stream of streams.values()) {
-        if (stream.stdin) {
-            const stdin = stream.stdin as FileSink
-
-            stdin.write(JSON.stringify(currentMaskData) + "\n")
-            stdin.flush()
-        }
-    }
+    updateStreamMask(currentMaskData)
 }
 
 export const saveMask = async (ctx: Context) => {

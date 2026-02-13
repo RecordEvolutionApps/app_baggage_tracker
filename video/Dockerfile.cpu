@@ -1,0 +1,93 @@
+# CPU-only Dockerfile for local development (Mac/Linux x86)
+# Use a reliable Python base image
+FROM python:3.10-slim-bookworm
+
+# Install uv for fast package management
+COPY --from=ghcr.io/astral-sh/uv:0.4.20 /uv /usr/local/bin/uv
+
+# Install system dependencies (including GStreamer for RTP video output)
+RUN apt-get -y update && \
+	apt-get install -y \
+		curl \
+		ffmpeg \
+		procps \
+		v4l-utils \
+		usbutils \
+		udev \
+		git \
+		libgl1 \
+		libglib2.0-0 \
+		libgomp1 \
+		libsm6 \
+		libxext6 \
+		libxrender-dev \
+		build-essential \
+		cmake \
+		pkg-config \
+		libgstreamer1.0-dev \
+		libgstreamer-plugins-base1.0-dev \
+		gstreamer1.0-plugins-base \
+		gstreamer1.0-plugins-good \
+		gstreamer1.0-plugins-bad \
+		gstreamer1.0-plugins-ugly \
+		gstreamer1.0-libav \
+		gstreamer1.0-tools \
+		libgstrtspserver-1.0-dev && \
+	apt-get clean && \
+	rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app/video
+
+# Install Python dependencies
+COPY requirements.txt requirements.txt
+RUN uv pip install --system torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cpu && \
+	uv pip install --system openmim==0.3.9 && \
+	mim install mmcv==2.1.0 && \
+	uv pip install --system mmengine==0.10.4 mmdet==3.3.0 && \
+	uv pip install --system ironflock==1.0.6 matplotlib==3.8.4 pyyaml==6.0.1 defusedxml==0.7.1 \
+				pillow==10.3.0 lapx==0.5.5 yt_dlp==2024.4.9 numpy==1.26.4 \
+				fastapi==0.115.0 "uvicorn[standard]==0.30.6"
+
+# Build OpenCV from source with GStreamer support (pip opencv-python lacks it)
+# First remove any pip-installed opencv to avoid wrapper conflicts
+RUN pip uninstall -y opencv-python opencv-python-headless opencv-contrib-python 2>/dev/null; true
+RUN cd /tmp && \
+	git clone --depth 1 --branch 4.8.1 https://github.com/opencv/opencv.git && \
+	mkdir opencv/build && cd opencv/build && \
+	cmake -D CMAKE_BUILD_TYPE=RELEASE \
+		-D CMAKE_INSTALL_PREFIX=/usr/local \
+		-D WITH_GSTREAMER=ON \
+		-D WITH_FFMPEG=ON \
+		-D BUILD_opencv_python3=ON \
+		-D BUILD_opencv_python2=OFF \
+		-D PYTHON3_EXECUTABLE=$(which python3) \
+		-D BUILD_TESTS=OFF \
+		-D BUILD_PERF_TESTS=OFF \
+		-D BUILD_EXAMPLES=OFF \
+		-D BUILD_LIST=core,imgproc,imgcodecs,videoio,video,highgui,python3 \
+		.. && \
+	make -j$(nproc) && \
+	make install && \
+	ldconfig && \
+	rm -rf /tmp/opencv
+
+# Install supervision separately (version compatibility)
+RUN uv pip install --system supervision==0.27.0 --no-deps
+
+# Create model cache directory
+RUN mkdir -p /app/download /data/mmdet
+
+# Copy patch file and apply before copying all source
+COPY patch/polygon_zone.py /app/video/patch/polygon_zone.py
+RUN SITE_PACKAGES=$(python3 -c "import site; print(site.getsitepackages()[0])") && \
+    cp /app/video/patch/polygon_zone.py ${SITE_PACKAGES}/supervision/detection/tools/polygon_zone.py
+
+# Copy application code (changes frequently — keep last)
+COPY . /app/video
+
+# Make entrypoint executable
+RUN chmod +x /app/video/entrypoint.sh
+
+EXPOSE 8000
+
+ENTRYPOINT ["/app/video/entrypoint.sh"]

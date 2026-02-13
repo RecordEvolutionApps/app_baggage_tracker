@@ -1,16 +1,34 @@
 
 
 
-import { BunFile, Subprocess } from "bun";
-import { $ } from "bun";
+import { BunFile } from "bun";
 import type { Context } from "elysia";
 
-export const streams: Map<string, Subprocess<"ignore", "pipe", "inherit">> = new Map()
 const ports = new Map()
 let streamSetup: Record<string, Camera> = {}
 const streamSetupFile: BunFile = Bun.file("/data/streamSetup.json");
-const camStreams = ['frontCam', 'backCam', 'leftCam', 'rightCam']
-const disableVideoSsh = Bun.env.DISABLE_VIDEO_SSH === '1' || Bun.env.DISABLE_VIDEO_SSH === 'true';
+const VIDEO_API = Bun.env.VIDEO_API || "http://video:8000";
+const MEDIASOUP_WS = Bun.env.MEDIASOUP_WS || "ws://mediasoup:1200";
+
+/**
+ * Wait for a service to respond to HTTP requests.
+ * Retries every `intervalMs` up to `maxRetries` times.
+ */
+async function waitForService(url: string, name: string, maxRetries = 30, intervalMs = 2000): Promise<boolean> {
+    for (let i = 1; i <= maxRetries; i++) {
+        try {
+            const res = await fetch(url, { signal: AbortSignal.timeout(2000) })
+            if (res.ok || res.status < 500) {
+                console.log(`✓ ${name} is ready (attempt ${i})`)
+                return true
+            }
+        } catch (_) { /* not ready yet */ }
+        console.log(`Waiting for ${name}... (attempt ${i}/${maxRetries})`)
+        await new Promise(r => setTimeout(r, intervalMs))
+    }
+    console.error(`✗ ${name} not reachable after ${maxRetries} attempts`)
+    return false
+}
 
 
 type Camera = {
@@ -47,7 +65,27 @@ async function initStreams() {
         streamSetup = {}
     }
 
+    if (Object.keys(streamSetup).length === 0 && !firstCam) {
+        const demoCam: Camera = {
+            id: 'demoVideo',
+            type: 'IP',
+            name: 'Demo Video',
+            path: 'demoVideo',
+            camStream: 'frontCam',
+        }
+        streamSetup = { frontCam: demoCam }
+        await Bun.write(streamSetupFile, JSON.stringify(streamSetup))
+    }
+
     console.log('StreamSetup', streamSetup)
+
+    // Wait for video API and mediasoup to be ready before starting streams
+    const videoReady = await waitForService(`${VIDEO_API}/cameras`, 'Video API')
+    if (!videoReady) {
+        console.error('Video API not available — streams will not be started')
+        return
+    }
+
     for (const [camStream, cam] of Object.entries(streamSetup)) {
         if (camStream && cam) startVideoStream(cam, camStream)
     }
@@ -84,104 +122,117 @@ export const selectCamera = async (ctx: Context) => {
 }
 
 async function startVideoStream(cam: Camera, camStream: string) {
-    if (disableVideoSsh) {
-        console.log('Video SSH disabled; skipping stream start for', camStream)
-        return
-    }
-    if (!camStreams.includes(camStream)) {
-        console.error('Error camStream is illegal:', camStream)
-        return
-    }
-    console.log('running video stream for ', cam, camStream)
+    console.log('starting video stream for', cam, camStream)
 
     let camPath: string
     if (cam.type === 'IP') {
-        const [protocol, path] = cam.path?.split('://') ?? []
-        const userpw =  cam.username ? (cam.username + (cam.password ? `:${cam.password}@`: '@')) : ''
-        camPath = `${protocol}://${userpw}${path}`
+        const rawPath = cam.path ?? ''
+        if (!rawPath || !rawPath.includes('://')) {
+            // Allow bare values like "demoVideo" without forcing a scheme.
+            camPath = rawPath
+        } else {
+            const [protocol, path] = rawPath.split('://')
+            const userpw = cam.username ? (cam.username + (cam.password ? `:${cam.password}@`: '@')) : ''
+            camPath = `${protocol}://${userpw}${path}`
+        }
     } else {
         camPath = cam.path ?? ''
     }
 
-    camPath = `"${camPath}"`
-
-    const proc = Bun.spawn(["ssh", "-o", "StrictHostKeyChecking=no", "video", "source",  "~/env_vars.txt", "&&", "python3", "-u", "/app/video/videoStream.py", camPath, camStream], {
-        env: { ...process.env },
-        onExit: async (proc, exitCode, signalCode, error) => {
-            console.log("Proccess exited with", { exitCode, signalCode, error })
-            if (exitCode > 0) {
-                await startVideoStream(cam, camStream)
+    try {
+        const res = await fetch(`${VIDEO_API}/streams`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ camPath, camStream }),
+        })
+        if (!res.ok) {
+            const text = await res.text()
+            console.error(`Failed to start stream ${camStream}:`, res.status, text)
+            // Retry once after a delay (mediasoup may not be ready yet)
+            console.log(`Retrying stream ${camStream} in 5s...`)
+            await new Promise(r => setTimeout(r, 5000))
+            const retry = await fetch(`${VIDEO_API}/streams`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ camPath, camStream }),
+            })
+            if (!retry.ok) {
+                console.error(`Retry failed for ${camStream}:`, retry.status, await retry.text())
+                return
             }
-        },
-        stderr: "inherit",
-        stdout: "inherit",
-        stdin: "pipe",
-    });
-
-    streams.set(cam.path ?? 'xxx', proc)
-    ports.set(camStream, proc)
-
-    await proc.exited
-
-    console.error('Python video stream exited', proc.exitCode, proc.signalCode)
+            const data: any = await retry.json()
+            console.log(`Stream ${camStream} started on retry:`, data)
+            ports.set(camStream, data.pid)
+            return
+        }
+        const data: any = await res.json()
+        console.log(`Stream ${camStream} started:`, data)
+        ports.set(camStream, data.pid)
+    } catch (err) {
+        console.error(`Error starting stream ${camStream}:`, err)
+        // Retry once after a delay
+        console.log(`Retrying stream ${camStream} in 5s...`)
+        await new Promise(r => setTimeout(r, 5000))
+        try {
+            const retry = await fetch(`${VIDEO_API}/streams`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ camPath, camStream }),
+            })
+            if (retry.ok) {
+                const data: any = await retry.json()
+                console.log(`Stream ${camStream} started on retry:`, data)
+                ports.set(camStream, data.pid)
+            } else {
+                console.error(`Retry failed for ${camStream}:`, retry.status, await retry.text())
+            }
+        } catch (retryErr) {
+            console.error(`Retry also failed for ${camStream}:`, retryErr)
+        }
+    }
 }
 
 async function killVideoStream(camPath: string, camStream: string) {
-    if (disableVideoSsh) {
-        console.log('Video SSH disabled; skipping stream stop for', camStream)
-        return
-    }
-    console.log('Killing video stream (if exists) on ', camPath, camStream)
+    console.log('Stopping video stream (if exists) for', camStream)
 
-    const proc: Subprocess = streams.get(camPath)
-
-    if (proc) {
-        console.log('killing device process', proc)
-        streams.delete(camPath)
-        proc.kill()
-        await proc.exited
-
-        const rproc = Bun.spawn(["ssh", "-o", "StrictHostKeyChecking=no", "video", "pkill", "-9", "python3"], {
-            env: { ...process.env },
-            onExit: async (proc, exitCode, signalCode, error) => {
-                console.log("Proccess killed with", { exitCode, signalCode, error })
-            },
-            stderr: "inherit",
-            stdout: "inherit",
-            stdin: "pipe",
-        });
-        await rproc.exited
+    try {
+        const res = await fetch(`${VIDEO_API}/streams/${camStream}`, {
+            method: 'DELETE',
+        })
+        if (res.ok) {
+            const data: any = await res.json()
+            console.log(`Stream ${camStream} stopped:`, data)
+        } else if (res.status !== 404) {
+            console.error(`Failed to stop stream ${camStream}:`, res.status, await res.text())
+        }
+    } catch (err) {
+        console.error(`Error stopping stream ${camStream}:`, err)
     }
 
-    const pproc: Subprocess = ports.get(camStream)
-
-    if (pproc) {
-        console.log('killing cam process', pproc)
-        ports.delete(camStream)
-        pproc.kill()
-        await pproc.exited
-
-        const rproc = Bun.spawn(["ssh", "-o", "StrictHostKeyChecking=no", "video", "pkill", "-9", "python3"], {
-            env: { ...process.env },
-            onExit: async (proc, exitCode, signalCode, error) => {
-                console.log("Proccess killed with", { exitCode, signalCode, error })
-            },
-            stderr: "inherit",
-            stdout: "inherit",
-            stdin: "pipe",
-        });
-        await rproc.exited
-    }
+    ports.delete(camStream)
 }
 
 export async function getUSBCameras(): Promise<Camera[]> {
-    if (disableVideoSsh) {
+    try {
+        const res = await fetch(`${VIDEO_API}/cameras`)
+        if (!res.ok) {
+            console.error('Failed to fetch cameras:', res.status, await res.text())
+            return []
+        }
+        return await res.json() as Camera[]
+    } catch (err) {
+        console.error('Error fetching cameras:', err)
         return []
     }
-    const camerasOutput = await $`ssh -o StrictHostKeyChecking=no video /app/video/list-cameras.sh`.text()
-    return camerasOutput.split("\n").slice(0, -1).map((v: any) => {
-        const [path, name, DEVPATH] = v.split(":")
-        const [id] = DEVPATH.replace("/devices/platform/", "").split("/video4linux") ?? []
-        return { path, name, id }
-    })
+}
+
+export function updateStreamMask(maskData: any) {
+    // Send mask update to all running streams via the video API
+    for (const camStream of ports.keys()) {
+        fetch(`${VIDEO_API}/streams/${camStream}/mask`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(maskData),
+        }).catch(err => console.error(`Error sending mask to ${camStream}:`, err))
+    }
 }

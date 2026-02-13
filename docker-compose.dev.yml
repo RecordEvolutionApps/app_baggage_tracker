@@ -1,14 +1,62 @@
+# Docker Compose for local development (CPU-only, no NVIDIA runtime)
 services:
+  mediasoup:
+    build: ./mediasoup
+    ports:
+      - 1200:1200
+      - 10000-10100:10000-10100/udp
+      # UDP ports published for WebRTC -> Browser (on host)
+    environment:
+      - ANNOUNCED_IP=127.0.0.1     # Tell mediasoup to advertise localhost for ICE candidates
+      - RTP_PORT_MIN=10000
+      - RTP_PORT_MAX=10100
+    volumes:
+      - ./mediasoup/src:/app/src
+  video:
+    build:
+      context: ./video
+      dockerfile: Dockerfile.cpu
+    network_mode: service:mediasoup   # Share network namespace so video streams reach mediasoup on localhost
+    volumes:
+      - data:/data
+      - ./video:/app/video
+    depends_on:
+      - mediasoup
+    privileged: true
+    environment:
+      - SWARM_KEY=2
+      - APP_KEY=26
+      - DEVICE_SERIAL_NUMBER=aa4ef0de-9800-482b-8205-d7ca12388dd1
+      - ENV=DEV
+      - OBJECT_MODEL=rtmdet_tiny_8xb32-300e_coco
+      - CLASS_LIST=24, 26, 28
+      - USE_SAHI=false
+      - FRAME_BUFFER=180
+      - SMOOTHING=false
+      - CONF=0.1
+      - IOU=0.5
+      - RESOLUTION_X=1280
+      - RESOLUTION_Y=720
+      - FRAMERATE=30
+      - MEDIASOUP_URL=http://127.0.0.1:1200
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    # No nvidia runtime for local dev
   web:
     build: ./web
-    environment:
-      - DISABLE_VIDEO_SSH=1
     volumes:
       - ./web/backend:/app/backend
       - ./web/frontend:/app/frontend
       - ./web/entrypoint.dev.sh:/app/entrypoint.dev.sh
-      - ./data:/data
+      - data:/data
     ports:
       - 1100:1100
       - 5173:5173
+    depends_on:
+      - video
+    environment:
+      - VIDEO_API=http://mediasoup:8000
     entrypoint: ["/app/entrypoint.dev.sh"]
+
+volumes:
+  data:

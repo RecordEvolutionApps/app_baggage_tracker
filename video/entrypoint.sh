@@ -1,27 +1,13 @@
 #!/bin/bash
+set -euo pipefail
 
-mkdir -p /data/ssh
-mkdir -p ~/.ssh
-mkdir -p /run/sshd
-chown root:ssh /run/sshd
-chmod 700 /run/sshd
-if [ -f /data/ssh/id_rsa ]; then
-  echo "Info: SSH key already exists at /data/ssh/id_rsa"
+UVICORN_ARGS="--host 0.0.0.0 --port 8000 --app-dir /app/video"
+
+if [ "${ENV:-}" = "DEV" ]; then
+  echo "Starting Video Service API (dev mode with --reload) on port 8000..."
+  UVICORN_ARGS="$UVICORN_ARGS --reload"
 else
-  # Generate a new key if it doesn't exist
-  ssh-keygen -t rsa -b 4096 -f /data/ssh/id_rsa -N ""
+  echo "Starting Video Service API on port 8000..."
 fi
-cp -a /data/ssh/id_rsa.pub ~/.ssh/authorized_keys
 
-> ~/env_vars.txt
-
-# Loop through all environment variables
-for var in $(printenv | cut -d= -f1); do
-    # Get the value of the current variable
-    value=$(printenv "$var")
-
-    # Quote the value and append to env_vars.txt
-    echo "export $var=\"$value\"" >> ~/env_vars.txt
-done
-
-exec /usr/sbin/sshd -D
+exec uvicorn api:app $UVICORN_ARGS

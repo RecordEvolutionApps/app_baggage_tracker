@@ -50,37 +50,62 @@ saved_masks = []
 parser = argparse.ArgumentParser(description='Start a Video Stream for the given Camera Device')
 
 parser.add_argument('device', type=str, help='A device path like e.g. /dev/video0')
-parser.add_argument('camStream', type=str, help='One of frontCam, leftCam, rightCam, backCam')
+parser.add_argument('camStream', type=str, help='Stream name (e.g. frontCam)')
+parser.add_argument('--port', type=int, required=True, help='RTP port assigned by mediasoup')
 
 args = parser.parse_args()
 
-portMap = {"frontCam": 5004,
-           "leftCam": 5005,
-           "rightCam": 5006,
-           "backCam": 5007}
-
 device = args.device
 print('CAMERA USED:' + device)
+
+# Check OpenCV video backends
+print('OpenCV build info:')
+print('  FFmpeg:', 'YES' if cv2.getBuildInformation().find('FFMPEG') > 0 else 'NO')
+print('  GStreamer:', 'YES' if cv2.getBuildInformation().find('GStreamer') > 0 else 'NO')
 
 def setVideoSource(device):
     global RESOLUTION_X
     global RESOLUTION_Y
     if device.startswith('http'):
         if device.startswith('https://youtu') or device.startswith('https://www.youtube.com'):
-            video = get_youtube_video(device, RESOLUTION_Y)
-            RESOLUTION_X = video["width"]
-            RESOLUTION_Y = video["height"]
-            device = video.get('url')
-        cap = cv2.VideoCapture(device)
-        # device = f"uridecay url='{device}' ! nvenc-hwaccel=true ! nvdec_hwaccel ! videoconvert ! appsink"
-        # cap = cv2.VideoCapture(device, cv2.CAP_GSTREAMER)
+            # Get YouTube stream URL via yt_dlp, then use OpenCV
+            try:
+                video = get_youtube_video(device, RESOLUTION_Y)
+                RESOLUTION_X = video.get("width", RESOLUTION_X)
+                RESOLUTION_Y = video.get("height", RESOLUTION_Y)
+                stream_url = video.get('url', device)
+                print(f'YouTube resolved to {RESOLUTION_X}x{RESOLUTION_Y}, streaming with OpenCV')
+                cap = cv2.VideoCapture(stream_url)
+            except Exception as err:
+                print(f'YouTube resolution failed: {err}, trying direct URL')
+                cap = cv2.VideoCapture(device)
+        else:
+            # Direct HTTPS/HTTP streaming with OpenCV (GStreamer preferred)
+            print(f'Opening HTTP(S) video with OpenCV: {device}')
+            cap = cv2.VideoCapture(device)
+            if not cap.isOpened():
+                print(f'FFmpeg backend failed, trying without explicit backend: {device}')
+                cap = cv2.VideoCapture(device)
+            if cap.isOpened():
+                actual_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                actual_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                if actual_width > 0 and actual_height > 0:
+                    RESOLUTION_X = actual_width
+                    RESOLUTION_Y = actual_height
+                    print(f'HTTP video opened successfully: {RESOLUTION_X}x{RESOLUTION_Y}')
+            else:
+                print(f'Failed to open HTTP video: {device}')
 
     elif device.startswith('rtsp:'):
         cap = cv2.VideoCapture(device)
     elif device.startswith('demoVideo'):
+        # Use default backend (GStreamer) for best performance
         cap = cv2.VideoCapture('/app/video/luggagebelt.m4v')
+        # Give GStreamer pipeline time to start (prevents immediate read failures)
+        time.sleep(0.5)
         RESOLUTION_X = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         RESOLUTION_Y = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        print(f'Demo video opened: {RESOLUTION_X}x{RESOLUTION_Y}')
         # RESOLUTION_X = 1280
         # RESOLUTION_Y = 720
     else:
@@ -116,11 +141,22 @@ async def main(_saved_masks):
 
         if torch.cuda.is_available():
             # Hardware h264 encoding of jetson
-            outputFormat = "queue ! videoconvert ! nvvidconv ! queue ! video/x-raw(memory:NVMM), format=I420 ! nvv4l2h264enc maxperf-enable=true preset-level=1 insert-sps-pps=true insert-vui=true iframeinterval=10 idrinterval=10 ! rtph264pay pt=96 config-interval=1"
+            outputFormat = "queue ! videoconvert ! nvvidconv ! queue ! video/x-raw(memory:NVMM), format=I420 ! nvv4l2h264enc maxperf-enable=true preset-level=1 insert-sps-pps=true insert-vui=true iframeinterval=10 idrinterval=10 ! rtph264pay pt=96 ssrc=11111111 config-interval=1"
         else:
-            outputFormat = "videoconvert ! video/x-raw, format=I420 ! x264enc tune=zerolatency ! rtph264pay pt=96 config-interval=1"
+            # veryfast preset: good balance of speed/quality (ultrafast was too low quality)
+            # NOTE: Do NOT use intra-refresh=true — it replaces real IDR keyframes with gradual
+            # refresh, which prevents the browser H264 decoder from starting after a reconnect.
+            # key-int-max=10 ensures an IDR every ~0.33s at 30fps for fast recovery on browser refresh.
+            outputFormat = "videoconvert ! video/x-raw, format=I420 ! x264enc tune=zerolatency key-int-max=10 bframes=0 speed-preset=veryfast ! rtph264pay pt=96 ssrc=11111111 config-interval=1"
 
-        writerStream = "appsrc ! " + outputFormat + " ! udpsink host=janus port=" + str(portMap[args.camStream]) + " sync=false async=false"
+        print(f"Streaming to {args.camStream} on port {args.port} (127.0.0.1)")
+
+        if args.port not in range(10000, 10101):  # Just check if valid
+            print("Port error")
+            sys.exit(1)
+
+        # Send to localhost since we share network namespace with mediasoup
+        writerStream = "appsrc ! " + outputFormat + " ! udpsink host=127.0.0.1 port=" + str(args.port) + " sync=false async=false"
         print('-------------CREATING WRITE STREAM:', writerStream)
         out = cv2.VideoWriter(writerStream, cv2.CAP_GSTREAMER, 0, FRAMERATE, (RESOLUTION_X, RESOLUTION_Y), True)
 
@@ -130,6 +166,8 @@ async def main(_saved_masks):
         start = time.time()
         real_ms = 0
         video_ms = 0
+        frame_interval = 1.0 / FRAMERATE  # seconds per frame
+        next_frame_time = time.time()
         aggCounts = []
         if USE_SAHI: slicer = initSliceInferer(model)
 
@@ -139,14 +177,27 @@ async def main(_saved_masks):
             elapsed_time1 = time.time() - start_time1
             elapsed_time2 = time.time() - start_time2
 
-            real_ms = (time.time() - start) * 1000
-            while real_ms >= video_ms:
-                success, frame = cap.read()
-                if not success: break
-                real_ms = (time.time() - start) * 1000
+            # Frame pacing: use CAP_PROP_POS_MSEC when available, otherwise pace by FPS timer
+            now = time.time()
+            real_ms = (now - start) * 1000
+
+            # Read one frame, optionally skip if we're behind
+            success, frame = cap.read()
+            if success:
                 video_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
-                # print('real > vs', int(real_ms), int(video_ms), real_ms > video_ms)
-            video_ms = 0
+                if video_ms > 0:
+                    # Video position tracking works — skip frames to catch up
+                    while real_ms >= video_ms and video_ms > 0:
+                        success, frame = cap.read()
+                        if not success: break
+                        real_ms = (time.time() - start) * 1000
+                        video_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
+                else:
+                    # CAP_PROP_POS_MSEC unreliable (GStreamer with m4v) — pace by FPS timer
+                    wait_time = next_frame_time - now
+                    if wait_time > 0:
+                        await sleep(wait_time)
+                    next_frame_time = time.time() + frame_interval
 
             if not success:
                 print("################ RESTART VIDEO ####################")
@@ -215,7 +266,10 @@ async def main(_saved_masks):
 
         print('WARNING: Video source is not open', device)
         cap.release()
-        cv2.destroyAllWindows()
+        try:
+            cv2.destroyAllWindows()
+        except cv2.error:
+            print('cv2.destroyAllWindows() not supported in headless mode')
     except Exception as e:
         print(f'############################# Error in video loop: {str(e)}')
         traceback.print_exc()
@@ -264,9 +318,21 @@ def publishLineCount(line_name, num_in, num_out):
 
 
 if __name__ == "__main__":
-    ironflock = IronFlock()
-    
-    task1 = get_event_loop().create_task(readMasksFromStdin(saved_masks))
-    task2 = get_event_loop().create_task(main(saved_masks))
+    ENV = os.environ.get('ENV', '')
 
-    ironflock.run()
+    if ENV == 'DEV':
+        # Stub IronFlock for local dev — no WAMP connection needed
+        class _StubIronFlock:
+            async def publish_to_table(self, table, data):
+                pass
+        ironflock = _StubIronFlock()
+
+        loop = get_event_loop()
+        loop.create_task(readMasksFromStdin(saved_masks))
+        loop.create_task(main(saved_masks))
+        loop.run_forever()
+    else:
+        ironflock = IronFlock()
+        get_event_loop().create_task(readMasksFromStdin(saved_masks))
+        get_event_loop().create_task(main(saved_masks))
+        ironflock.run()

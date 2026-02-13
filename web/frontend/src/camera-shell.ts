@@ -1,40 +1,32 @@
 import { LitElement, html, css } from 'lit';
 import { customElement } from 'lit/decorators.js';
 import './camera-player.js';
-import { initJanus } from './modules/webRTCPlayer.js';
+import { initMediasoup } from './modules/webRTCPlayer.js';
 import { CameraPlayer } from './camera-player.js';
 import { mainStyles } from './utils.js';
 
 @customElement('camera-shell')
 export class CameraShell extends LitElement {
 
-  protected startJanus(event: CustomEvent): void {
-    
+  protected startStream(event: CustomEvent): void {
+    const target = event.target as CameraPlayer;
     const videoElement = event.detail?.videoElement as HTMLVideoElement | undefined;
-    if (!videoElement) {
-      console.error("[camera-shell] videoElement received from event detail is undefined or null! Cannot start Janus.");
-      return; // Stop here if no video element
+    if (!videoElement || !target?.id) {
+      console.error('[camera-shell] videoElement or camId missing from event');
+      return;
     }
 
-    const frontCam = this.shadowRoot?.getElementById(
-      'frontCam',
-    ) as CameraPlayer;
+    // Build videoPlayers from all rendered camera-player elements
+    const videoPlayers: Record<string, HTMLVideoElement | undefined> = {};
+    this.shadowRoot?.querySelectorAll('camera-player').forEach((el) => {
+      const player = el as CameraPlayer;
+      if (player.id && player.videoElement) {
+        videoPlayers[player.id] = player.videoElement;
+      }
+    });
+    console.log('[camera-shell] videoPlayers', videoPlayers);
 
-    const leftCam = this.shadowRoot?.getElementById('leftCam') as CameraPlayer;
-    const backCam = this.shadowRoot?.getElementById('backCam') as CameraPlayer;
-    const rightCam = this.shadowRoot?.getElementById(
-      'rightCam',
-    ) as CameraPlayer;
-
-    const videoPlayers = {
-      frontCam: frontCam?.videoElement,
-      leftCam: leftCam?.videoElement,
-      backCam: backCam?.videoElement,
-      rightCam: rightCam?.videoElement,
-    };
-    console.log('videoPlayers', frontCam, videoPlayers);
-
-    initJanus(videoPlayers);
+    initMediasoup(videoPlayers);
   }
 
   static styles = [
@@ -65,7 +57,7 @@ export class CameraShell extends LitElement {
         <camera-player
           id="frontCam"
           label="Front"
-          @video-ready=${this.startJanus}
+          @video-ready=${this.startStream}
         ></camera-player>
       </div>
       <!-- <div class="cam-container">

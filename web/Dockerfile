@@ -1,18 +1,22 @@
 FROM oven/bun:1.3-debian
 
-RUN apt-get update && apt-get install -y openssh-client
-
 WORKDIR /app
 
+# --- Backend deps (cached unless package.json changes) ---
 COPY backend/package.json /app/backend/
 RUN cd /app/backend && bun i
-COPY backend/* /app/backend/
+
+# --- Frontend deps (cached unless package.json/lockfile changes) ---
+COPY frontend/package.json frontend/bun.lockb /app/frontend/
+RUN cd /app/frontend && bun i
+
+# --- Copy source code (changes frequently) ---
+COPY backend/ /app/backend/
+COPY frontend/ /app/frontend/
+
+# --- Build frontend ---
+RUN cd /app/frontend && bun run build
+
 COPY entrypoint.sh .
-COPY frontend /app/frontend
-RUN cd frontend && bun i 
-RUN cd frontend && bun run build
 
 ENTRYPOINT ["/app/entrypoint.sh"]
-
-
-# ssh -o StrictHostKeyChecking=no video

@@ -3,7 +3,7 @@ set ignore-comments := true
 
 # Start dev stack (frontend + backend) with bind mounts
 dev:
-  docker compose -f docker-compose.dev.yml up --build
+  docker compose -f docker-compose.dev.yml up --build -d
 
 # Stop dev stack
 dev-down:
