@@ -9,9 +9,11 @@ import subprocess
 from asyncio import get_event_loop, sleep
 import sys
 import cv2
-import traceback
+import logging
 import torch
 from typing import Dict, Any, Optional
+
+logger = logging.getLogger('model_utils')
 
 OBJECT_MODEL = os.environ.get('OBJECT_MODEL', 'rtmdet_tiny_8xb32-300e_coco')
 DETECT_BACKEND = os.environ.get('DETECT_BACKEND', 'mmdet')
@@ -25,18 +27,14 @@ FRAME_BUFFER = int(os.environ.get('FRAME_BUFFER', 64))
 CLASS_LIST = os.environ.get('CLASS_LIST', '')
 CLASS_LIST = CLASS_LIST.split(',')
 
-with open('/app/video/coco_classes.json', 'r') as f:
-  class_id_topic = json.load(f)
-
 try:
     CLASS_LIST = [int(num.strip()) for num in CLASS_LIST]
 except Exception as err:
-    print('Invalid Class list given', CLASS_LIST)
+    logger.warning('Invalid Class list given: %s', CLASS_LIST)
     CLASS_LIST = []
 
 if len(CLASS_LIST) <= 1:
-    CLASS_LIST = list(class_id_topic.keys())
-    CLASS_LIST = [int(item) for item in CLASS_LIST]
+    CLASS_LIST = []
 
 # Open-vocabulary class names (text labels for models like Grounding DINO)
 CLASS_NAMES: list[str] = []
@@ -74,10 +72,10 @@ MMDET_MODEL_ZOO = {
 }
 
 def download_file(url: str, destination: str) -> None:
-    print(f'Downloading {url}...')
+    logger.info('Downloading %s...', url)
     Path(destination).parent.mkdir(parents=True, exist_ok=True)
     urllib.request.urlretrieve(url, destination)
-    print('Download complete!')
+    logger.info('Download complete')
 
 def is_model_cached(model_name: str) -> bool:
     """Check whether a model's checkpoint is already available locally."""
@@ -207,10 +205,10 @@ def get_mmdet_model(model_name: str) -> Dict[str, Any]:
     # metafile, properly handling _base_ inheritance.  Use locally cached
     # weights when available, otherwise let DetInferencer auto-download.
     if checkpoint_path.is_file():
-        inferencer = DetInferencer(model=model_name, weights=str(checkpoint_path), device=device)
+        inferencer = DetInferencer(model=model_name, weights=str(checkpoint_path), device=device, show_progress=False)
     else:
-        print(f'No cached checkpoint for "{model_name}", DetInferencer will auto-download...')
-        inferencer = DetInferencer(model=model_name, device=device)
+        logger.info('No cached checkpoint for "%s", DetInferencer will auto-download...', model_name)
+        inferencer = DetInferencer(model=model_name, device=device, show_progress=False)
 
     native_wh = MMDET_MODEL_ZOO.get(model_name, {}).get('native_input_wh', (640, 640))
     return {
@@ -271,7 +269,7 @@ def count_detections(detections):
             else:
                 count_dict[class_id] = 1
     except Exception as e:
-        print('failed to count', e)
+        logger.warning('Failed to count: %s', e)
     return count_dict
 
 
@@ -284,7 +282,7 @@ async def watchMaskFile(saved_masks, cam_stream='frontCam', poll_interval=1.0):
     legacy_path = '/data/mask.json'
     last_mtime = 0.0
 
-    print(f"Watching mask file: {mask_path}")
+    logger.info('Watching mask file: %s', mask_path)
 
     while True:
         try:
@@ -298,10 +296,9 @@ async def watchMaskFile(saved_masks, cam_stream='frontCam', poll_interval=1.0):
                         loaded_masks = json.load(f)
                     saved_masks[:] = []
                     saved_masks.extend(prepMasks(loaded_masks))
-                    print(f"Reloaded masks from {path} (mtime={mtime})")
+                    logger.info('Reloaded masks from %s', path)
         except Exception as e:
-            traceback.print_exc()
-            print(f'Error reading mask file: {e}')
+            logger.error('Error reading mask file: %s', e, exc_info=True)
 
         await sleep(poll_interval)
 
@@ -314,7 +311,7 @@ async def watchSettingsFile(settings_dict, cam_stream='frontCam', poll_interval=
     settings_path = f'/data/settings/{cam_stream}.json'
     last_mtime = 0.0
 
-    print(f"Watching settings file: {settings_path}")
+    logger.info('[settings] Watching %s', settings_path)
 
     while True:
         try:
@@ -324,11 +321,20 @@ async def watchSettingsFile(settings_dict, cam_stream='frontCam', poll_interval=
                     last_mtime = mtime
                     with open(settings_path, 'r') as f:
                         new_settings = json.load(f)
+                    # Log which keys changed
+                    changed = {}
+                    for k, v in new_settings.items():
+                        old_v = settings_dict.get(k)
+                        if old_v != v:
+                            changed[k] = {'from': old_v, 'to': v}
                     settings_dict.update(new_settings)
-                    print(f"Reloaded settings from {settings_path}: {settings_dict}")
+                    if changed:
+                        for k, diff in changed.items():
+                            logger.info('[settings] %s: %s: %s -> %s', cam_stream, k, diff['from'], diff['to'])
+                    else:
+                        logger.debug('[settings] %s: settings file touched (no changes)', cam_stream)
         except Exception as e:
-            traceback.print_exc()
-            print(f'Error reading settings file: {e}')
+            logger.error('[settings] Error reading settings file: %s', e, exc_info=True)
 
         await sleep(poll_interval)
 
@@ -384,7 +390,7 @@ def prepMasks(in_masks):
             mask['annotator'] = line_annotator
 
         out_masks.append(mask)
-    print('Refreshed Masks', out_masks)
+    logger.info('[masks] Refreshed %d mask(s)', len(out_masks))
     return out_masks
 
 def get_extreme_points(masks, frame_buffer=FRAME_BUFFER):
@@ -406,11 +412,12 @@ def get_extreme_points(masks, frame_buffer=FRAME_BUFFER):
     return max(0, low_x - frame_buffer), max(0, low_y - frame_buffer), min(RESOLUTION_X - 1, high_x + frame_buffer), min(RESOLUTION_Y - 1, high_y + frame_buffer)
 
 
-def initSliceInferer(model_bundle: Dict[str, Any]):
+def initSliceInferer(model_bundle: Dict[str, Any], settings_dict=None):
     native_w, native_h = model_bundle.get('native_input_wh', (640, 640))
 
     def inferSlice(image_slice: np.ndarray) -> Optional[sv.Detections]:
-        detections = infer_frame(image_slice, model_bundle)
+        conf = float(settings_dict.get('confidence', CONF)) if settings_dict else CONF
+        detections = infer_frame(image_slice, model_bundle, confidence=conf)
         return detections if detections is not False else empty_detections()
 
     slicer = sv.InferenceSlicer(
@@ -422,18 +429,18 @@ def initSliceInferer(model_bundle: Dict[str, Any]):
     )
     return slicer
 
-def infer(frame, model_bundle):
-    return infer_frame(frame, model_bundle)
+def infer(frame, model_bundle, confidence=None):
+    return infer_frame(frame, model_bundle, confidence=confidence)
 
-def infer_frame(frame: np.ndarray, model_bundle: Dict[str, Any]):
+def infer_frame(frame: np.ndarray, model_bundle: Dict[str, Any], confidence=None):
     backend = model_bundle.get('backend')
     if backend == 'mmdet':
-        return infer_mmdet(frame, model_bundle['inferencer'])
+        return infer_mmdet(frame, model_bundle['inferencer'], confidence=confidence)
     raise ValueError(f'Unsupported backend in model bundle: {backend}')
 
-def infer_mmdet(frame: np.ndarray, inferencer) -> Optional[sv.Detections]:
+def infer_mmdet(frame: np.ndarray, inferencer, confidence=None) -> Optional[sv.Detections]:
     try:
-        results = inferencer(frame, return_vis=False)
+        results = inferencer(frame, return_vis=False, no_save_pred=True, print_result=False)
         predictions = results.get('predictions', [])
         if not predictions:
             return False
@@ -444,7 +451,8 @@ def infer_mmdet(frame: np.ndarray, inferencer) -> Optional[sv.Detections]:
         if bboxes.size == 0:
             return False
 
-        keep = scores >= CONF
+        conf_threshold = confidence if confidence is not None else CONF
+        keep = scores >= conf_threshold
         if CLASS_LIST:
             class_mask = np.isin(labels, CLASS_LIST)
             keep = np.logical_and(keep, class_mask)
@@ -462,8 +470,7 @@ def infer_mmdet(frame: np.ndarray, inferencer) -> Optional[sv.Detections]:
             class_id=labels,
         )
     except Exception as e:
-        print('Failed to extract detections from MMDetection result', e)
-        traceback.print_exc()
+        logger.error('Failed to extract detections from MMDetection result: %s', e, exc_info=True)
         return False
 
 def move_detections(detections: sv.Detections, offset_x: int, offset_y: int) -> sv.Detections:
@@ -483,8 +490,7 @@ def processFrame(frame, detections, saved_masks):
         if SMOOTHING:
             detections = smoother.update_with_detections(detections)
     except Exception as e:
-        print('Error when smoothing detections or updating tracker', str(e))
-        traceback.print_exc()
+        logger.warning('Error when smoothing detections or updating tracker: %s', e, exc_info=True)
 
     zoneCounts = []
     lineCounts = []
@@ -498,7 +504,7 @@ def processFrame(frame, detections, saved_masks):
     # Annotate all detections if no zones are defined
     if len(zoneMasks) == 0:
         frame = bounding_box_annotator.annotate(scene=frame, detections=detections)
-        # labels = [f"{class_id_topic[str(class_id)]} #{tracker_id}" for class_id, tracker_id in zip(detections.class_id, detections.tracker_id)]
+        # labels = [f"#{tracker_id}" for tracker_id in detections.tracker_id]
         frame = label_annotator.annotate(scene=frame, detections=detections)
 
         count_dict = count_detections(detections)
@@ -510,7 +516,7 @@ def processFrame(frame, detections, saved_masks):
             try:
                 zone_mask = zone.trigger(detections=detections)
             except Exception as e:
-                print('Failed to get detections')
+                logger.warning('Failed to get detections: %s', e)
                 continue
 
             count = zone.current_count
@@ -518,7 +524,7 @@ def processFrame(frame, detections, saved_masks):
 
             filtered_detections = detections[zone_mask]
             
-            # labels = [f"{class_id_topic[str(class_id)]} #{tracker_id}" for class_id, tracker_id in zip(filtered_detections.class_id, filtered_detections.tracker_id)]
+            # labels = [f"#{tracker_id}" for tracker_id in filtered_detections.tracker_id]
 
             count_dict = count_polygon_zone(zone, CLASS_LIST)
             zoneCounts.append({'label': saved_mask['label'], 'count': count_dict})
@@ -539,8 +545,7 @@ def processFrame(frame, detections, saved_masks):
             if num_in > 0 or num_out > 0:
                 lineCounts.append({'label': saved_mask['label'], 'num_in': num_in, 'num_out': num_out})
         except Exception as e:
-            traceback.print_exc()
-            print('Failed to get line counts')
+            logger.warning('Failed to get line counts: %s', e, exc_info=True)
             # continue
 
         frame = line_annotator.annotate(frame, line_counter=lineZone)

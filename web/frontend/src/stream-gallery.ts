@@ -47,8 +47,10 @@ export class StreamGallery extends LitElement {
       this.streams = [];
     }
 
-    // Mark all streams as loading
-    this.loadingStreams = new Set(this.streams.map((s) => s.camStream));
+    // Mark only streams with a configured source as loading
+    this.loadingStreams = new Set(
+      this.streams.filter((s) => !!s.path).map((s) => s.camStream)
+    );
 
     // Wait for render, then init mediasoup with all video elements
     await this.updateComplete;
@@ -73,10 +75,13 @@ export class StreamGallery extends LitElement {
   }
 
   private initVideoPlayers() {
+    const configuredStreams = new Set(
+      this.streams.filter((s) => !!s.path).map((s) => s.camStream)
+    );
     const videoPlayers: Record<string, HTMLVideoElement | undefined> = {};
     this.shadowRoot?.querySelectorAll<HTMLVideoElement>('video[data-cam]').forEach((v) => {
       const camId = v.dataset.cam;
-      if (camId) videoPlayers[camId] = v;
+      if (camId && configuredStreams.has(camId)) videoPlayers[camId] = v;
     });
     if (Object.keys(videoPlayers).length > 0) {
       initMediasoup(videoPlayers);
@@ -211,6 +216,12 @@ export class StreamGallery extends LitElement {
         color: #8a8b9e;
       }
 
+      .tile-loading span:first-of-type {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #ccd0e0;
+      }
+
       .spinner {
         width: 28px;
         height: 28px;
@@ -239,13 +250,24 @@ export class StreamGallery extends LitElement {
 
       .tile-placeholder {
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
         width: 100%;
         height: 100%;
-        color: #556;
+        gap: 8px;
         font-family: sans-serif;
-        font-size: 0.85rem;
+      }
+
+      .tile-placeholder span:first-child {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #ccd0e0;
+      }
+
+      .tile-placeholder span:last-child {
+        font-size: 0.8rem;
+        color: #8a8b9e;
       }
 
       .add-tile {
@@ -268,7 +290,6 @@ export class StreamGallery extends LitElement {
       }
 
       .add-tile md-icon {
-        font-size: 40px;
         color: #788894;
       }
 
@@ -310,11 +331,19 @@ export class StreamGallery extends LitElement {
           (s) => s.camStream,
           (s) => html`
             <div class="tile" @click=${() => this.onTileClick(s.camStream)}>
-              <div class="tile-loading" ?hidden=${!this.loadingStreams.has(s.camStream)}>
-                <div class="spinner"></div>
-                <span>Connecting…</span>
-              </div>
-              <video data-cam=${s.camStream} autoplay muted playsinline></video>
+              ${s.path ? html`
+                <div class="tile-loading" ?hidden=${!this.loadingStreams.has(s.camStream)}>
+                  <div class="spinner"></div>
+                  <span>${s.name || s.camStream}</span>
+                  <span>Connecting…</span>
+                </div>
+                <video data-cam=${s.camStream} autoplay muted playsinline></video>
+              ` : html`
+                <div class="tile-placeholder">
+                  <span>${s.name || s.camStream}</span>
+                  <span>No source configured</span>
+                </div>
+              `}
               <div class="tile-label">${s.name || s.camStream}</div>
             </div>
           `,

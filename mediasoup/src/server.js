@@ -231,6 +231,19 @@ async function handleMessage(msg, ws, consumerTransports, consumers) {
     // ── Step 2: Browser requests a WebRTC transport for consuming ──────
     case 'createConsumerTransport': {
       const camId = msg.camId || 'frontCam';
+
+      // Don't create a transport if the camera hasn't registered yet
+      if (!cameras.has(camId)) {
+        throw new Error(`Camera "${camId}" not found`);
+      }
+
+      // Close any existing transport for this camera to prevent leaks
+      const existing = consumerTransports.get(camId);
+      if (existing) {
+        existing.close();
+        consumerTransports.delete(camId);
+      }
+
       const transport = await router.createWebRtcTransport({
         listenInfos: [
           { protocol: 'udp', ip: LISTEN_IP, announcedAddress: ANNOUNCED_IP },

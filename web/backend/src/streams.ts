@@ -129,9 +129,9 @@ async function initStreams() {
 
     if (Object.keys(loaded).length === 0 && !firstCam) {
         const demoCam: Camera = {
-            id: 'demoVideo',
+            id: 'frontCam',
             type: 'IP',
-            name: 'Demo Video',
+            name: 'frontCam',
             path: 'demoVideo',
             camStream: 'frontCam',
         }

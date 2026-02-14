@@ -6,6 +6,7 @@ import cv2
 import os
 import argparse
 import time
+import logging
 from datetime import datetime
 from ironflock import IronFlock
 from concurrent.futures import ThreadPoolExecutor
@@ -15,15 +16,16 @@ import base64
 import torch
 import functools
 
-import traceback
-
 from model_utils import getModel, processFrame, initSliceInferer, move_detections, get_extreme_points, infer, get_youtube_video, overlay_text, count_polygon_zone, count_detections, watchMaskFile, watchSettingsFile, empty_detections, FRAME_BUFFER
 import model_utils  # for updating CLASS_LIST dynamically
 
-print = functools.partial(print, flush=True)
-
-with open('/app/video/coco_classes.json', 'r') as f:
-  class_id_topic = json.load(f)
+# Configure logging for the whole video service
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(name)s %(levelname)s %(message)s',
+    datefmt='%H:%M:%S',
+)
+logger = logging.getLogger('videoStream')
 
 OBJECT_MODEL = os.environ.get('OBJECT_MODEL')
 RESOLUTION_X = int(os.environ.get('RESOLUTION_X', 640))
@@ -38,14 +40,13 @@ CLASS_LIST = CLASS_LIST.split(',')
 try:
     CLASS_LIST = [int(num.strip()) for num in CLASS_LIST]
 except Exception as err:
-    print('Invalid Class list given', CLASS_LIST)
+    logger.warning('Invalid Class list given: %s', CLASS_LIST)
     CLASS_LIST = []
 
 if len(CLASS_LIST) <= 1:
-    CLASS_LIST = list(class_id_topic.keys())
-    CLASS_LIST = [int(item) for item in CLASS_LIST]
+    CLASS_LIST = []
 
-print('########## USING CLASS LIST:', CLASS_LIST)
+logger.info('Using CLASS_LIST: %s', CLASS_LIST)
 
 saved_masks = []
 stream_settings = { 'model': OBJECT_MODEL }
@@ -59,12 +60,12 @@ parser.add_argument('--port', type=int, required=True, help='RTP port assigned b
 args = parser.parse_args()
 
 device = args.device
-print('CAMERA USED:' + device)
+logger.info('Camera: %s', device)
 
 # Check OpenCV video backends
-print('OpenCV build info:')
-print('  FFmpeg:', 'YES' if cv2.getBuildInformation().find('FFMPEG') > 0 else 'NO')
-print('  GStreamer:', 'YES' if cv2.getBuildInformation().find('GStreamer') > 0 else 'NO')
+logger.info('OpenCV backends — FFmpeg: %s, GStreamer: %s',
+    'YES' if cv2.getBuildInformation().find('FFMPEG') > 0 else 'NO',
+    'YES' if cv2.getBuildInformation().find('GStreamer') > 0 else 'NO')
 
 def setVideoSource(device):
     global RESOLUTION_X
@@ -77,17 +78,17 @@ def setVideoSource(device):
                 RESOLUTION_X = video.get("width", RESOLUTION_X)
                 RESOLUTION_Y = video.get("height", RESOLUTION_Y)
                 stream_url = video.get('url', device)
-                print(f'YouTube resolved to {RESOLUTION_X}x{RESOLUTION_Y}, streaming with OpenCV')
+                logger.info('YouTube resolved to %dx%d, streaming with OpenCV', RESOLUTION_X, RESOLUTION_Y)
                 cap = cv2.VideoCapture(stream_url)
             except Exception as err:
-                print(f'YouTube resolution failed: {err}, trying direct URL')
+                logger.warning('YouTube resolution failed: %s, trying direct URL', err)
                 cap = cv2.VideoCapture(device)
         else:
             # Direct HTTPS/HTTP streaming with OpenCV (GStreamer preferred)
-            print(f'Opening HTTP(S) video with OpenCV: {device}')
+            logger.info('Opening HTTP(S) video with OpenCV: %s', device)
             cap = cv2.VideoCapture(device)
             if not cap.isOpened():
-                print(f'FFmpeg backend failed, trying without explicit backend: {device}')
+                logger.warning('FFmpeg backend failed, trying without explicit backend: %s', device)
                 cap = cv2.VideoCapture(device)
             if cap.isOpened():
                 actual_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -95,9 +96,9 @@ def setVideoSource(device):
                 if actual_width > 0 and actual_height > 0:
                     RESOLUTION_X = actual_width
                     RESOLUTION_Y = actual_height
-                    print(f'HTTP video opened successfully: {RESOLUTION_X}x{RESOLUTION_Y}')
+                    logger.info('HTTP video opened: %dx%d', RESOLUTION_X, RESOLUTION_Y)
             else:
-                print(f'Failed to open HTTP video: {device}')
+                logger.error('Failed to open HTTP video: %s', device)
 
     elif device.startswith('rtsp:'):
         cap = cv2.VideoCapture(device)
@@ -108,7 +109,7 @@ def setVideoSource(device):
         time.sleep(0.5)
         RESOLUTION_X = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         RESOLUTION_Y = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        print(f'Demo video opened: {RESOLUTION_X}x{RESOLUTION_Y}')
+        logger.info('Demo video opened: %dx%d', RESOLUTION_X, RESOLUTION_Y)
         # RESOLUTION_X = 1280
         # RESOLUTION_Y = 720
     else:
@@ -118,13 +119,13 @@ def setVideoSource(device):
 
 cap = setVideoSource(device)
 
-print('RESOLUTION', RESOLUTION_X, RESOLUTION_Y, device)
+logger.info('Resolution: %dx%d, source: %s', RESOLUTION_X, RESOLUTION_Y, device)
 cap.set(3, RESOLUTION_X)
 cap.set(4, RESOLUTION_Y)
 
 model = getModel(OBJECT_MODEL)
 current_model_name = OBJECT_MODEL
-print(f'Model native input: {model.get("native_input_wh", "unknown")}')
+logger.info('Model native input: %s', model.get('native_input_wh', 'unknown'))
 
 # print("CUDA available:", torch.cuda.is_available(), 'GPUs', torch.cuda.device_count())
 
@@ -149,25 +150,25 @@ async def main(_saved_masks):
             # key-int-max=15 ensures an IDR every ~0.5s at 30fps for fast recovery on browser refresh.
             outputFormat = "videoconvert ! video/x-raw, format=I420 ! x264enc tune=zerolatency key-int-max=15 bframes=0 speed-preset=veryfast ! rtph264pay pt=96 ssrc=11111111 config-interval=1"
 
-        print(f"Streaming to {args.camStream} on port {args.port} (127.0.0.1)")
+        logger.info('Streaming %s to port %d (127.0.0.1)', args.camStream, args.port)
 
         if args.port not in range(10000, 10101):  # Just check if valid
-            print("Port error")
+            logger.error('Port %d out of range', args.port)
             sys.exit(1)
 
         # Send to localhost since we share network namespace with mediasoup
         writerStream = "appsrc ! " + outputFormat + " ! udpsink host=127.0.0.1 port=" + str(args.port) + " sync=false async=false"
-        print('-------------CREATING WRITE STREAM:', writerStream)
+        logger.debug('GStreamer pipeline: %s', writerStream)
         out = cv2.VideoWriter(writerStream, cv2.CAP_GSTREAMER, 0, FRAMERATE, (RESOLUTION_X, RESOLUTION_Y), True)
 
-        print('starting main video loop...')
+        logger.info('Starting main video loop...')
         success = True
         frame = None
         loop_start = time.monotonic()
         frame_interval = 1.0 / FRAMERATE  # seconds per frame
         next_frame_time = time.monotonic()
         aggCounts = []
-        slicer = initSliceInferer(model) if USE_SAHI else None
+        slicer = initSliceInferer(model, stream_settings) if USE_SAHI else None
 
         while cap.isOpened():
             await sleep(0) # Give other task time to run, not a hack: https://superfastpython.com/what-is-asyncio-sleep-zero/#:~:text=You%20can%20force%20the%20current,before%20resuming%20the%20current%20task.
@@ -184,24 +185,23 @@ async def main(_saved_masks):
                 if new_list != model_utils.CLASS_LIST:
                     model_utils.CLASS_LIST = new_list
                     CLASS_LIST[:] = new_list
-                    print('Updated CLASS_LIST from settings:', new_list)
+                    logger.info('Updated CLASS_LIST from settings: %s', new_list)
             elif settings_class_list is not None and len(settings_class_list) == 0:
-                # Empty list means "all classes"
-                all_classes = [int(k) for k in class_id_topic.keys()]
-                if model_utils.CLASS_LIST != all_classes:
-                    model_utils.CLASS_LIST = all_classes
-                    CLASS_LIST[:] = all_classes
-                    print('Reset CLASS_LIST to all classes')
+                # Empty list means "all classes" (no filter)
+                if model_utils.CLASS_LIST != []:
+                    model_utils.CLASS_LIST = []
+                    CLASS_LIST[:] = []
+                    logger.info('Reset CLASS_LIST to all classes (no filter)')
 
             # Dynamically update open-vocab class names from stream settings
             settings_class_names = stream_settings.get('classNames', None)
             if settings_class_names is not None and isinstance(settings_class_names, list):
                 if hasattr(model_utils, 'CLASS_NAMES') and settings_class_names != model_utils.CLASS_NAMES:
                     model_utils.CLASS_NAMES = settings_class_names
-                    print('Updated CLASS_NAMES from settings:', settings_class_names)
+                    logger.info('Updated CLASS_NAMES from settings: %s', settings_class_names)
                 elif not hasattr(model_utils, 'CLASS_NAMES'):
                     model_utils.CLASS_NAMES = settings_class_names
-                    print('Set CLASS_NAMES from settings:', settings_class_names)
+                    logger.info('Set CLASS_NAMES from settings: %s', settings_class_names)
 
             # --- Fixed-timestep pacing (standard game-loop / video-player pattern) ---
             # Always wait for the next frame slot before reading
@@ -232,13 +232,13 @@ async def main(_saved_masks):
                 next_frame_time = time.monotonic() + frame_interval
 
             if not success:
-                print("################ RESTART VIDEO ####################")
+                logger.warning('Restarting video source: %s', device)
                 await sleep(1)
                 cap = setVideoSource(device)
                 loop_start = time.monotonic()
                 next_frame_time = time.monotonic()
                 if elapsed_time >= 2.0:
-                    print('Video Frame could not be read from source', device)
+                    logger.error('Video frame could not be read from source: %s', device)
                     start_time = time.time()
                 continue
 
@@ -251,7 +251,7 @@ async def main(_saved_masks):
                 use_sahi = stream_settings.get('useSahi', USE_SAHI)
                 # Lazily create or clear slicer when the setting changes
                 if use_sahi and slicer is None:
-                    slicer = initSliceInferer(model)
+                    slicer = initSliceInferer(model, stream_settings)
                 elif not use_sahi:
                     slicer = None
 
@@ -265,7 +265,8 @@ async def main(_saved_masks):
                     cv2.rectangle(frame, (low_x, low_y), (high_x, high_y), (255, 0, 0), 2)
                     # print('SLICER detections:', detections)
                 else:
-                    detections = infer(frame, model)
+                    conf = float(stream_settings.get('confidence', model_utils.CONF))
+                    detections = infer(frame, model, confidence=conf)
 
             start_time2 = time.time()
 
@@ -308,15 +309,14 @@ async def main(_saved_masks):
             out.write(frame)
 
 
-        print('WARNING: Video source is not open', device)
+        logger.warning('Video source is not open: %s', device)
         cap.release()
         try:
             cv2.destroyAllWindows()
         except cv2.error:
-            print('cv2.destroyAllWindows() not supported in headless mode')
+            logger.debug('cv2.destroyAllWindows() not supported in headless mode')
     except Exception as e:
-        print(f'############################# Error in video loop: {str(e)}')
-        traceback.print_exc()
+        logger.critical('Fatal error in video loop: %s', e, exc_info=True)
         import sys
         sys.exit(1)
 
@@ -350,9 +350,7 @@ def publishClassCount(zone_name, result):
         }
 
     for class_id in CLASS_LIST:
-        payload[class_id_topic[str(class_id)]] = result.get(class_id, 0)
-
-    print(payload)
+        payload[str(class_id)] = result.get(class_id, 0)
 
     get_event_loop().create_task(ironflock.publish_to_table('detections', payload))
 
@@ -365,8 +363,8 @@ def publishLineCount(line_name, num_in, num_out):
         "num_out": num_out
     }
 
-    print(payload)
     get_event_loop().create_task(ironflock.publish_to_table('linecounts', payload))
+    
 
 
 if __name__ == "__main__":

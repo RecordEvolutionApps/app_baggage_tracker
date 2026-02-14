@@ -19,6 +19,7 @@ export type Camera = {
     camStream: string
     model?: string
     useSahi?: boolean
+    confidence?: number
     frameBuffer?: number
     classList?: number[]
     classNames?: string[]
@@ -61,6 +62,7 @@ export async function writeStreamSettings(camStream: string, cam: Camera) {
     const settings: Record<string, any> = {
         model: cam.model ?? 'rtmdet_tiny_8xb32-300e_coco',
         useSahi: cam.useSahi ?? true,
+        confidence: cam.confidence ?? 0.1,
         frameBuffer: cam.frameBuffer ?? 64,
         classList: cam.classList ?? [],
         classNames: cam.classNames ?? [],

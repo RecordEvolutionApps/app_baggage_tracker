@@ -146,6 +146,7 @@ export type Camera = {
   model?: string
   useSahi?: boolean
   frameBuffer?: number
+  confidence?: number
   classList?: number[]
   classNames?: string[]
 }

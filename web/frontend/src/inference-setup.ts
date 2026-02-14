@@ -30,6 +30,9 @@ export class InferenceSetup extends LitElement {
   declare frameBuffer: number;
 
   @state()
+  declare confidence: number;
+
+  @state()
   declare modelFilter: string;
 
   @state()
@@ -87,6 +90,7 @@ export class InferenceSetup extends LitElement {
     this.selectedModel = 'rtmdet_tiny_8xb32-300e_coco';
     this.useSahi = true;
     this.frameBuffer = 64;
+    this.confidence = 0.1;
     this.modelFilter = '';
     this.selectedDataset = '';
     this.selectedArch = '';
@@ -597,6 +601,7 @@ export class InferenceSetup extends LitElement {
       }
       this.useSahi = this.camSetup.camera?.useSahi ?? true;
       this.frameBuffer = this.camSetup.camera?.frameBuffer ?? 64;
+      this.confidence = this.camSetup.camera?.confidence ?? 0.1;
       // Restore persisted class selection
       if (this.camSetup.camera?.classList && this.camSetup.camera.classList.length > 0) {
         this.selectedClassIds = new Set(this.camSetup.camera.classList);
@@ -919,6 +924,21 @@ export class InferenceSetup extends LitElement {
     }
   }
 
+  private async onConfidenceChange(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    const confidence = parseFloat(input.value);
+    this.confidence = confidence;
+    try {
+      await fetch(`${this.basepath}/cameras/confidence`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ camStream: this.camStream, confidence }),
+      });
+    } catch (err) {
+      console.error('Failed to update confidence', err);
+    }
+  }
+
   private async fetchModelClasses(modelId: string, retries = 4) {
     if (!modelId || modelId === 'none') {
       this.availableClasses = [];
@@ -1059,6 +1079,9 @@ export class InferenceSetup extends LitElement {
         <div class="model-picker">
           <div class="model-summary-header">
             <span>Model</span>
+            <span class="model-count">
+              ${this.models.length} models available
+            </span>
           </div>
           <md-outlined-button class="model-button" @click=${this.openModelDialog}>
             ${this.selectedModel}
@@ -1068,9 +1091,7 @@ export class InferenceSetup extends LitElement {
               <md-text-button @click=${this.resetModel}>Reset</md-text-button>
             ` : ''}
           </div>
-          <span class="model-count">
-            ${this.models.length} models available
-          </span>
+
         </div>
 
         ${this.modelStatus !== 'idle' ? html`
@@ -1083,6 +1104,20 @@ export class InferenceSetup extends LitElement {
             ` : ''}
           </div>
         ` : ''}
+
+        <div class="frame-buffer-row" style="display: flex;">
+          <label for="confidence" class="fb-label">Confidence</label>
+          <input
+            id="confidence"
+            type="number"
+            min="0.1"
+            max="1.0"
+            step="0.05"
+            .value=${String(this.confidence)}
+            @change=${this.onConfidenceChange}
+            class="fb-input"
+          />
+        </div>
 
         <label class="sahi-toggle">
           <input
@@ -1108,6 +1143,8 @@ export class InferenceSetup extends LitElement {
             class="fb-input"
           />
         </div>
+
+
 
         <div class="class-filter-section">
           <div class="class-summary-header">

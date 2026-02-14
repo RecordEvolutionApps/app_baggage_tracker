@@ -60,6 +60,30 @@ export async function updateStreamSahi(ctx: Context) {
     return { status: 'ok', camStream, useSahi }
 }
 
+export async function updateStreamConfidence(ctx: Context) {
+    let body: any
+    try {
+        body = typeof ctx.body === 'string' ? JSON.parse(ctx.body) : ctx.body
+    } catch {
+        ctx.set.status = 400
+        return { error: 'Invalid JSON' }
+    }
+    const { camStream, confidence } = body
+    if (!camStream || typeof confidence !== 'number') {
+        ctx.set.status = 400
+        return { error: 'camStream (string) and confidence (number) are required' }
+    }
+    const cam = streamSetup[camStream]
+    if (!cam) {
+        ctx.set.status = 404
+        return { error: `Stream "${camStream}" not found` }
+    }
+    cam.confidence = confidence
+    await Bun.write(streamSetupFile, JSON.stringify(streamSetup))
+    await writeStreamSettings(camStream, cam)
+    return { status: 'ok', camStream, confidence }
+}
+
 export async function updateStreamFrameBuffer(ctx: Context) {
     let body: any
     try {

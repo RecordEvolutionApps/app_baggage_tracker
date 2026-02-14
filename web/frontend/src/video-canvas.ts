@@ -141,6 +141,11 @@ export class VideoCanvas extends LitElement {
       this.polygonManager.setCamStream(this.camStream);
     }
 
+    // If camSetup loaded and no source configured, stop showing spinner
+    if (changedProps.has('camSetup') && this.camSetup && !this.camSetup.camera?.path) {
+      this.loading = false;
+    }
+
     if (!this.initialized && this.video && this.width && this.height) {
       this.canvasElement.addEventListener('mousedown', this.getCursorPosition);
       this.canvasElement.width = this.width;
@@ -198,7 +203,6 @@ export class VideoCanvas extends LitElement {
         padding: 10px;
         box-sizing: border-box;
         background: #e9eaf2;
-        border-radius: 4px;
         overflow-y: auto;
         overflow-x: hidden;
         flex-shrink: 0;
@@ -284,6 +288,11 @@ export class VideoCanvas extends LitElement {
           <div class="spinner"></div>
           <span class="loading-text">Connecting to video stream…</span>
         </div>
+        ${!this.loading && this.camSetup && !this.camSetup.camera?.path ? html`
+          <div class="loading-overlay">
+            <span class="loading-text">No video source configured</span>
+          </div>
+        ` : ''}
         <canvas id="canvas"></canvas>
       </div>
     </div>`;
