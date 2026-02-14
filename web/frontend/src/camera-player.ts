@@ -72,7 +72,6 @@ protected async firstUpdated() {
         flex: 1;
         position: relative;
         margin: 0 auto;
-        padding: 23px 16px;
         box-sizing: border-box;
         background: #fff;
       }
@@ -96,7 +95,6 @@ protected async firstUpdated() {
 
   render() {
     return html`
-      <h3>Baggage Vision</h3>
       <video-canvas
         .video=${this.videoElement}
         .camSetup=${this.camSetup}

@@ -8,6 +8,7 @@ import argparse
 import time
 from datetime import datetime
 from ironflock import IronFlock
+from concurrent.futures import ThreadPoolExecutor
 
 from pprint import pprint
 import base64
@@ -16,7 +17,7 @@ import functools
 
 import traceback
 
-from model_utils import getModel, processFrame, initSliceInferer, move_detections, get_extreme_points, infer, get_youtube_video, overlay_text, count_polygon_zone, count_detections, readMasksFromStdin
+from model_utils import getModel, processFrame, initSliceInferer, move_detections, get_extreme_points, infer, get_youtube_video, overlay_text, count_polygon_zone, count_detections, watchMaskFile, watchSettingsFile, empty_detections, FRAME_BUFFER
 
 print = functools.partial(print, flush=True)
 
@@ -46,6 +47,7 @@ if len(CLASS_LIST) <= 1:
 print('########## USING CLASS LIST:', CLASS_LIST)
 
 saved_masks = []
+stream_settings = { 'model': OBJECT_MODEL }
 
 parser = argparse.ArgumentParser(description='Start a Video Stream for the given Camera Device')
 
@@ -119,12 +121,8 @@ print('RESOLUTION', RESOLUTION_X, RESOLUTION_Y, device)
 cap.set(3, RESOLUTION_X)
 cap.set(4, RESOLUTION_Y)
 
-MODEL_RESX = (RESOLUTION_X // 32) * 32 # must be multiple of max stride 32
-MODEL_RESY = (RESOLUTION_Y // 32) * 32
-if USE_SAHI:
-    model = getModel(OBJECT_MODEL)
-else:
-    model = getModel(OBJECT_MODEL, MODEL_RESX, MODEL_RESY)
+model = getModel(OBJECT_MODEL)
+print(f'Model native input: {model.get("native_input_wh", "unknown")}')
 
 # print("CUDA available:", torch.cuda.is_available(), 'GPUs', torch.cuda.device_count())
 
@@ -146,8 +144,8 @@ async def main(_saved_masks):
             # veryfast preset: good balance of speed/quality (ultrafast was too low quality)
             # NOTE: Do NOT use intra-refresh=true — it replaces real IDR keyframes with gradual
             # refresh, which prevents the browser H264 decoder from starting after a reconnect.
-            # key-int-max=10 ensures an IDR every ~0.33s at 30fps for fast recovery on browser refresh.
-            outputFormat = "videoconvert ! video/x-raw, format=I420 ! x264enc tune=zerolatency key-int-max=10 bframes=0 speed-preset=veryfast ! rtph264pay pt=96 ssrc=11111111 config-interval=1"
+            # key-int-max=15 ensures an IDR every ~0.5s at 30fps for fast recovery on browser refresh.
+            outputFormat = "videoconvert ! video/x-raw, format=I420 ! x264enc tune=zerolatency key-int-max=15 bframes=0 speed-preset=veryfast ! rtph264pay pt=96 ssrc=11111111 config-interval=1"
 
         print(f"Streaming to {args.camStream} on port {args.port} (127.0.0.1)")
 
@@ -163,13 +161,11 @@ async def main(_saved_masks):
         print('starting main video loop...')
         success = True
         frame = None
-        start = time.time()
-        real_ms = 0
-        video_ms = 0
+        loop_start = time.monotonic()
         frame_interval = 1.0 / FRAMERATE  # seconds per frame
-        next_frame_time = time.time()
+        next_frame_time = time.monotonic()
         aggCounts = []
-        if USE_SAHI: slicer = initSliceInferer(model)
+        slicer = initSliceInferer(model) if USE_SAHI else None
 
         while cap.isOpened():
             await sleep(0) # Give other task time to run, not a hack: https://superfastpython.com/what-is-asyncio-sleep-zero/#:~:text=You%20can%20force%20the%20current,before%20resuming%20the%20current%20task.
@@ -177,34 +173,42 @@ async def main(_saved_masks):
             elapsed_time1 = time.time() - start_time1
             elapsed_time2 = time.time() - start_time2
 
-            # Frame pacing: use CAP_PROP_POS_MSEC when available, otherwise pace by FPS timer
-            now = time.time()
-            real_ms = (now - start) * 1000
+            skip_inference = stream_settings.get('model', '') == 'none'
 
-            # Read one frame, optionally skip if we're behind
+            # --- Fixed-timestep pacing (standard game-loop / video-player pattern) ---
+            # Always wait for the next frame slot before reading
+            wait_time = next_frame_time - time.monotonic()
+            if wait_time > 0:
+                await sleep(wait_time)
+
+            # Read one frame
             success, frame = cap.read()
-            if success:
+
+            # When inference is active and we fell behind, drop frames to catch up
+            if success and not skip_inference:
                 video_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
                 if video_ms > 0:
-                    # Video position tracking works — skip frames to catch up
+                    real_ms = (time.monotonic() - loop_start) * 1000
                     while real_ms >= video_ms and video_ms > 0:
                         success, frame = cap.read()
                         if not success: break
-                        real_ms = (time.time() - start) * 1000
+                        real_ms = (time.monotonic() - loop_start) * 1000
                         video_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
-                else:
-                    # CAP_PROP_POS_MSEC unreliable (GStreamer with m4v) — pace by FPS timer
-                    wait_time = next_frame_time - now
-                    if wait_time > 0:
-                        await sleep(wait_time)
-                    next_frame_time = time.time() + frame_interval
+
+            # Schedule next frame relative to previous target (absorbs jitter)
+            next_frame_time += frame_interval
+            # Only hard-reset if we're very far behind (e.g. mode switch, video restart).
+            # Small spikes (publishImage etc.) self-correct: the next wait_time will be
+            # negative, so we skip the sleep and process immediately — catching up in 1-2 frames.
+            if next_frame_time < time.monotonic() - 0.5:
+                next_frame_time = time.monotonic() + frame_interval
 
             if not success:
                 print("################ RESTART VIDEO ####################")
                 await sleep(1)
                 cap = setVideoSource(device)
-                # cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                start = time.time()
+                loop_start = time.monotonic()
+                next_frame_time = time.monotonic()
                 if elapsed_time >= 2.0:
                     print('Video Frame could not be read from source', device)
                     start_time = time.time()
@@ -215,21 +219,33 @@ async def main(_saved_masks):
             detections = False
             fps_monitor.tick()
 
-            if USE_SAHI:
-                low_x, low_y, high_x, high_y = get_extreme_points(_saved_masks)
-                # print('CROPPING', low_x, low_y, high_x, high_y)
-                frame_ = frame[low_y:high_y, low_x:high_x]
-                detections = slicer(frame_)
-                detections = move_detections(detections, low_x, low_y)
-                cv2.rectangle(frame, (low_x, low_y), (high_x, high_y), (255, 0, 0), 2)
-                # print('SLICER detections:', detections)
-            else:
-                detections = infer(frame, model, MODEL_RESX, MODEL_RESY)
+            if not skip_inference:
+                use_sahi = stream_settings.get('useSahi', USE_SAHI)
+                # Lazily create or clear slicer when the setting changes
+                if use_sahi and slicer is None:
+                    slicer = initSliceInferer(model)
+                elif not use_sahi:
+                    slicer = None
+
+                if use_sahi and slicer is not None:
+                    frame_buf = int(stream_settings.get('frameBuffer', FRAME_BUFFER))
+                    low_x, low_y, high_x, high_y = get_extreme_points(_saved_masks, frame_buf)
+                    # print('CROPPING', low_x, low_y, high_x, high_y)
+                    frame_ = frame[low_y:high_y, low_x:high_x]
+                    detections = slicer(frame_)
+                    detections = move_detections(detections, low_x, low_y)
+                    cv2.rectangle(frame, (low_x, low_y), (high_x, high_y), (255, 0, 0), 2)
+                    # print('SLICER detections:', detections)
+                else:
+                    detections = infer(frame, model)
 
             start_time2 = time.time()
 
             if detections:
                 frame, zoneCounts, lineCounts = processFrame(frame, detections, _saved_masks)
+            elif skip_inference:
+                # Still draw zone/line overlays even without inference
+                frame, zoneCounts, lineCounts = processFrame(frame, empty_detections(), _saved_masks)
 
             # Draw FPS and Timestamp
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
@@ -276,12 +292,20 @@ async def main(_saved_masks):
         import sys
         sys.exit(1)
 
-def publishImage(frame):
-    _, encoded_frame = cv2.imencode('.jpg', frame)
-    base64_encoded_frame = base64.b64encode(encoded_frame.tobytes()).decode('utf-8')
-    now = datetime.now().astimezone().isoformat()
+_publish_pool = ThreadPoolExecutor(max_workers=1)
 
-    get_event_loop().create_task(ironflock.publish_to_table('images', {"tsp": now, "image": 'data:image/jpeg;base64,' + base64_encoded_frame}))
+def _encode_image(frame):
+    """CPU-intensive JPEG + base64 encoding — runs in a thread to avoid blocking the event loop."""
+    _, encoded_frame = cv2.imencode('.jpg', frame)
+    return base64.b64encode(encoded_frame.tobytes()).decode('utf-8')
+
+def publishImage(frame):
+    async def _publish():
+        loop = get_event_loop()
+        base64_encoded_frame = await loop.run_in_executor(_publish_pool, _encode_image, frame.copy())
+        now = datetime.now().astimezone().isoformat()
+        await ironflock.publish_to_table('images', {"tsp": now, "image": 'data:image/jpeg;base64,' + base64_encoded_frame})
+    get_event_loop().create_task(_publish())
 
 def publishCameras():
     now = datetime.now().astimezone().isoformat()
@@ -328,11 +352,13 @@ if __name__ == "__main__":
         ironflock = _StubIronFlock()
 
         loop = get_event_loop()
-        loop.create_task(readMasksFromStdin(saved_masks))
+        loop.create_task(watchMaskFile(saved_masks, args.camStream))
+        loop.create_task(watchSettingsFile(stream_settings, args.camStream))
         loop.create_task(main(saved_masks))
         loop.run_forever()
     else:
         ironflock = IronFlock()
-        get_event_loop().create_task(readMasksFromStdin(saved_masks))
+        get_event_loop().create_task(watchMaskFile(saved_masks, args.camStream))
+        get_event_loop().create_task(watchSettingsFile(stream_settings, args.camStream))
         get_event_loop().create_task(main(saved_masks))
         ironflock.run()

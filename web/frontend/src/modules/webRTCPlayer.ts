@@ -393,4 +393,16 @@ function cleanupCamera(camId: string): void {
   }
 }
 
-export { initMediasoup }
+export { initMediasoup, stopMediasoup }
+
+function stopMediasoup(): void {
+  initializing = false;
+  sessionId++;
+  cleanup();
+  if (ws) {
+    try {
+      ws.onclose = null; // prevent auto-reconnect
+      ws.close();
+    } catch {}
+  }
+}

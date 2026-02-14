@@ -1,32 +1,66 @@
 import { LitElement, html, css } from 'lit';
-import { customElement } from 'lit/decorators.js';
-import './camera-player.js';
-import { initMediasoup } from './modules/webRTCPlayer.js';
-import { CameraPlayer } from './camera-player.js';
+import { customElement, state } from 'lit/decorators.js';
+import './stream-gallery.js';
+import './stream-editor.js';
+import { stopMediasoup } from './modules/webRTCPlayer.js';
 import { mainStyles } from './utils.js';
 
 @customElement('camera-shell')
 export class CameraShell extends LitElement {
 
-  protected startStream(event: CustomEvent): void {
-    const target = event.target as CameraPlayer;
-    const videoElement = event.detail?.videoElement as HTMLVideoElement | undefined;
-    if (!videoElement || !target?.id) {
-      console.error('[camera-shell] videoElement or camId missing from event');
-      return;
-    }
+  @state() declare private view: 'gallery' | 'editor';
+  @state() declare private editCamStream: string;
 
-    // Build videoPlayers from all rendered camera-player elements
-    const videoPlayers: Record<string, HTMLVideoElement | undefined> = {};
-    this.shadowRoot?.querySelectorAll('camera-player').forEach((el) => {
-      const player = el as CameraPlayer;
-      if (player.id && player.videoElement) {
-        videoPlayers[player.id] = player.videoElement;
+  private boundHashChange = this.onHashChange.bind(this);
+
+  constructor() {
+    super();
+    this.view = 'gallery';
+    this.editCamStream = '';
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    window.addEventListener('hashchange', this.boundHashChange);
+    this.parseHash();
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    window.removeEventListener('hashchange', this.boundHashChange);
+  }
+
+  private onHashChange() {
+    this.parseHash();
+  }
+
+  private parseHash() {
+    const hash = window.location.hash;
+    if (hash.startsWith('#edit/')) {
+      const camStream = decodeURIComponent(hash.slice('#edit/'.length));
+      if (camStream) {
+        // Stop any previous mediasoup connections before switching view
+        stopMediasoup();
+        this.editCamStream = camStream;
+        this.view = 'editor';
+        return;
       }
-    });
-    console.log('[camera-shell] videoPlayers', videoPlayers);
+    }
+    // Default: gallery
+    stopMediasoup();
+    this.view = 'gallery';
+    this.editCamStream = '';
+  }
 
-    initMediasoup(videoPlayers);
+  private onEditStream(e: CustomEvent) {
+    const camStream = e.detail?.camStream;
+    if (camStream) {
+      window.location.hash = `#edit/${encodeURIComponent(camStream)}`;
+    }
+  }
+
+  private onCloseEditor() {
+    window.location.hash = '';
   }
 
   static styles = [
@@ -41,30 +75,23 @@ export class CameraShell extends LitElement {
         justify-content: flex-start;
         background-color: #fbfcff;
       }
-
-      .cam-container {
-        display: flex;
-        width: 100%;
-        gap: 8px;
-        justify-content: space-around;
-      }
     `,
   ];
 
   render() {
+    if (this.view === 'editor' && this.editCamStream) {
+      return html`
+        <stream-editor
+          .camStream=${this.editCamStream}
+          @close-editor=${this.onCloseEditor}
+        ></stream-editor>
+      `;
+    }
+
     return html`
-      <div class="cam-container">
-        <camera-player
-          id="frontCam"
-          label="Front"
-          @video-ready=${this.startStream}
-        ></camera-player>
-      </div>
-      <!-- <div class="cam-container">
-      <camera-player id="leftCam" label="Left"></camera-player>
-      <camera-player id="backCam" label="Back"></camera-player>
-      <camera-player id="rightCam" label="Right"></camera-player>
-    </div> -->
+      <stream-gallery
+        @edit-stream=${this.onEditStream}
+      ></stream-gallery>
     `;
   }
 }

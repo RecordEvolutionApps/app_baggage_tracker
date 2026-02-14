@@ -1,4 +1,4 @@
-ironflock==1.0.6
+ironflock==1.3.10
 matplotlib==3.8.4
 pyyaml==6.0.1
 defusedxml==0.7.1

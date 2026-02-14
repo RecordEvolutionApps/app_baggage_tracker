@@ -49,10 +49,6 @@ class StreamRequest(BaseModel):
     camStream: str
 
 
-class MaskUpdate(BaseModel):
-    polygons: list = []
-    selectedPolygonId: int | None = None
-
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 def _create_mediasoup_ingest(stream_id: str) -> int:
@@ -91,10 +87,18 @@ def start_stream(req: StreamRequest):
     if req.camStream in processes:
         proc = processes[req.camStream]
         if proc.poll() is None:  # still running
-            raise HTTPException(409, f"Stream {req.camStream} is already running (pid={proc.pid})")
-        else:
-            # Process exited, remove stale entry
-            processes.pop(req.camStream, None)
+            # Kill existing stream so we can restart cleanly
+            print(f"[api] Killing existing stream {req.camStream} (pid={proc.pid}) before restart")
+            try:
+                proc.send_signal(signal.SIGTERM)
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+        processes.pop(req.camStream, None)
+
+    # Clean up any stale mediasoup ingest before creating a new one
+    _delete_mediasoup_ingest(req.camStream)
 
     # Ask mediasoup to create (or reuse) an ingest and give us the RTP port
     try:
@@ -111,7 +115,6 @@ def start_stream(req: StreamRequest):
         env=os.environ.copy(),
         stdout=sys.stdout,
         stderr=sys.stderr,
-        stdin=subprocess.PIPE,
     )
     processes[req.camStream] = proc
 
@@ -181,23 +184,6 @@ def list_cameras():
         return []
     except subprocess.TimeoutExpired:
         raise HTTPException(504, "Camera listing timed out")
-
-
-@app.post("/streams/{cam_stream}/mask")
-def update_mask(cam_stream: str, mask: MaskUpdate):
-    """Send updated mask data to a running stream via stdin."""
-    proc = processes.get(cam_stream)
-    if not proc or proc.poll() is not None:
-        raise HTTPException(404, f"No running stream for {cam_stream}")
-
-    try:
-        import json
-        data = json.dumps(mask.model_dump()) + "\n"
-        proc.stdin.write(data.encode())
-        proc.stdin.flush()
-        return {"status": "ok", "camStream": cam_stream}
-    except Exception as e:
-        raise HTTPException(500, f"Failed to send mask: {e}")
 
 
 @app.get("/health")

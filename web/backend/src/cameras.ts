@@ -1,8 +1,6 @@
-
-
-
 import { BunFile } from "bun";
 import type { Context } from "elysia";
+import { mkdir } from 'node:fs/promises'
 
 const ports = new Map()
 let streamSetup: Record<string, Camera> = {}
@@ -39,7 +37,29 @@ type Camera = {
     username?: string
     password?: string
     camStream: string
+    model?: string
+    useSahi?: boolean
+    frameBuffer?: number
   }
+
+const AVAILABLE_MODELS = [
+    { id: 'none', label: 'No Inference' },
+    { id: 'rtmdet_tiny_8xb32-300e_coco', label: 'RTMDet Tiny' },
+    { id: 'rtmdet_s_8xb32-300e_coco', label: 'RTMDet Small' },
+    { id: 'rtmdet_m_8xb32-300e_coco', label: 'RTMDet Medium' },
+]
+
+const settingsDir = '/data/settings'
+
+async function writeStreamSettings(camStream: string, cam: Camera) {
+    await mkdir(settingsDir, { recursive: true })
+    const settings = {
+        model: cam.model ?? 'rtmdet_tiny_8xb32-300e_coco',
+        useSahi: cam.useSahi ?? true,
+        frameBuffer: cam.frameBuffer ?? 64,
+    }
+    await Bun.write(`${settingsDir}/${camStream}.json`, JSON.stringify(settings))
+}
 
 async function initStreams() {
     let camList: Camera[] = []
@@ -87,17 +107,150 @@ async function initStreams() {
     }
 
     for (const [camStream, cam] of Object.entries(streamSetup)) {
-        if (camStream && cam) startVideoStream(cam, camStream)
+        if (camStream && cam) {
+            writeStreamSettings(camStream, cam)
+            startVideoStream(cam, camStream)
+        }
     }
 }
 
 initStreams()
 
 export function getStreamSetup(ctx: Context): any {
-    // const params = ctx.query as any
     const params = new URLSearchParams(ctx.request.url.split('?')[1])
     console.log('getStreamSetup', params.get('camStream'))
     return { "camera": streamSetup[params.get('camStream') ?? ''], "width": process.env.RESOLUTION_X, "height": process.env.RESOLUTION_Y }
+}
+
+export function getModels(): any {
+    return AVAILABLE_MODELS
+}
+
+export async function updateStreamModel(ctx: Context) {
+    let body: any
+    try {
+        body = typeof ctx.body === 'string' ? JSON.parse(ctx.body) : ctx.body
+    } catch {
+        ctx.set.status = 400
+        return { error: 'Invalid JSON' }
+    }
+    const { camStream, model } = body
+    if (!camStream || !model) {
+        ctx.set.status = 400
+        return { error: 'camStream and model are required' }
+    }
+    const cam = streamSetup[camStream]
+    if (!cam) {
+        ctx.set.status = 404
+        return { error: `Stream "${camStream}" not found` }
+    }
+    cam.model = model
+    await Bun.write(streamSetupFile, JSON.stringify(streamSetup))
+    await writeStreamSettings(camStream, cam)
+    return { status: 'ok', camStream, model }
+}
+
+export async function updateStreamSahi(ctx: Context) {
+    let body: any
+    try {
+        body = typeof ctx.body === 'string' ? JSON.parse(ctx.body) : ctx.body
+    } catch {
+        ctx.set.status = 400
+        return { error: 'Invalid JSON' }
+    }
+    const { camStream, useSahi } = body
+    if (!camStream || typeof useSahi !== 'boolean') {
+        ctx.set.status = 400
+        return { error: 'camStream (string) and useSahi (boolean) are required' }
+    }
+    const cam = streamSetup[camStream]
+    if (!cam) {
+        ctx.set.status = 404
+        return { error: `Stream "${camStream}" not found` }
+    }
+    cam.useSahi = useSahi
+    await Bun.write(streamSetupFile, JSON.stringify(streamSetup))
+    await writeStreamSettings(camStream, cam)
+    return { status: 'ok', camStream, useSahi }
+}
+
+export async function updateStreamFrameBuffer(ctx: Context) {
+    let body: any
+    try {
+        body = typeof ctx.body === 'string' ? JSON.parse(ctx.body) : ctx.body
+    } catch {
+        ctx.set.status = 400
+        return { error: 'Invalid JSON' }
+    }
+    const { camStream, frameBuffer } = body
+    if (!camStream || typeof frameBuffer !== 'number' || frameBuffer < 0) {
+        ctx.set.status = 400
+        return { error: 'camStream (string) and frameBuffer (non-negative number) are required' }
+    }
+    const cam = streamSetup[camStream]
+    if (!cam) {
+        ctx.set.status = 404
+        return { error: `Stream "${camStream}" not found` }
+    }
+    cam.frameBuffer = frameBuffer
+    await Bun.write(streamSetupFile, JSON.stringify(streamSetup))
+    await writeStreamSettings(camStream, cam)
+    return { status: 'ok', camStream, frameBuffer }
+}
+
+// ── Stream CRUD ────────────────────────────────────────────────────────────
+
+export function listStreams(): Camera[] {
+    return Object.values(streamSetup)
+}
+
+export async function createStream(ctx: Context) {
+    let body: any
+    try {
+        body = typeof ctx.body === 'string' ? JSON.parse(ctx.body) : ctx.body
+    } catch (err) {
+        console.error('createStream: failed to parse body', ctx.body, err)
+        ctx.set.status = 400
+        return { error: 'Invalid JSON body' }
+    }
+    const { name, camStream } = body
+    if (!camStream) {
+        ctx.set.status = 400
+        return { error: 'camStream is required' }
+    }
+    if (streamSetup[camStream]) {
+        ctx.set.status = 409
+        return { error: `Stream "${camStream}" already exists` }
+    }
+    const newCam: Camera = {
+        id: camStream,
+        type: 'IP',
+        name: name || camStream,
+        path: '',
+        camStream,
+    }
+    streamSetup[camStream] = newCam
+    await Bun.write(streamSetupFile, JSON.stringify(streamSetup))
+    return newCam
+}
+
+export async function deleteStream(ctx: Context) {
+    const url = new URL(ctx.request.url)
+    const camStream = url.pathname.split('/cameras/streams/')[1]
+    if (!camStream) {
+        ctx.set.status = 400
+        return { error: 'camStream is required' }
+    }
+    const decoded = decodeURIComponent(camStream)
+    const cam = streamSetup[decoded]
+    if (!cam) {
+        ctx.set.status = 404
+        return { error: `Stream "${decoded}" not found` }
+    }
+    await killVideoStream(cam.path ?? '', decoded)
+    delete streamSetup[decoded]
+    await Bun.write(streamSetupFile, JSON.stringify(streamSetup))
+    return { status: 'deleted', camStream: decoded }
 }
 
 export const selectCamera = async (ctx: Context) => {
@@ -115,6 +268,7 @@ export const selectCamera = async (ctx: Context) => {
 
     const startCam = streamSetup[cam.camStream]
     await Bun.write(streamSetupFile, JSON.stringify(streamSetup));
+    await writeStreamSettings(cam.camStream, startCam)
 
     await killVideoStream(startCam.path, cam.camStream)
 
@@ -226,13 +380,3 @@ export async function getUSBCameras(): Promise<Camera[]> {
     }
 }
 
-export function updateStreamMask(maskData: any) {
-    // Send mask update to all running streams via the video API
-    for (const camStream of ports.keys()) {
-        fetch(`${VIDEO_API}/streams/${camStream}/mask`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(maskData),
-        }).catch(err => console.error(`Error sending mask to ${camStream}:`, err))
-    }
-}

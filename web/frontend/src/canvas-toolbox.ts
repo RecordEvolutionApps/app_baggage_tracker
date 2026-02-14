@@ -1,7 +1,7 @@
 import { LitElement, html, css, PropertyValueMap } from 'lit';
 import { property, customElement, state } from 'lit/decorators.js';
 import { PolygonManager, Polygon } from './polygon.js';
-import { mainStyles, CamSetup, Camera, PolygonType } from './utils.js';
+import { mainStyles, CamSetup, Camera, PolygonType, ModelOption } from './utils.js';
 import './camera-selector.js';
 import './ip-camera-dialog.js';
 import '@material/web/button/elevated-button.js';
@@ -9,6 +9,8 @@ import '@material/web/button/text-button.js';
 import '@material/web/textfield/outlined-text-field.js';
 import '@material/web/radio/radio.js';
 import '@material/web/dialog/dialog.js';
+import '@material/web/select/outlined-select.js';
+import '@material/web/select/select-option.js';
 import { MdDialog } from '@material/web/dialog/dialog.js';
 import { IpCameraDialog } from './ip-camera-dialog.js';
 
@@ -38,9 +40,22 @@ export class CanvasToolbox extends LitElement {
   @state()
   declare selectedCamType: 'USB' | 'IP'
 
+  @state()
+  declare models: ModelOption[]
+
+  @state()
+  declare selectedModel: string
+
+  @state()
+  declare useSahi: boolean
+
+  @state()
+  declare frameBuffer: number
+
   zoneDialog?: MdDialog;
   lineDialog: MdDialog;
   cameraDialog?: IpCameraDialog;
+  private basepath = window.location.protocol + '//' + window.location.host;
 
   constructor() {
     super();
@@ -49,6 +64,10 @@ export class CanvasToolbox extends LitElement {
     this.selectedPolygon = null;
     this.mask_name = '';
     this.selectedCamType = 'USB';
+    this.models = [];
+    this.selectedModel = 'rtmdet_tiny_8xb32-300e_coco';
+    this.useSahi = true;
+    this.frameBuffer = 64;
   }
 
   static styles = [
@@ -129,6 +148,47 @@ export class CanvasToolbox extends LitElement {
         gap: 8px;       
       }
 
+      .sahi-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #5e5f61;
+        font-family: sans-serif;
+        font-size: 0.875rem;
+        cursor: pointer;
+        padding: 4px 0;
+      }
+
+      .sahi-toggle input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: #002e6a;
+        cursor: pointer;
+      }
+
+      .frame-buffer-row {
+        align-items: center;
+        gap: 8px;
+        padding: 0 0 4px;
+      }
+
+      .fb-label {
+        color: #5e5f61;
+        font-family: sans-serif;
+        font-size: 0.875rem;
+        white-space: nowrap;
+      }
+
+      .fb-input {
+        width: 72px;
+        padding: 4px 8px;
+        border: 1px solid #aaa;
+        border-radius: 4px;
+        font-size: 0.875rem;
+        font-family: sans-serif;
+        color: #334d5c;
+      }
+
       @media only screen and (max-width: 600px) {
         h3 {
           display: none;
@@ -154,13 +214,90 @@ export class CanvasToolbox extends LitElement {
       this.requestUpdate();
     });
 
+    // Sync current state (importFromRemote may have already completed)
     this.polygons = this.polygonManager?.getAll();
+    this.selectedPolygon = this.polygonManager?.getSelected() ?? null;
     this.requestUpdate();
+
+    // Re-fetch in case data wasn't loaded yet when the manager was created
+    this.polygonManager.importFromRemote();
+
+    // Fetch available models
+    this.fetchModels();
+  }
+
+  private async fetchModels() {
+    try {
+      const res = await fetch(`${this.basepath}/cameras/models`);
+      if (res.ok) this.models = await res.json();
+    } catch (err) {
+      console.error('Failed to fetch models', err);
+    }
+    // Set current model from camSetup if available
+    if (this.camSetup?.camera?.model) {
+      this.selectedModel = this.camSetup.camera.model;
+    }
+    // Wait for option elements to render, then sync the select's display
+    await this.updateComplete;
+    const select = this.shadowRoot?.querySelector('md-outlined-select') as any;
+    if (select) select.value = this.selectedModel;
+  }
+
+  private async onModelChange(ev: Event) {
+    const select = ev.target as any;
+    const model = select.value;
+    if (!model || model === this.selectedModel) return;
+    this.selectedModel = model;
+    try {
+      await fetch(`${this.basepath}/cameras/model`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ camStream: this.camStream, model }),
+      });
+    } catch (err) {
+      console.error('Failed to update model', err);
+    }
+  }
+
+  private async onSahiToggle(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    const useSahi = input.checked;
+    this.useSahi = useSahi;
+    try {
+      await fetch(`${this.basepath}/cameras/sahi`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ camStream: this.camStream, useSahi }),
+      });
+    } catch (err) {
+      console.error('Failed to update SAHI setting', err);
+    }
+  }
+
+  private async onFrameBufferChange(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    const frameBuffer = Math.max(0, parseInt(input.value, 10) || 0);
+    this.frameBuffer = frameBuffer;
+    try {
+      await fetch(`${this.basepath}/cameras/frameBuffer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ camStream: this.camStream, frameBuffer }),
+      });
+    } catch (err) {
+      console.error('Failed to update frame buffer', err);
+    }
   }
 
   update(_changedProperties: PropertyValueMap<any> | Map<PropertyKey, unknown>) {
-    if (_changedProperties.has('camSetup') && this.camSetup)
-    this.selectedCamType = this.camSetup?.camera?.type ?? 'USB'
+    if (_changedProperties.has('camSetup') && this.camSetup) {
+      this.selectedCamType = this.camSetup?.camera?.type ?? 'USB'
+      if (this.camSetup.camera?.model) {
+        this.selectedModel = this.camSetup.camera.model
+      }
+      this.useSahi = this.camSetup.camera?.useSahi ?? true
+      this.frameBuffer = this.camSetup.camera?.frameBuffer ?? 64
+    }
     super.update(_changedProperties)
   }
 
@@ -289,7 +426,44 @@ export class CanvasToolbox extends LitElement {
           </div>
         </div>
 
-        <h4>Detection Zones and Lines</h4>
+        <h4>Inference Setup</h4>
+        <div class="control">
+          <md-outlined-select
+            label="Model"
+            .value=${this.selectedModel}
+            @change=${this.onModelChange}
+          >
+            ${this.models.map(m => html`
+              <md-select-option value=${m.id} .selected=${m.id === this.selectedModel}>
+                <div slot="headline">${m.label}</div>
+              </md-select-option>
+            `)}
+          </md-outlined-select>
+
+          <label class="sahi-toggle">
+            <input
+              type="checkbox"
+              .checked=${this.useSahi}
+              @change=${this.onSahiToggle}
+            />
+            Use SAHI (Slicing Aided Hyper Inference)
+          </label>
+
+          <div class="frame-buffer-row" style="display:${this.useSahi ? 'flex' : 'none'}">
+            <label for="frameBuffer" class="fb-label">Frame Buffer (px)</label>
+            <input
+              id="frameBuffer"
+              type="number"
+              min="0"
+              max="500"
+              .value=${String(this.frameBuffer)}
+              @change=${this.onFrameBufferChange}
+              class="fb-input"
+            />
+          </div>
+        </div>
+
+        <h4>Zones &amp; Lines</h4>
         <div class="control">
           <div class="mb16">
             <div class="button-row">
@@ -306,12 +480,6 @@ export class CanvasToolbox extends LitElement {
               </md-elevated-button>
             </div>
           </div>
-          <!-- <div class="mb16">
-            <md-elevated-button @click=${this.undoLastLine}>
-              Undo
-              <md-icon slot="icon">undo</md-icon>
-            </md-elevated-button>
-          </div> -->
           <div>
             <md-elevated-button @click=${this.onCreateLineClick}>
               Line

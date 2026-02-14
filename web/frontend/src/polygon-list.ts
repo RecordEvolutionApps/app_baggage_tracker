@@ -118,8 +118,13 @@ export class PolygonList extends LitElement {
       this.requestUpdate();
     });
 
+    // Sync current state (importFromRemote may have already completed)
     this.polygons = this.polygonManager?.getAll();
+    this.selectedPolygon = this.polygonManager?.getSelected() ?? null;
     this.requestUpdate();
+
+    // Re-fetch in case data wasn't loaded yet when the manager was created
+    this.polygonManager.importFromRemote();
   }
 
   selectPolygon(id: number) {

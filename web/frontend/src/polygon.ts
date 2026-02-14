@@ -130,15 +130,27 @@ export class Polygon extends EventTarget {
 export class PolygonManager extends EventTarget {
   polygons: Polygon[] = [];
   selectedPolygon: Polygon | null = null;
+  camStream: string = '';
 
-  constructor() {
+  constructor(camStream?: string) {
     super()
-    this.importFromRemote()
+    if (camStream) {
+      this.camStream = camStream;
+      this.importFromRemote();
+    }
+  }
+
+  /** Update the camStream and reload masks from backend */
+  setCamStream(camStream: string) {
+    if (this.camStream === camStream) return;
+    this.camStream = camStream;
+    this.importFromRemote();
   }
 
   async importFromRemote() {
+    if (!this.camStream) return;
     try {
-      const result = await fetch(`${basepath}/mask`, {
+      const result = await fetch(`${basepath}/mask?camStream=${encodeURIComponent(this.camStream)}`, {
         method: 'GET',
         headers: {
           Accept: 'application/json',
@@ -152,7 +164,8 @@ export class PolygonManager extends EventTarget {
   }
 
   updateRemote(data: PolygonState) {
-    return fetch(`${basepath}/mask/save`, {
+    if (!this.camStream) return;
+    return fetch(`${basepath}/mask/save?camStream=${encodeURIComponent(this.camStream)}`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
@@ -200,7 +213,7 @@ export class PolygonManager extends EventTarget {
     this.update();
   }
 
-  update() {
+  update(saveRemote: boolean = true) {
     this.dispatchEvent(
       new CustomEvent('update', {
         detail: {
@@ -210,9 +223,11 @@ export class PolygonManager extends EventTarget {
       }),
     );
 
-    // only save committed polygons
-    const { polygons, selectedPolygonId } = this.export()
-    this.updateRemote({ polygons: polygons.filter((p) => p.committed), selectedPolygonId })
+    if (saveRemote) {
+      // only save committed polygons
+      const { polygons, selectedPolygonId } = this.export()
+      this.updateRemote({ polygons: polygons.filter((p) => p.committed), selectedPolygonId })
+    }
   }
 
   getSelected() {
@@ -244,6 +259,7 @@ export class PolygonManager extends EventTarget {
   ) {
     this.polygons = data.polygons.map(p => Polygon.revive(p));
 
-    this.update()
+    // Dispatch update event to notify listeners, but don't save back to remote
+    this.update(false)
   }
 }

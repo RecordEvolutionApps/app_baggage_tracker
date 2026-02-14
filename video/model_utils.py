@@ -56,14 +56,17 @@ MMDET_MODEL_ZOO = {
     "rtmdet_tiny_8xb32-300e_coco": {
         "config": "https://raw.githubusercontent.com/open-mmlab/mmdetection/v3.3.0/configs/rtmdet/rtmdet_tiny_8xb32-300e_coco.py",
         "checkpoint": "https://download.openmmlab.com/mmdetection/v3.0/rtmdet/rtmdet_tiny_8xb32-300e_coco/rtmdet_tiny_8xb32-300e_coco_20220902_112414-78e30dcc.pth",
+        "native_input_wh": (640, 640),
     },
     "rtmdet_s_8xb32-300e_coco": {
         "config": "https://raw.githubusercontent.com/open-mmlab/mmdetection/v3.3.0/configs/rtmdet/rtmdet_s_8xb32-300e_coco.py",
         "checkpoint": "https://download.openmmlab.com/mmdetection/v3.0/rtmdet/rtmdet_s_8xb32-300e_coco/rtmdet_s_8xb32-300e_coco_20220905_161602-387a891e.pth",
+        "native_input_wh": (640, 640),
     },
     "rtmdet_m_8xb32-300e_coco": {
         "config": "https://raw.githubusercontent.com/open-mmlab/mmdetection/v3.3.0/configs/rtmdet/rtmdet_m_8xb32-300e_coco.py",
         "checkpoint": "https://download.openmmlab.com/mmdetection/v3.0/rtmdet/rtmdet_m_8xb32-300e_coco/rtmdet_m_8xb32-300e_coco_20220719_112220-229f527c.pth",
+        "native_input_wh": (640, 640),
     },
 }
 
@@ -73,7 +76,7 @@ def download_file(url: str, destination: str) -> None:
     urllib.request.urlretrieve(url, destination)
     print('Download complete!')
 
-def getModel(model_name: str, model_resx: int = 640, model_resy: int = 640) -> Dict[str, Any]:
+def getModel(model_name: str) -> Dict[str, Any]:
     backend = DETECT_BACKEND.lower()
     if backend == 'mmdet':
         return get_mmdet_model(model_name)
@@ -100,10 +103,12 @@ def get_mmdet_model(model_name: str) -> Dict[str, Any]:
     # Pass the model name (not a config file path) so DetInferencer resolves
     # the full config from its metafile, properly handling _base_ inheritance.
     inferencer = DetInferencer(model=model_name, weights=str(checkpoint_path), device=device)
+    native_wh = MMDET_MODEL_ZOO[model_name].get('native_input_wh', (640, 640))
     return {
         'backend': 'mmdet',
         'inferencer': inferencer,
         'model_name': model_name,
+        'native_input_wh': native_wh,
     }
 
 def get_youtube_video(url, height):
@@ -161,33 +166,63 @@ def count_detections(detections):
     return count_dict
 
 
-async def readMasksFromStdin(saved_masks):
-    print("Reading STDIN")
-    try:
-        with open('/data/mask.json', 'r') as f:
-            loaded_masks = json.load(f)
+async def watchMaskFile(saved_masks, cam_stream='frontCam', poll_interval=1.0):
+    """
+    Poll the per-stream mask file for changes and reload when modified.
+    This replaces the old stdin-based approach with a simple file-watch loop.
+    """
+    mask_path = f'/data/masks/{cam_stream}.json'
+    legacy_path = '/data/mask.json'
+    last_mtime = 0.0
 
-        saved_masks[:] = []
-        saved_masks.extend(prepMasks(loaded_masks))
-
-    except Exception as e:
-        traceback.print_exc()
-        print('Failed to load masks initially', e)
+    print(f"Watching mask file: {mask_path}")
 
     while True:
         try:
-            masksJSON = await get_event_loop().run_in_executor(None, sys.stdin.readline)
+            path = mask_path if os.path.exists(mask_path) else legacy_path
 
-            print("Got masks from stdin:", masksJSON)
-
-            stdin_masks = json.loads(masksJSON)
-    
-            saved_masks[:] = []
-            saved_masks.extend(prepMasks(stdin_masks))
-            
+            if os.path.exists(path):
+                mtime = os.path.getmtime(path)
+                if mtime != last_mtime:
+                    last_mtime = mtime
+                    with open(path, 'r') as f:
+                        loaded_masks = json.load(f)
+                    saved_masks[:] = []
+                    saved_masks.extend(prepMasks(loaded_masks))
+                    print(f"Reloaded masks from {path} (mtime={mtime})")
         except Exception as e:
-            print(e)
-        await sleep(0)
+            traceback.print_exc()
+            print(f'Error reading mask file: {e}')
+
+        await sleep(poll_interval)
+
+
+async def watchSettingsFile(settings_dict, cam_stream='frontCam', poll_interval=1.0):
+    """
+    Poll the per-stream settings file for changes and update settings_dict.
+    The backend writes /data/settings/<camStream>.json when settings change.
+    """
+    settings_path = f'/data/settings/{cam_stream}.json'
+    last_mtime = 0.0
+
+    print(f"Watching settings file: {settings_path}")
+
+    while True:
+        try:
+            if os.path.exists(settings_path):
+                mtime = os.path.getmtime(settings_path)
+                if mtime != last_mtime:
+                    last_mtime = mtime
+                    with open(settings_path, 'r') as f:
+                        new_settings = json.load(f)
+                    settings_dict.update(new_settings)
+                    print(f"Reloaded settings from {settings_path}: {settings_dict}")
+        except Exception as e:
+            traceback.print_exc()
+            print(f'Error reading settings file: {e}')
+
+        await sleep(poll_interval)
+
 
 def get_contrast_color(hex_color):
     c = sv.Color.from_hex(hex_color)
@@ -243,14 +278,13 @@ def prepMasks(in_masks):
     print('Refreshed Masks', out_masks)
     return out_masks
 
-def get_extreme_points(masks):
+def get_extreme_points(masks, frame_buffer=FRAME_BUFFER):
     if len(masks) == 0:
         return 0, 0, RESOLUTION_X, RESOLUTION_Y
     low_x = RESOLUTION_X - 1
     low_y = RESOLUTION_Y - 1
     high_x = -1
     high_y = -1
-    buf = FRAME_BUFFER
     for mask in masks:
         points = np.array(mask["points"])
         points.astype(int)
@@ -260,27 +294,29 @@ def get_extreme_points(masks):
             high_x = point[0] if point[0] > high_x else high_x
             high_y = point[1] if point[1] > high_y else high_y
 
-    return max(0, low_x - buf), max(0, low_y - buf), min(RESOLUTION_X - 1, high_x + buf), min(RESOLUTION_Y - 1, high_y + buf)
+    return max(0, low_x - frame_buffer), max(0, low_y - frame_buffer), min(RESOLUTION_X - 1, high_x + frame_buffer), min(RESOLUTION_Y - 1, high_y + frame_buffer)
 
 
 def initSliceInferer(model_bundle: Dict[str, Any]):
+    native_w, native_h = model_bundle.get('native_input_wh', (640, 640))
+
     def inferSlice(image_slice: np.ndarray) -> Optional[sv.Detections]:
-        detections = infer_frame(image_slice, model_bundle, model_resx=None, model_resy=None)
+        detections = infer_frame(image_slice, model_bundle)
         return detections if detections is not False else empty_detections()
 
     slicer = sv.InferenceSlicer(
         callback=inferSlice,
-        slice_wh=[640, 640],
-        overlap_wh=[int(0.2 * 640), int(0.2 * 640)],
+        slice_wh=(native_w, native_h),
+        overlap_wh=(int(0.2 * native_w), int(0.2 * native_h)),
         iou_threshold=IOU,
         thread_workers=6
     )
     return slicer
 
-def infer(frame, model_bundle, model_resx, model_resy):
-    return infer_frame(frame, model_bundle, model_resx=model_resx, model_resy=model_resy)
+def infer(frame, model_bundle):
+    return infer_frame(frame, model_bundle)
 
-def infer_frame(frame: np.ndarray, model_bundle: Dict[str, Any], model_resx: Optional[int], model_resy: Optional[int]):
+def infer_frame(frame: np.ndarray, model_bundle: Dict[str, Any]):
     backend = model_bundle.get('backend')
     if backend == 'mmdet':
         return infer_mmdet(frame, model_bundle['inferencer'])

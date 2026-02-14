@@ -143,6 +143,14 @@ export type Camera = {
   path?: string
   username?: string
   password?: string
+  model?: string
+  useSahi?: boolean
+  frameBuffer?: number
+}
+
+export type ModelOption = {
+  id: string
+  label: string
 }
 
 export type CamSetup = {
