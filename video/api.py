@@ -4,8 +4,7 @@ Video Service API — replaces SSH-based stream management.
 Provides HTTP endpoints for starting/stopping video streams
 and listing USB cameras. The web backend calls these endpoints
 instead of spawning SSH commands.
-"""
-
+"""from __future__ import annotations
 import os
 import sys
 import json

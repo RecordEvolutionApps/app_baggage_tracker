@@ -1,8 +1,11 @@
 FROM node:22-bookworm-slim
 
-# mediasoup needs python3, make, g++ for its C++ worker build
+# mediasoup needs python3, pip, make, g++ for its C++ worker build
+# On arm64 there is no prebuilt worker binary, so mediasoup compiles it
+# from source using pip+invoke.
 RUN apt-get update && apt-get install -y \
     python3 \
+    python3-pip \
     make \
     g++ \
     && rm -rf /var/lib/apt/lists/*

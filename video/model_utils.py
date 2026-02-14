@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import supervision as sv
 import numpy as np
 import urllib.request

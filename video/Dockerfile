@@ -39,12 +39,12 @@ RUN uv pip install --system openmim==0.3.9 && \
 RUN uv pip install --system mmengine==0.10.4 mmdet==3.3.0
 
 # Install remaining dependencies (changes more frequently)
-RUN uv pip install --system ironflock==1.0.6 matplotlib==3.8.4 pyyaml==6.0.1 defusedxml==0.7.1 \
-				pillow==10.3.0 lapx==0.5.5 yt_dlp==2024.4.9 opencv-python==4.8.1.78 numpy==1.26.4 \
+RUN uv pip install --system ironflock==1.0.6 matplotlib==3.7.5 pyyaml==6.0.1 defusedxml==0.7.1 \
+				pillow==10.3.0 lapx==0.5.5 yt_dlp==2024.4.9 opencv-python==4.8.1.78 numpy==1.24.4 \
 				fastapi==0.115.0 "uvicorn[standard]==0.30.6"
 
 # Install supervision separately (version compatibility)
-RUN uv pip install --system supervision==0.27.0 --no-deps
+RUN uv pip install --system supervision==0.25.1 --no-deps
 
 # Create model cache directory
 RUN mkdir -p /app/download /data/mmdet
