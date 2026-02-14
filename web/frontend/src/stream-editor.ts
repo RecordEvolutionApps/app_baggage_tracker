@@ -105,6 +105,7 @@ export class StreamEditor extends LitElement {
       .editor-body camera-player {
         flex: 1;
         height: 100%;
+        overflow: hidden;
       }
 
       md-dialog {

@@ -2,7 +2,7 @@ import { Elysia } from "elysia";
 import { staticPlugin } from '@elysiajs/static'
 import { html } from '@elysiajs/html'
 import { cors } from '@elysiajs/cors'
-import { getUSBCameras, getStreamSetup, selectCamera, listStreams, createStream, deleteStream, getModels, updateStreamModel, updateStreamSahi, updateStreamFrameBuffer } from './cameras.js'
+import { getUSBCameras, getStreamSetup, selectCamera, listStreams, createStream, deleteStream, getModels, getModelClasses, getModelStatus, prepareModel, updateStreamModel, updateStreamSahi, updateStreamFrameBuffer, updateStreamClassList, updateStreamClassNames } from './cameras.js'
 import { getMask, saveMask } from "./mask.js";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -34,9 +34,16 @@ app.get('/cameras/streams', listStreams)
 app.post('/cameras/streams', createStream)
 app.delete('/cameras/streams/*', deleteStream)
 app.get('/cameras/models', getModels)
+app.get('/cameras/models/:modelId/classes', getModelClasses)
+app.get('/cameras/models/*/classes', getModelClasses)
+app.get('/cameras/models/:modelId/status', getModelStatus)
+app.get('/cameras/models/*/status', getModelStatus)
+app.post('/cameras/models/prepare', prepareModel)
 app.post('/cameras/model', updateStreamModel)
 app.post('/cameras/sahi', updateStreamSahi)
 app.post('/cameras/frameBuffer', updateStreamFrameBuffer)
+app.post('/cameras/classList', updateStreamClassList)
+app.post('/cameras/classNames', updateStreamClassNames)
 app.get('/', async () => {
   if (hasFrontendDist) {
     return Bun.file(join(frontendDist, "index.html"))

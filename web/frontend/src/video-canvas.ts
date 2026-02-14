@@ -171,6 +171,7 @@ export class VideoCanvas extends LitElement {
         flex: 1;
         display: flex;
         flex-direction: column;
+        overflow: hidden;
       }
       #canvas {
         width: 100%;
@@ -190,10 +191,17 @@ export class VideoCanvas extends LitElement {
         flex-direction: column;
         gap: 16px;
         height: 100%;
+        max-height: 100%;
+        min-height: 0;
+        max-width: 300px;
+        min-width: 300px;
         padding: 10px;
         box-sizing: border-box;
         background: #e9eaf2;
         border-radius: 4px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        flex-shrink: 0;
       }
 
       .surface {

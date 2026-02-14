@@ -18,6 +18,7 @@ import functools
 import traceback
 
 from model_utils import getModel, processFrame, initSliceInferer, move_detections, get_extreme_points, infer, get_youtube_video, overlay_text, count_polygon_zone, count_detections, watchMaskFile, watchSettingsFile, empty_detections, FRAME_BUFFER
+import model_utils  # for updating CLASS_LIST dynamically
 
 print = functools.partial(print, flush=True)
 
@@ -122,6 +123,7 @@ cap.set(3, RESOLUTION_X)
 cap.set(4, RESOLUTION_Y)
 
 model = getModel(OBJECT_MODEL)
+current_model_name = OBJECT_MODEL
 print(f'Model native input: {model.get("native_input_wh", "unknown")}')
 
 # print("CUDA available:", torch.cuda.is_available(), 'GPUs', torch.cuda.device_count())
@@ -174,6 +176,32 @@ async def main(_saved_masks):
             elapsed_time2 = time.time() - start_time2
 
             skip_inference = stream_settings.get('model', '') == 'none'
+
+            # Dynamically update class filter from stream settings
+            settings_class_list = stream_settings.get('classList', None)
+            if settings_class_list is not None and len(settings_class_list) > 0:
+                new_list = [int(c) for c in settings_class_list]
+                if new_list != model_utils.CLASS_LIST:
+                    model_utils.CLASS_LIST = new_list
+                    CLASS_LIST[:] = new_list
+                    print('Updated CLASS_LIST from settings:', new_list)
+            elif settings_class_list is not None and len(settings_class_list) == 0:
+                # Empty list means "all classes"
+                all_classes = [int(k) for k in class_id_topic.keys()]
+                if model_utils.CLASS_LIST != all_classes:
+                    model_utils.CLASS_LIST = all_classes
+                    CLASS_LIST[:] = all_classes
+                    print('Reset CLASS_LIST to all classes')
+
+            # Dynamically update open-vocab class names from stream settings
+            settings_class_names = stream_settings.get('classNames', None)
+            if settings_class_names is not None and isinstance(settings_class_names, list):
+                if hasattr(model_utils, 'CLASS_NAMES') and settings_class_names != model_utils.CLASS_NAMES:
+                    model_utils.CLASS_NAMES = settings_class_names
+                    print('Updated CLASS_NAMES from settings:', settings_class_names)
+                elif not hasattr(model_utils, 'CLASS_NAMES'):
+                    model_utils.CLASS_NAMES = settings_class_names
+                    print('Set CLASS_NAMES from settings:', settings_class_names)
 
             # --- Fixed-timestep pacing (standard game-loop / video-player pattern) ---
             # Always wait for the next frame slot before reading

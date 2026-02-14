@@ -39,7 +39,7 @@ export const saveMask = async (ctx: Context) => {
 
         maskStore[camStream] = state;
         await mkdir(masksDir, { recursive: true });
-        await Bun.write(maskPathFor(camStream), ctx.body);
+        await Bun.write(maskPathFor(camStream), ctx.body as string);
     } catch (error) {
         console.error("Failed to save mask", error);
     }

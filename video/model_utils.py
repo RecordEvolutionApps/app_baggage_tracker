@@ -38,6 +38,9 @@ if len(CLASS_LIST) <= 1:
     CLASS_LIST = list(class_id_topic.keys())
     CLASS_LIST = [int(item) for item in CLASS_LIST]
 
+# Open-vocabulary class names (text labels for models like Grounding DINO)
+CLASS_NAMES: list[str] = []
+
 # Supervision Annotations (RTMDet does not use OBB, always use BoxAnnotator)
 bounding_box_annotator = sv.BoxAnnotator()
 label_annotator = sv.LabelAnnotator(text_scale=0.4, text_thickness=1, text_padding=3)
@@ -76,6 +79,103 @@ def download_file(url: str, destination: str) -> None:
     urllib.request.urlretrieve(url, destination)
     print('Download complete!')
 
+def is_model_cached(model_name: str) -> bool:
+    """Check whether a model's checkpoint is already available locally."""
+    if model_name in ('none', ''):
+        return True
+    cache_root = Path('/data/mmdet')
+    checkpoint_path = cache_root / 'checkpoints' / f'{model_name}.pth'
+    if checkpoint_path.is_file():
+        return True
+    # Check mmengine / torch hub default cache locations
+    for cache_dir in [
+        Path.home() / '.cache' / 'torch' / 'hub' / 'checkpoints',
+        Path.home() / '.cache' / 'mim',
+    ]:
+        if cache_dir.is_dir():
+            # Any file containing the model name is a hit
+            for f in cache_dir.iterdir():
+                if model_name.replace('-', '_') in f.name.replace('-', '_'):
+                    return True
+    return False
+
+
+def prepare_model(model_name: str, progress_callback=None):
+    """Download a model checkpoint if not cached. Returns when ready.
+
+    progress_callback(status, progress, message) is called with:
+      - ("checking", 0, "...")
+      - ("downloading", 0-100, "...")
+      - ("ready", 100, "...")
+      - ("error", 0, "...")
+    """
+    def _report(status, progress=0, message=''):
+        if progress_callback:
+            progress_callback(status, progress, message)
+
+    _report('checking', 0, f'Checking cache for {model_name}...')
+
+    if model_name in ('none', ''):
+        _report('ready', 100, 'No model needed')
+        return
+
+    if is_model_cached(model_name):
+        _report('ready', 100, f'{model_name} already cached')
+        return
+
+    _report('downloading', 0, f'Downloading {model_name}...')
+
+    cache_root = Path('/data/mmdet')
+    checkpoint_path = cache_root / 'checkpoints' / f'{model_name}.pth'
+
+    # For curated models, download with progress tracking
+    if model_name in MMDET_MODEL_ZOO:
+        url = MMDET_MODEL_ZOO[model_name]['checkpoint']
+        checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+        _download_with_progress(url, str(checkpoint_path), _report)
+        _report('ready', 100, f'{model_name} downloaded')
+        return
+
+    # For all other models, use DetInferencer to resolve and download
+    # DetInferencer.__init__ auto-downloads — we run it once to prime the cache
+    try:
+        from mmdet.apis import DetInferencer
+        device = 'cpu'  # Use CPU for download-only; saves GPU memory
+        _report('downloading', 10, f'Resolving {model_name} from metafiles...')
+        DetInferencer(model=model_name, device=device)
+        _report('ready', 100, f'{model_name} downloaded and cached')
+    except Exception as e:
+        _report('error', 0, str(e))
+        raise
+
+
+def _download_with_progress(url: str, dest: str, report_fn):
+    """Download a file with progress reporting."""
+    import urllib.request
+    Path(dest).parent.mkdir(parents=True, exist_ok=True)
+
+    response = urllib.request.urlopen(url)
+    total = int(response.headers.get('Content-Length', 0))
+    downloaded = 0
+    block_size = 1024 * 256  # 256 KB
+    last_pct = -1
+
+    with open(dest, 'wb') as f:
+        while True:
+            chunk = response.read(block_size)
+            if not chunk:
+                break
+            f.write(chunk)
+            downloaded += len(chunk)
+            if total > 0:
+                pct = int(downloaded * 100 / total)
+                if pct != last_pct:
+                    last_pct = pct
+                    report_fn('downloading', pct, f'{downloaded}/{total} bytes')
+
+    report_fn('downloading', 100, 'Download complete')
+
+
 def getModel(model_name: str) -> Dict[str, Any]:
     backend = DETECT_BACKEND.lower()
     if backend == 'mmdet':
@@ -83,15 +183,17 @@ def getModel(model_name: str) -> Dict[str, Any]:
     raise ValueError(f'Unsupported DETECT_BACKEND: {backend}. Only mmdet is supported.')
 
 def get_mmdet_model(model_name: str) -> Dict[str, Any]:
-    if model_name not in MMDET_MODEL_ZOO:
-        raise ValueError(f'Unknown MMDetection model: {model_name}. Available: {", ".join(MMDET_MODEL_ZOO.keys())}')
+    """Load any MMDetection model by name.
 
+    For models listed in MMDET_MODEL_ZOO the checkpoint is pre-downloaded for
+    offline/cached use.  For *any other* model name, DetInferencer resolves the
+    config from mmdet's metafile registry and auto-downloads the checkpoint.
+    """
     cache_root = Path('/data/mmdet')
     checkpoint_path = cache_root / 'checkpoints' / f'{model_name}.pth'
 
-    # Pre-download checkpoint for caching (configs are resolved by DetInferencer
-    # using the model name + metafile, which properly handles _base_ imports)
-    if not checkpoint_path.is_file():
+    # If we have a curated entry, pre-download the checkpoint for offline use
+    if model_name in MMDET_MODEL_ZOO and not checkpoint_path.is_file():
         download_file(MMDET_MODEL_ZOO[model_name]['checkpoint'], str(checkpoint_path))
 
     try:
@@ -100,10 +202,17 @@ def get_mmdet_model(model_name: str) -> Dict[str, Any]:
         raise RuntimeError('MMDetection is not installed. Install mmdet, mmengine, and mmcv for DETECT_BACKEND=mmdet.') from exc
 
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-    # Pass the model name (not a config file path) so DetInferencer resolves
-    # the full config from its metafile, properly handling _base_ inheritance.
-    inferencer = DetInferencer(model=model_name, weights=str(checkpoint_path), device=device)
-    native_wh = MMDET_MODEL_ZOO[model_name].get('native_input_wh', (640, 640))
+
+    # Pass the model name so DetInferencer resolves the full config from its
+    # metafile, properly handling _base_ inheritance.  Use locally cached
+    # weights when available, otherwise let DetInferencer auto-download.
+    if checkpoint_path.is_file():
+        inferencer = DetInferencer(model=model_name, weights=str(checkpoint_path), device=device)
+    else:
+        print(f'No cached checkpoint for "{model_name}", DetInferencer will auto-download...')
+        inferencer = DetInferencer(model=model_name, device=device)
+
+    native_wh = MMDET_MODEL_ZOO.get(model_name, {}).get('native_input_wh', (640, 640))
     return {
         'backend': 'mmdet',
         'inferencer': inferencer,

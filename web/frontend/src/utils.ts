@@ -146,11 +146,26 @@ export type Camera = {
   model?: string
   useSahi?: boolean
   frameBuffer?: number
+  classList?: number[]
+  classNames?: string[]
 }
 
 export type ModelOption = {
   id: string
   label: string
+  arch?: string
+  dataset?: string
+  architecture?: string
+  task?: string
+  paper?: string
+  summary?: string
+  openVocab?: boolean
+  fileSize?: number
+}
+
+export type ClassOption = {
+  id: number
+  name: string
 }
 
 export type CamSetup = {
