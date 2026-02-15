@@ -130,13 +130,13 @@ def setVideoSource(device):
     elif device.startswith('rtsp:'):
         cap = cv2.VideoCapture(device)
     elif device.startswith('demoVideo'):
-        # Use default backend (GStreamer) for best performance
-        cap = cv2.VideoCapture('/app/video/luggagebelt.m4v')
-        # Give GStreamer pipeline time to start (prevents immediate read failures)
-        time.sleep(0.5)
+        # Use FFmpeg backend — GStreamer can't reliably re-open m4v files
+        # (fails with "unable to query duration of stream" on subsequent opens)
+        cap = cv2.VideoCapture('/app/video/luggagebelt.m4v', cv2.CAP_FFMPEG)
+        time.sleep(0.3)
         RESOLUTION_X = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         RESOLUTION_Y = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        logger.info('Demo video opened: %dx%d', RESOLUTION_X, RESOLUTION_Y)
+        logger.info('Demo video opened: %dx%d (FFmpeg backend)', RESOLUTION_X, RESOLUTION_Y)
         # RESOLUTION_X = 1280
         # RESOLUTION_Y = 720
     else:
@@ -276,7 +276,18 @@ async def main(_saved_masks):
                 next_frame_time = time.monotonic() + frame_interval
 
             if not success:
+                if device.startswith('demoVideo'):
+                    # Demo video ended — re-open the file to loop.
+                    # Seek (CAP_PROP_POS_FRAMES=0) is unreliable on m4v with FFmpeg;
+                    # it can silently fail, causing a tight read-fail loop.
+                    cap.release()
+                    cap = cv2.VideoCapture('/app/video/luggagebelt.m4v', cv2.CAP_FFMPEG)
+                    loop_start = time.monotonic()
+                    next_frame_time = time.monotonic()
+                    logger.info('Demo video looped to start')
+                    continue
                 logger.warning('Restarting video source: %s', device)
+                cap.release()
                 await sleep(1)
                 cap = setVideoSource(device)
                 loop_start = time.monotonic()

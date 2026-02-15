@@ -45,7 +45,7 @@ app.post('/cameras/confidence', updateStreamConfidence)
 app.post('/cameras/frameBuffer', updateStreamFrameBuffer)
 app.post('/cameras/classList', updateStreamClassList)
 app.post('/cameras/classNames', updateStreamClassNames)
-app.get('/cameras/streams/*/backend', getStreamBackendStatus)
+app.get('/cameras/streams/:camStream/backend', getStreamBackendStatus)
 app.get('/', async () => {
   if (hasFrontendDist) {
     return Bun.file(join(frontendDist, "index.html"))

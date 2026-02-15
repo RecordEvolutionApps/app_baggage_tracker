@@ -722,7 +722,7 @@ export class InferenceSetup extends LitElement {
 
   private get _backendDetail(): string {
     if (!this.backendInfo) return '';
-    return `${this.backendInfo.device} · ${this.backendInfo.model}`;
+    return this.backendInfo.device || '';
   }
 
   update(
@@ -897,6 +897,7 @@ export class InferenceSetup extends LitElement {
     this.selectedClassIds = new Set();
     this.availableClasses = [];
     this.classNamesText = '';
+    this.backendInfo = null;
     await this.applyModel('none');
   }
 
@@ -1214,6 +1215,11 @@ export class InferenceSetup extends LitElement {
         <div class="model-picker">
           <div class="model-summary-header">
             <span>Model</span>
+                      <div style="display: flex; gap: 8px;">
+            ${this.selectedModel !== 'none' ? html`
+              <md-text-button @click=${this.resetModel}>Reset</md-text-button>
+            ` : ''}
+          </div>
             <span class="model-count">
               ${this.models.length} models available
             </span>
@@ -1221,21 +1227,19 @@ export class InferenceSetup extends LitElement {
           <md-outlined-button class="model-button" @click=${this.openModelDialog}>
             ${this.selectedModel}
           </md-outlined-button>
-          <div style="display: flex; gap: 8px;">
-            ${this.selectedModel !== 'none' ? html`
-              <md-text-button @click=${this.resetModel}>Reset</md-text-button>
-            ` : ''}
-          </div>
+
 
         </div>
 
+        ${this.selectedModel && this.selectedModel !== 'none' ? html`
         <div class="backend-badge ${this._backendBadgeClass}">
           <span class="badge-dot"></span>
           <span>${this._backendLabel}</span>
-          ${this.backendInfo ? html`
+          ${this._backendDetail ? html`
             <span class="badge-detail">${this._backendDetail}</span>
           ` : ''}
         </div>
+        ` : ''}
 
         ${this.modelStatus !== 'idle' ? html`
           <div class="model-status-bar ${this.modelStatus}">

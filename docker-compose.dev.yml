@@ -12,7 +12,7 @@ services:
       # ANNOUNCED_IP = the IP browsers use to reach this host.
       # 127.0.0.1 works only when the browser runs on the same machine.
       # For LAN access (e.g. 192.168.0.19:1100), set to the host's LAN IP.
-      - ANNOUNCED_IP=${ANNOUNCED_IP:-192.168.0.19}
+      - ANNOUNCED_IP=${ANNOUNCED_IP:-127.0.0.1}
       - RTP_PORT_MIN=10000
       - RTP_PORT_MAX=10100
     volumes:
