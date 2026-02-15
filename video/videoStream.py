@@ -1,9 +1,36 @@
 import sys
+import os
+
+# ── Jetson TLS diagnostics & fix ───────────────────────────────────────────
+# On Jetson (L4T), the static TLS block is limited. PyTorch + CUDA can exhaust
+# it, preventing GStreamer NVIDIA plugins from loading libGLdispatch.so.0.
+# We force-load these .so files before any heavy imports (torch, cv2).
+import ctypes
+_tls_libs = [
+    '/lib/aarch64-linux-gnu/libGLdispatch.so.0',
+    '/usr/lib/aarch64-linux-gnu/libGLESv2.so.2',
+    '/usr/lib/aarch64-linux-gnu/libEGL.so.1',
+    '/usr/lib/aarch64-linux-gnu/gstreamer-1.0/libgstnvvidconv.so',
+    '/usr/lib/aarch64-linux-gnu/gstreamer-1.0/libgstnvvideo4linux2.so',
+]
+for _lib in _tls_libs:
+    if os.path.exists(_lib):
+        try:
+            ctypes.CDLL(_lib, mode=ctypes.RTLD_GLOBAL)
+            print(f'[TLS] Pre-loaded: {_lib}', flush=True)
+        except OSError as e:
+            print(f'[TLS] FAILED to pre-load {_lib}: {e}', flush=True)
+    else:
+        print(f'[TLS] Not found (skipped): {_lib}', flush=True)
+
+print(f'[TLS] LD_PRELOAD={os.environ.get("LD_PRELOAD", "<not set>")}', flush=True)
+del _lib, _tls_libs
+# ────────────────────────────────────────────────────────────────────────────
+
 import json
 from asyncio import get_event_loop, sleep
 import supervision as sv
 import cv2
-import os
 import argparse
 import time
 import logging
@@ -141,25 +168,41 @@ async def main(_saved_masks):
         # outputFormat = " videoconvert ! vp8enc deadline=2 threads=4 keyframe-max-dist=10 ! video/x-vp8 ! rtpvp8pay pt=96"
 
         if torch.cuda.is_available():
-            # Hardware h264 encoding of jetson
-            outputFormat = "queue ! videoconvert ! nvvidconv ! queue ! video/x-raw(memory:NVMM), format=I420 ! nvv4l2h264enc maxperf-enable=true preset-level=1 insert-sps-pps=true insert-vui=true iframeinterval=10 idrinterval=10 ! rtph264pay pt=96 ssrc=11111111 config-interval=1"
+            # Hardware h264 encoding on Jetson
+            # profile=0 (Baseline) matches mediasoup's declared profile-level-id 42e01f
+            # idrinterval=1 makes every I-frame a true IDR (NAL type 5) — mediasoup
+            # only detects NAL type 5 as keyframes, NOT non-IDR I-frames (type 1).
+            # h264parse normalises NAL unit boundaries for clean RTP packetisation.
+            # config-interval=-1 inserts SPS/PPS with every IDR (not every N seconds).
+            outputFormat = ("queue ! videoconvert ! nvvidconv ! queue"
+                " ! video/x-raw(memory:NVMM), format=I420"
+                " ! nvv4l2h264enc maxperf-enable=true preset-level=1 profile=0"
+                "   insert-sps-pps=true insert-vui=true iframeinterval=10 idrinterval=1"
+                " ! h264parse"
+                " ! rtph264pay pt=96 ssrc=11111111 config-interval=-1")
         else:
-            # veryfast preset: good balance of speed/quality (ultrafast was too low quality)
-            # NOTE: Do NOT use intra-refresh=true — it replaces real IDR keyframes with gradual
-            # refresh, which prevents the browser H264 decoder from starting after a reconnect.
-            # key-int-max=15 ensures an IDR every ~0.5s at 30fps for fast recovery on browser refresh.
-            outputFormat = "videoconvert ! video/x-raw, format=I420 ! x264enc tune=zerolatency key-int-max=15 bframes=0 speed-preset=veryfast ! rtph264pay pt=96 ssrc=11111111 config-interval=1"
+            # CPU software encoding (x264)
+            # key-int-max=15 ensures an IDR every ~0.5s at 30fps.
+            # h264parse + config-interval=-1: same rationale as the HW path above.
+            outputFormat = ("videoconvert ! video/x-raw, format=I420"
+                " ! x264enc tune=zerolatency key-int-max=15 bframes=0 speed-preset=veryfast"
+                " ! h264parse"
+                " ! rtph264pay pt=96 ssrc=11111111 config-interval=-1")
 
         logger.info('Streaming %s to port %d (127.0.0.1)', args.camStream, args.port)
 
-        if args.port not in range(10000, 10101):  # Just check if valid
+        if args.port < 1024 or args.port > 65535:
             logger.error('Port %d out of range', args.port)
             sys.exit(1)
 
         # Send to localhost since we share network namespace with mediasoup
         writerStream = "appsrc ! " + outputFormat + " ! udpsink host=127.0.0.1 port=" + str(args.port) + " sync=false async=false"
-        logger.debug('GStreamer pipeline: %s', writerStream)
+        logger.info('GStreamer pipeline: %s', writerStream)
         out = cv2.VideoWriter(writerStream, cv2.CAP_GSTREAMER, 0, FRAMERATE, (RESOLUTION_X, RESOLUTION_Y), True)
+        if out.isOpened():
+            logger.info('GStreamer VideoWriter opened successfully (hw encoder: %s)', 'yes' if torch.cuda.is_available() else 'no')
+        else:
+            logger.error('GStreamer VideoWriter FAILED to open — check GStreamer plugin availability')
 
         logger.info('Starting main video loop...')
         success = True
@@ -317,7 +360,6 @@ async def main(_saved_masks):
             logger.debug('cv2.destroyAllWindows() not supported in headless mode')
     except Exception as e:
         logger.critical('Fatal error in video loop: %s', e, exc_info=True)
-        import sys
         sys.exit(1)
 
 _publish_pool = ThreadPoolExecutor(max_workers=1)

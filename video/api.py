@@ -4,13 +4,16 @@ Video Service API — replaces SSH-based stream management.
 Provides HTTP endpoints for starting/stopping video streams
 and listing USB cameras. The web backend calls these endpoints
 instead of spawning SSH commands.
-"""from __future__ import annotations
+"""
+from __future__ import annotations
+
 import os
 import sys
 import json
 import signal
 import subprocess
 import asyncio
+import logging
 import urllib.parse
 import threading
 from contextlib import asynccontextmanager
@@ -19,6 +22,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 # ── Configuration ───────────────────────────────────────────────────────────
+logger = logging.getLogger('api')
 MEDIASOUP_URL = os.environ.get("MEDIASOUP_URL", "http://127.0.0.1:1200")
 
 # ── State ───────────────────────────────────────────────────────────────────
@@ -47,6 +51,32 @@ app = FastAPI(title="Video Stream Service", lifespan=lifespan)
 # ── Model classes cache ────────────────────────────────────────────────────
 _MODEL_CLASSES_CACHE: dict[str, list[dict]] = {}
 
+# Standard COCO-2017 80-class list (used by virtually all COCO-pretrained models)
+_COCO_CLASSES = [
+    'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train',
+    'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign',
+    'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
+    'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag',
+    'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite',
+    'baseball bat', 'baseball glove', 'skateboard', 'surfboard',
+    'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon',
+    'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot',
+    'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant',
+    'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote',
+    'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink',
+    'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear',
+    'hair drier', 'toothbrush',
+]
+
+# Map dataset keywords → class lists so we never need to load the model
+_DATASET_CLASSES: dict[str, list[str]] = {
+    'coco': _COCO_CLASSES,
+}
+
+
+def _classes_to_dicts(names: list[str]) -> list[dict]:
+    return [{"id": idx, "name": name} for idx, name in enumerate(names)]
+
 
 def _extract_model_classes(inferencer) -> list[dict]:
     classes = None
@@ -71,6 +101,29 @@ def _get_model_classes(model_id: str) -> list[dict]:
     if model_id in _MODEL_CLASSES_CACHE:
         return _MODEL_CLASSES_CACHE[model_id]
 
+    # Fast path: if the model name contains a known dataset keyword, return
+    # the class list directly.  This covers the vast majority of mmdet models
+    # (e.g. "yolox_tiny_8xb8-300e_coco") and avoids loading the whole model.
+    model_id_lower = model_id.lower()
+    for keyword, class_list in _DATASET_CLASSES.items():
+        if keyword in model_id_lower:
+            result = _classes_to_dicts(class_list)
+            _MODEL_CLASSES_CACHE[model_id] = result
+            return result
+
+    # Secondary fast path: check discovered model metadata (if already cached)
+    if hasattr(_discover_mmdet_models, '_cache'):
+        for m in _discover_mmdet_models._cache:
+            if m['id'] == model_id:
+                dataset = m.get('dataset', '').lower()
+                for keyword, class_list in _DATASET_CLASSES.items():
+                    if keyword in dataset:
+                        result = _classes_to_dicts(class_list)
+                        _MODEL_CLASSES_CACHE[model_id] = result
+                        return result
+                break
+
+    # Slow path: actually load the model (non-standard dataset)
     from model_utils import get_mmdet_model
     bundle = get_mmdet_model(model_id)
     inferencer = bundle.get('inferencer')
@@ -236,6 +289,7 @@ def get_model_classes(model_id: str):
     try:
         return _get_model_classes(model_id)
     except Exception as exc:
+        logger.error("Failed to load classes for '%s': %s", model_id, exc, exc_info=True)
         raise HTTPException(500, f"Could not load classes for '{model_id}': {exc}")
 
 
@@ -384,8 +438,13 @@ def _discover_mmdet_models() -> list[dict]:
                 '_weight_url': weight if pd.notna(weight) else '',
             })
 
-        # Fetch checkpoint file sizes via concurrent HEAD requests
-        _populate_file_sizes(models)
+        # Fetch checkpoint file sizes in background (don't block the response)
+        def _bg_populate():
+            try:
+                _populate_file_sizes(models)
+            except Exception:
+                pass
+        threading.Thread(target=_bg_populate, daemon=True).start()
 
         # Sort by architecture, then by name
         models.sort(key=lambda m: (m['arch'], m['id']))

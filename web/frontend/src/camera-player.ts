@@ -71,7 +71,6 @@ protected async firstUpdated() {
         align-items: center;
         flex: 1;
         position: relative;
-        margin: 0 auto;
         box-sizing: border-box;
         background: #fff;
       }

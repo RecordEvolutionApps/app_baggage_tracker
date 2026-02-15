@@ -15,7 +15,47 @@ import logging
 import torch
 from typing import Dict, Any, Optional
 
+# Jetson L4T PyTorch lacks full distributed support — stub out ReduceOp
+# so that mmengine doesn't crash on import.
+if not hasattr(torch.distributed, 'ReduceOp'):
+    class _ReduceOpStub:
+        SUM = 0; PRODUCT = 1; MIN = 2; MAX = 3; BAND = 4; BOR = 5; BXOR = 6
+    torch.distributed.ReduceOp = _ReduceOpStub
+
 logger = logging.getLogger('model_utils')
+
+# --------------------------------------------------------------------------- #
+# Monkey-patch mmcv NMS: fall back to torchvision when the compiled CUDA
+# kernel is unavailable (common on Jetson where mmcv was not compiled with
+# the correct TORCH_CUDA_ARCH_LIST).
+# --------------------------------------------------------------------------- #
+def _patch_mmcv_nms():
+    try:
+        from mmcv.ops import nms as _nms_mod
+        _orig_apply = _nms_mod.NMSop.apply
+
+        @staticmethod
+        def _safe_nms(*args, **kwargs):
+            try:
+                return _orig_apply(*args, **kwargs)
+            except RuntimeError as e:
+                if 'nms_impl' not in str(e):
+                    raise
+                # Fall back to torchvision NMS (CUDA-accelerated on Jetson)
+                import torchvision
+                bboxes, scores, iou_threshold = args[0], args[1], args[2]
+                max_num = args[5] if len(args) > 5 else -1
+                keep = torchvision.ops.nms(bboxes, scores, float(iou_threshold))
+                if max_num > 0:
+                    keep = keep[:max_num]
+                return keep
+
+        _nms_mod.NMSop.apply = _safe_nms
+        logger.info('Patched mmcv NMS with torchvision fallback')
+    except Exception:
+        pass  # mmcv not installed or structure changed — skip silently
+
+_patch_mmcv_nms()
 
 OBJECT_MODEL = os.environ.get('OBJECT_MODEL', 'rtmdet_tiny_8xb32-300e_coco')
 DETECT_BACKEND = os.environ.get('DETECT_BACKEND', 'mmdet')
@@ -136,12 +176,21 @@ def prepare_model(model_name: str, progress_callback=None):
         _report('ready', 100, f'{model_name} downloaded')
         return
 
-    # For all other models, use DetInferencer to resolve and download
-    # DetInferencer.__init__ auto-downloads — we run it once to prime the cache
+    # For all other models, resolve the checkpoint URL from openmim metafiles
+    # (DetInferencer's internal registry is smaller and may not find the model)
+    weight_url = _resolve_weight_url(model_name)
+    if weight_url:
+        checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+        _report('downloading', 5, f'Downloading {model_name} from {weight_url[:80]}...')
+        _download_with_progress(weight_url, str(checkpoint_path), _report)
+        _report('ready', 100, f'{model_name} downloaded')
+        return
+
+    # Last resort: try DetInferencer auto-download
     try:
         from mmdet.apis import DetInferencer
         device = 'cpu'  # Use CPU for download-only; saves GPU memory
-        _report('downloading', 10, f'Resolving {model_name} from metafiles...')
+        _report('downloading', 10, f'Resolving {model_name} from DetInferencer...')
         DetInferencer(model=model_name, device=device)
         _report('ready', 100, f'{model_name} downloaded and cached')
     except Exception as e:
@@ -176,6 +225,26 @@ def _download_with_progress(url: str, dest: str, report_fn):
     report_fn('downloading', 100, 'Download complete')
 
 
+def _resolve_weight_url(model_name: str) -> str | None:
+    """Look up the checkpoint download URL from openmim's metafile data."""
+    try:
+        from mim.commands.search import get_model_info
+        import pandas as pd
+        df = get_model_info('mmdet', shown_fields=['config', 'weight'])
+        for _, row in df.iterrows():
+            config_path = row.get('config', '')
+            if not config_path:
+                continue
+            name = os.path.basename(config_path).replace('.py', '')
+            if name == model_name:
+                weight = row.get('weight', '')
+                if pd.notna(weight) and str(weight).startswith('http'):
+                    return str(weight)
+    except Exception as e:
+        logger.warning('_resolve_weight_url failed for %s: %s', model_name, e)
+    return None
+
+
 def getModel(model_name: str) -> Dict[str, Any]:
     backend = DETECT_BACKEND.lower()
     if backend == 'mmdet':
@@ -186,8 +255,9 @@ def get_mmdet_model(model_name: str) -> Dict[str, Any]:
     """Load any MMDetection model by name.
 
     For models listed in MMDET_MODEL_ZOO the checkpoint is pre-downloaded for
-    offline/cached use.  For *any other* model name, DetInferencer resolves the
-    config from mmdet's metafile registry and auto-downloads the checkpoint.
+    offline/cached use.  For *any other* model name we resolve the config via
+    openmim metafiles (which covers more models than DetInferencer's internal
+    registry).
     """
     cache_root = Path('/data/mmdet')
     checkpoint_path = cache_root / 'checkpoints' / f'{model_name}.pth'
@@ -203,14 +273,31 @@ def get_mmdet_model(model_name: str) -> Dict[str, Any]:
 
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
-    # Pass the model name so DetInferencer resolves the full config from its
-    # metafile, properly handling _base_ inheritance.  Use locally cached
-    # weights when available, otherwise let DetInferencer auto-download.
+    # Try loading by name first (works for models in DetInferencer's registry)
+    # If that fails, resolve the config path from openmim metafiles
+    inferencer = None
     if checkpoint_path.is_file():
-        inferencer = DetInferencer(model=model_name, weights=str(checkpoint_path), device=device, show_progress=False)
+        try:
+            inferencer = DetInferencer(model=model_name, weights=str(checkpoint_path), device=device, show_progress=False)
+        except ValueError:
+            # Model name not in DetInferencer registry — resolve config from openmim
+            config_path = _resolve_config_path(model_name)
+            if config_path:
+                logger.info('Loading %s via config path: %s', model_name, config_path)
+                inferencer = DetInferencer(model=config_path, weights=str(checkpoint_path), device=device, show_progress=False)
+            else:
+                raise
     else:
-        logger.info('No cached checkpoint for "%s", DetInferencer will auto-download...', model_name)
-        inferencer = DetInferencer(model=model_name, device=device, show_progress=False)
+        try:
+            logger.info('No cached checkpoint for "%s", DetInferencer will auto-download...', model_name)
+            inferencer = DetInferencer(model=model_name, device=device, show_progress=False)
+        except ValueError:
+            config_path = _resolve_config_path(model_name)
+            if config_path:
+                logger.info('Loading %s via config path (auto-download): %s', model_name, config_path)
+                inferencer = DetInferencer(model=config_path, device=device, show_progress=False)
+            else:
+                raise
 
     native_wh = MMDET_MODEL_ZOO.get(model_name, {}).get('native_input_wh', (640, 640))
     return {
@@ -219,6 +306,42 @@ def get_mmdet_model(model_name: str) -> Dict[str, Any]:
         'model_name': model_name,
         'native_input_wh': native_wh,
     }
+
+
+def _resolve_config_path(model_name: str) -> str | None:
+    """Resolve the absolute config file path for a model from openmim metafiles.
+
+    Returns an absolute path like
+    '/usr/local/lib/python3.8/dist-packages/mmdet/.mim/configs/yolox/yolox_tiny_8xb8-300e_coco.py'
+    that DetInferencer can load directly as a Config file, or None.
+    """
+    try:
+        import mmdet
+        mmdet_root = os.path.dirname(mmdet.__file__)
+
+        from mim.commands.search import get_model_info
+        df = get_model_info('mmdet', shown_fields=['config'])
+        for _, row in df.iterrows():
+            config = row.get('config', '')
+            if not config:
+                continue
+            name = os.path.basename(config).replace('.py', '')
+            if name == model_name:
+                # Resolve to absolute path inside the installed mmdet package
+                for prefix in [
+                    os.path.join(mmdet_root, '.mim'),   # pip-installed mmdet
+                    mmdet_root,                          # editable / dev install
+                ]:
+                    abs_path = os.path.join(prefix, config)
+                    if os.path.isfile(abs_path):
+                        logger.info('Resolved config for %s: %s', model_name, abs_path)
+                        return abs_path
+                # Last resort: return relative path (will likely fail)
+                logger.warning('Config file not found on disk for %s: %s', model_name, config)
+                return config
+    except Exception as e:
+        logger.warning('_resolve_config_path failed for %s: %s', model_name, e)
+    return None
 
 def get_youtube_video(url, height):
     import yt_dlp

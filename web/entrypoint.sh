@@ -1,3 +1,3 @@
 #!/bin/bash
 
-exec bun run /app/backend/index.ts
+exec bun run /app/backend/src/index.ts

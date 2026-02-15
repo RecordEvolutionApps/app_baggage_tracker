@@ -1,13 +1,29 @@
 import { createWorker } from 'mediasoup';
 import { WebSocketServer } from 'ws';
 import http from 'node:http';
+import os from 'node:os';
 
 // ── Configuration ──────────────────────────────────────────────────────────
 const WS_PORT       = parseInt(process.env.WS_PORT || '1200', 10);
-const ANNOUNCED_IP  = process.env.ANNOUNCED_IP || undefined;  // public IP for NAT
 const LISTEN_IP     = process.env.LISTEN_IP || '0.0.0.0';
 const RTP_PORT_MIN  = parseInt(process.env.RTP_PORT_MIN || '2000', 10);
 const RTP_PORT_MAX  = parseInt(process.env.RTP_PORT_MAX || '2999', 10);
+
+// Auto-detect host IP if ANNOUNCED_IP is not explicitly set.
+// This finds the first non-internal IPv4 address (e.g. 192.168.x.x).
+function getHostIp() {
+  for (const ifaces of Object.values(os.networkInterfaces())) {
+    for (const iface of ifaces) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return '127.0.0.1';
+}
+
+const ANNOUNCED_IP = process.env.ANNOUNCED_IP || getHostIp();
+console.log(`[mediasoup] ANNOUNCED_IP=${ANNOUNCED_IP}`);
 
 // No pre-defined camera list — ingests are created on demand via POST /ingest
 
@@ -264,6 +280,9 @@ async function handleMessage(msg, ws, consumerTransports, consumers) {
 
       consumerTransports.set(camId, transport);
 
+      console.log(`[mediasoup] WebRTC transport ${camId} created — ICE candidates:`,
+        transport.iceCandidates.map(c => `${c.protocol}://${c.ip}:${c.port}`).join(', '));
+
       return {
         type: 'consumerTransportCreated',
         data: {
@@ -282,6 +301,7 @@ async function handleMessage(msg, ws, consumerTransports, consumers) {
       const transport = consumerTransports.get(camId);
       if (!transport) throw new Error(`No transport for ${camId}`);
       await transport.connect({ dtlsParameters: msg.dtlsParameters });
+      console.log(`[mediasoup] WebRTC transport ${camId} ICE state: ${transport.iceState}, DTLS state: ${transport.dtlsState}`);
       return { type: 'consumerTransportConnected', camId };
     }
 
@@ -388,3 +408,14 @@ async function handleMessage(msg, ws, consumerTransports, consumers) {
 // ── Boot ───────────────────────────────────────────────────────────────────
 await startMediasoup();
 startSignaling();
+
+// Graceful shutdown on SIGTERM/SIGINT (Docker stop)
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, () => {
+    console.log(`[mediasoup] Received ${sig}, shutting down…`);
+    try { worker?.close(); } catch {}
+    // Force exit after 500ms if worker.close() hangs
+    setTimeout(() => process.exit(0), 500).unref();
+    process.exit(0);
+  });
+}
