@@ -245,11 +245,72 @@ def _resolve_weight_url(model_name: str) -> str | None:
     return None
 
 
+# ── Backend status reporting ────────────────────────────────────────────────
+
+def write_backend_status(cam_stream: str, model_bundle: Dict[str, Any], extra: Dict[str, Any] | None = None):
+    """Write a JSON status file so the API / frontend can inspect the active backend.
+
+    Written to /data/status/<camStream>.backend.json with keys:
+      backend       – 'mmdet', 'tensorrt', or 'none'
+      model         – model name
+      precision     – 'fp16', 'fp32', or 'n/a'
+      device        – 'cuda:0' or 'cpu'
+      trt_cached    – bool (True if engine was loaded from cache)
+      message       – human-readable summary
+    """
+    import torch
+    status_dir = Path('/data/status')
+    status_dir.mkdir(parents=True, exist_ok=True)
+
+    backend = model_bundle.get('backend', 'unknown')
+    model_name = model_bundle.get('model_name', '')
+    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+
+    if backend == 'tensorrt':
+        precision = 'fp16'
+        trt_cached = bool(model_bundle.get('trt_cached'))
+        message = f'TensorRT FP16 engine active for {model_name}'
+        if trt_cached:
+            message += ' (loaded from cache)'
+    elif backend == 'mmdet':
+        precision = 'fp32'
+        trt_cached = False
+        # Check if tensorrt was requested but fell back
+        requested = DETECT_BACKEND.lower()
+        if requested == 'tensorrt':
+            message = f'PyTorch FP32 fallback (TensorRT build failed) for {model_name}'
+        else:
+            message = f'PyTorch FP32 (MMDetection) for {model_name}'
+    else:
+        precision = 'n/a'
+        trt_cached = False
+        message = 'No inference backend'
+
+    status = {
+        'backend': backend,
+        'model': model_name,
+        'precision': precision,
+        'device': device,
+        'trt_cached': trt_cached,
+        'requested_backend': DETECT_BACKEND.lower(),
+        'message': message,
+    }
+    if extra:
+        status.update(extra)
+
+    status_file = status_dir / f'{cam_stream}.backend.json'
+    with open(status_file, 'w') as f:
+        json.dump(status, f)
+    logger.info('[status] %s: %s', cam_stream, message)
+
+
 def getModel(model_name: str) -> Dict[str, Any]:
     backend = DETECT_BACKEND.lower()
+    if backend == 'tensorrt':
+        return get_tensorrt_model(model_name)
     if backend == 'mmdet':
         return get_mmdet_model(model_name)
-    raise ValueError(f'Unsupported DETECT_BACKEND: {backend}. Only mmdet is supported.')
+    raise ValueError(f'Unsupported DETECT_BACKEND: {backend}. Supported: mmdet, tensorrt')
 
 def get_mmdet_model(model_name: str) -> Dict[str, Any]:
     """Load any MMDetection model by name.
@@ -342,6 +403,72 @@ def _resolve_config_path(model_name: str) -> str | None:
     except Exception as e:
         logger.warning('_resolve_config_path failed for %s: %s', model_name, e)
     return None
+
+
+def get_tensorrt_model(model_name: str) -> Dict[str, Any]:
+    """Load a model as a TensorRT FP16 engine.
+
+    If a cached engine exists it is loaded directly — no MMDet / ONNX overhead.
+    Otherwise, the full pipeline runs:  MMDet → ONNX export → TRT engine build.
+    Falls back to the mmdet PyTorch backend if TensorRT is unavailable or the
+    build fails.
+    """
+    try:
+        import trt_backend
+    except ImportError:
+        logger.warning('trt_backend module not found; falling back to mmdet')
+        return get_mmdet_model(model_name)
+
+    if not trt_backend.is_available():
+        logger.warning('TensorRT or CUDA not available; falling back to mmdet backend')
+        return get_mmdet_model(model_name)
+
+    input_wh = MMDET_MODEL_ZOO.get(model_name, {}).get('native_input_wh', (640, 640))
+
+    # ── Fast path: load from cached engine (no MMDet needed) ───────────
+    if trt_backend.is_engine_cached(model_name):
+        try:
+            trt_inferencer = trt_backend.TRTInferencer(
+                str(trt_backend.engine_path(model_name)), input_wh,
+            )
+            logger.info('TensorRT engine loaded from cache for %s (FP16)', model_name)
+            return {
+                'backend': 'tensorrt',
+                'inferencer': trt_inferencer,
+                'model_name': model_name,
+                'native_input_wh': input_wh,
+                'trt_cached': True,
+            }
+        except Exception as e:
+            logger.warning('Cached TRT engine failed to load: %s — rebuilding', e)
+
+    # ── Slow path: build engine from MMDet model ──────────────────────
+    mmdet_bundle = get_mmdet_model(model_name)
+    input_wh = mmdet_bundle['native_input_wh']
+    num_classes = mmdet_bundle['inferencer'].model.bbox_head.num_classes
+
+    try:
+        trt_inferencer = trt_backend.build_trt_model(
+            model_name, mmdet_bundle['inferencer'], input_wh, num_classes,
+        )
+
+        # Free the PyTorch model to reclaim GPU memory
+        del mmdet_bundle['inferencer']
+        torch.cuda.empty_cache()
+
+        logger.info('TensorRT backend ready for %s (FP16)', model_name)
+        return {
+            'backend': 'tensorrt',
+            'inferencer': trt_inferencer,
+            'model_name': model_name,
+            'native_input_wh': input_wh,
+            'num_classes': num_classes,
+            'trt_cached': False,
+        }
+    except Exception as e:
+        logger.error('TensorRT build failed: %s — falling back to mmdet', e, exc_info=True)
+        return mmdet_bundle
+
 
 def get_youtube_video(url, height):
     import yt_dlp
@@ -559,6 +686,8 @@ def infer(frame, model_bundle, confidence=None):
 
 def infer_frame(frame: np.ndarray, model_bundle: Dict[str, Any], confidence=None):
     backend = model_bundle.get('backend')
+    if backend == 'tensorrt':
+        return infer_tensorrt(frame, model_bundle, confidence=confidence)
     if backend == 'mmdet':
         return infer_mmdet(frame, model_bundle['inferencer'], confidence=confidence)
     raise ValueError(f'Unsupported backend in model bundle: {backend}')
@@ -597,6 +726,20 @@ def infer_mmdet(frame: np.ndarray, inferencer, confidence=None) -> Optional[sv.D
     except Exception as e:
         logger.error('Failed to extract detections from MMDetection result: %s', e, exc_info=True)
         return False
+
+
+def infer_tensorrt(frame: np.ndarray, model_bundle: Dict[str, Any], confidence=None) -> Optional[sv.Detections]:
+    """Run inference through the TensorRT engine."""
+    trt_inf = model_bundle['inferencer']
+    conf = confidence if confidence is not None else CONF
+    class_list = CLASS_LIST if CLASS_LIST else None
+    try:
+        result = trt_inf(frame, conf=conf, iou=IOU, class_list=class_list)
+        return result if result is not None else False
+    except Exception as e:
+        logger.error('TensorRT inference failed: %s', e, exc_info=True)
+        return False
+
 
 def move_detections(detections: sv.Detections, offset_x: int, offset_y: int) -> sv.Detections:
   for i in range(len(detections.xyxy)):

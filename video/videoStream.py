@@ -43,7 +43,7 @@ import base64
 import torch
 import functools
 
-from model_utils import getModel, processFrame, initSliceInferer, move_detections, get_extreme_points, infer, get_youtube_video, overlay_text, count_polygon_zone, count_detections, watchMaskFile, watchSettingsFile, empty_detections, FRAME_BUFFER
+from model_utils import getModel, processFrame, initSliceInferer, move_detections, get_extreme_points, infer, get_youtube_video, overlay_text, count_polygon_zone, count_detections, watchMaskFile, watchSettingsFile, empty_detections, FRAME_BUFFER, write_backend_status
 import model_utils  # for updating CLASS_LIST dynamically
 
 # Configure logging for the whole video service
@@ -153,6 +153,7 @@ cap.set(4, RESOLUTION_Y)
 model = getModel(OBJECT_MODEL)
 current_model_name = OBJECT_MODEL
 logger.info('Model native input: %s', model.get('native_input_wh', 'unknown'))
+write_backend_status(args.camStream, model)
 
 # print("CUDA available:", torch.cuda.is_available(), 'GPUs', torch.cuda.device_count())
 

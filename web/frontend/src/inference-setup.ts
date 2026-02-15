@@ -79,6 +79,19 @@ export class InferenceSetup extends LitElement {
   @state()
   declare modelStatusMessage: string;
 
+  @state()
+  declare backendInfo: {
+    backend: string;
+    model: string;
+    precision: string;
+    device: string;
+    trt_cached: boolean;
+    requested_backend: string;
+    message: string;
+  } | null;
+
+  private backendPollTimer: ReturnType<typeof setInterval> | null = null;
+
   classDialog?: MdDialog;
   modelDialog?: MdDialog;
   private basepath = window.location.protocol + '//' + window.location.host;
@@ -105,6 +118,7 @@ export class InferenceSetup extends LitElement {
     this.modelStatus = 'idle';
     this.modelProgress = 0;
     this.modelStatusMessage = '';
+    this.backendInfo = null;
   }
 
   static styles = [
@@ -581,6 +595,72 @@ export class InferenceSetup extends LitElement {
         vertical-align: middle;
         line-height: 1.2;
       }
+
+      .backend-badge {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        border-radius: 4px;
+        font-family: sans-serif;
+        font-size: 0.8rem;
+        border: 1px solid #d0d0d0;
+        background: #f5f7fa;
+        color: #5e5f61;
+      }
+
+      .backend-badge .badge-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+
+      .backend-badge.tensorrt {
+        background: #eef6ee;
+        border-color: #8bc48b;
+        color: #2d5a2d;
+      }
+
+      .backend-badge.tensorrt .badge-dot {
+        background: #4caf50;
+      }
+
+      .backend-badge.mmdet {
+        background: #f5f7fa;
+        border-color: #b0bec5;
+        color: #455a64;
+      }
+
+      .backend-badge.mmdet .badge-dot {
+        background: #78909c;
+      }
+
+      .backend-badge.fallback {
+        background: #fff8e1;
+        border-color: #ffcc02;
+        color: #7a6400;
+      }
+
+      .backend-badge.fallback .badge-dot {
+        background: #ff9800;
+      }
+
+      .backend-badge.unknown {
+        background: #fafafa;
+        border-color: #e0e0e0;
+        color: #999;
+      }
+
+      .backend-badge.unknown .badge-dot {
+        background: #bbb;
+      }
+
+      .backend-badge .badge-detail {
+        font-size: 0.7rem;
+        color: inherit;
+        opacity: 0.75;
+      }
     `,
   ];
 
@@ -590,6 +670,59 @@ export class InferenceSetup extends LitElement {
     this.classDialog = this.shadowRoot?.getElementById('class-dialog') as MdDialog;
     this.modelDialog = this.shadowRoot?.getElementById('model-dialog') as MdDialog;
     this.fetchModels();
+    this.fetchBackendStatus();
+    this.backendPollTimer = setInterval(() => this.fetchBackendStatus(), 10000);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    if (this.backendPollTimer) {
+      clearInterval(this.backendPollTimer);
+      this.backendPollTimer = null;
+    }
+  }
+
+  private async fetchBackendStatus() {
+    if (!this.camStream) return;
+    try {
+      const res = await fetch(
+        `${this.basepath}/cameras/streams/${encodeURIComponent(this.camStream)}/backend`,
+        { signal: AbortSignal.timeout(5000) },
+      );
+      if (res.ok) {
+        this.backendInfo = await res.json();
+      }
+    } catch {
+      // Silently ignore — badge stays as-is
+    }
+  }
+
+  private get _backendBadgeClass(): string {
+    if (!this.backendInfo) return 'unknown';
+    const { backend, requested_backend } = this.backendInfo;
+    if (backend === 'tensorrt') return 'tensorrt';
+    if (backend === 'mmdet' && requested_backend === 'tensorrt') return 'fallback';
+    if (backend === 'mmdet') return 'mmdet';
+    return 'unknown';
+  }
+
+  private get _backendLabel(): string {
+    if (!this.backendInfo) return 'Loading…';
+    const { backend, precision, trt_cached, requested_backend } = this.backendInfo;
+    if (backend === 'tensorrt') {
+      const cached = trt_cached ? ' (cached)' : '';
+      return `TensorRT ${precision.toUpperCase()}${cached}`;
+    }
+    if (backend === 'mmdet' && requested_backend === 'tensorrt') {
+      return `PyTorch FP32 (TRT fallback)`;
+    }
+    if (backend === 'mmdet') return `PyTorch FP32`;
+    return this.backendInfo.message || 'Unknown';
+  }
+
+  private get _backendDetail(): string {
+    if (!this.backendInfo) return '';
+    return `${this.backendInfo.device} · ${this.backendInfo.model}`;
   }
 
   update(
@@ -868,6 +1001,8 @@ export class InferenceSetup extends LitElement {
 
       this.modelStatus = 'ready';
       this.modelStatusMessage = 'Model applied successfully';
+      // Refresh backend status after stream restart (with delay for process startup)
+      setTimeout(() => this.fetchBackendStatus(), 5000);
       // Auto-clear the status bar after a short delay
       setTimeout(() => {
         if (this.modelStatus === 'ready') {
@@ -1092,6 +1227,14 @@ export class InferenceSetup extends LitElement {
             ` : ''}
           </div>
 
+        </div>
+
+        <div class="backend-badge ${this._backendBadgeClass}">
+          <span class="badge-dot"></span>
+          <span>${this._backendLabel}</span>
+          ${this.backendInfo ? html`
+            <span class="badge-detail">${this._backendDetail}</span>
+          ` : ''}
         </div>
 
         ${this.modelStatus !== 'idle' ? html`

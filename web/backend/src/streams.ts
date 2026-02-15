@@ -100,6 +100,30 @@ export async function killVideoStream(camPath: string, camStream: string) {
     ports.delete(camStream)
 }
 
+// ── Backend status ─────────────────────────────────────────────────────────
+
+export async function getStreamBackendStatus(ctx: Context): Promise<any> {
+    const url = new URL(ctx.request.url)
+    const camStream = url.pathname.split('/cameras/streams/')[1]?.split('/')[0]
+    if (!camStream) {
+        ctx.set.status = 400
+        return { error: 'camStream is required' }
+    }
+    try {
+        const res = await fetch(
+            `${VIDEO_API}/streams/${encodeURIComponent(camStream)}/backend`,
+            { signal: AbortSignal.timeout(5000) },
+        )
+        if (res.ok) return await res.json()
+        ctx.set.status = res.status
+        return { error: `Video API returned ${res.status}` }
+    } catch (err) {
+        console.error('Failed to fetch backend status:', err)
+        ctx.set.status = 502
+        return { error: 'Could not reach video API' }
+    }
+}
+
 // ── Initialization ─────────────────────────────────────────────────────────
 
 async function initStreams() {

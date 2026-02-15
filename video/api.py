@@ -252,6 +252,30 @@ def list_streams():
     return {"streams": alive}
 
 
+@app.get("/streams/{cam_stream}/backend")
+def stream_backend_status(cam_stream: str):
+    """Return the inference backend status for a running stream.
+
+    Reads from /data/status/<camStream>.backend.json written by the
+    video process at startup.
+    """
+    status_file = f'/data/status/{cam_stream}.backend.json'
+    if not os.path.isfile(status_file):
+        return {
+            "backend": "unknown",
+            "model": "",
+            "precision": "n/a",
+            "device": "unknown",
+            "trt_cached": False,
+            "message": "Stream has not reported backend status yet",
+        }
+    try:
+        with open(status_file, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read backend status: {e}")
+
+
 @app.get("/cameras")
 def list_cameras():
     """List USB cameras attached to the system."""

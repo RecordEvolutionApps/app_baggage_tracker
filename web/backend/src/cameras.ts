@@ -8,5 +8,5 @@
  *   settings.ts – per-stream settings updates
  */
 export { getModels, getModelStatus, prepareModel, getModelClasses } from './models.js'
-export { getStreamSetup, listStreams, createStream, deleteStream, selectCamera, getUSBCameras } from './streams.js'
+export { getStreamSetup, listStreams, createStream, deleteStream, selectCamera, getUSBCameras, getStreamBackendStatus } from './streams.js'
 export { updateStreamModel, updateStreamSahi, updateStreamConfidence, updateStreamFrameBuffer, updateStreamClassList, updateStreamClassNames } from './settings.js'
