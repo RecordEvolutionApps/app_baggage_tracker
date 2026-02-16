@@ -58,7 +58,9 @@ def _patch_mmcv_nms():
 _patch_mmcv_nms()
 
 OBJECT_MODEL = os.environ.get('OBJECT_MODEL', 'rtmdet_tiny_8xb32-300e_coco')
-DETECT_BACKEND = os.environ.get('DETECT_BACKEND', 'mmdet')
+# Auto-select TensorRT on CUDA-capable devices (Jetson), fall back to mmdet on CPU
+_default_backend = 'tensorrt' if torch.cuda.is_available() else 'mmdet'
+DETECT_BACKEND = os.environ.get('DETECT_BACKEND', _default_backend)
 RESOLUTION_X = int(os.environ.get('RESOLUTION_X', 640))
 RESOLUTION_Y = int(os.environ.get('RESOLUTION_Y', 480))
 DEVICE_NAME = os.environ.get('DEVICE_NAME', 'UNKNOWN_DEVICE')
@@ -675,6 +677,7 @@ def initSliceInferer(model_bundle: Dict[str, Any], settings_dict=None):
     slicer = sv.InferenceSlicer(
         callback=inferSlice,
         slice_wh=(native_w, native_h),
+        overlap_ratio_wh=None,
         overlap_wh=(int(0.2 * native_w), int(0.2 * native_h)),
         iou_threshold=IOU,
         thread_workers=6

@@ -160,6 +160,7 @@ export type ModelOption = {
   task?: string
   paper?: string
   summary?: string
+  description?: string
   openVocab?: boolean
   fileSize?: number
 }

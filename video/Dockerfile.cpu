@@ -77,7 +77,7 @@ RUN cd /tmp && \
 	rm -rf /tmp/opencv
 
 # Install supervision separately (version compatibility)
-RUN uv pip install --system supervision==0.27.0 --no-deps
+RUN uv pip install --system supervision==0.25.1 --no-deps
 
 # Create model cache directory
 RUN mkdir -p /app/download /data/mmdet

@@ -156,7 +156,8 @@ export class InferenceSetup extends LitElement {
 
       .model-button {
         width: 100%;
-        --md-outlined-button-label-text-font: sans-serif;
+        --md-elevated-button-container-color: #eceff1;
+        --md-elevated-button-label-text-color: #5e5f61;
       }
 
       .model-filter {
@@ -780,6 +781,7 @@ export class InferenceSetup extends LitElement {
         !q ||
         m.id.toLowerCase().includes(q) ||
         m.label.toLowerCase().includes(q) ||
+        (m.description || '').toLowerCase().includes(q) ||
         (m.openVocab && 'open vocab'.includes(q)),
     );
 
@@ -803,6 +805,7 @@ export class InferenceSetup extends LitElement {
         !q ||
         m.id.toLowerCase().includes(q) ||
         m.label.toLowerCase().includes(q) ||
+        (m.description || '').toLowerCase().includes(q) ||
         (m.openVocab && 'open vocab'.includes(q)),
     );
   }
@@ -1224,9 +1227,10 @@ export class InferenceSetup extends LitElement {
               ${this.models.length} models available
             </span>
           </div>
-          <md-outlined-button class="model-button" @click=${this.openModelDialog}>
+          <md-elevated-button class="model-button" @click=${this.openModelDialog}>
             ${this.selectedModel}
-          </md-outlined-button>
+            <md-icon slot="icon">neurology</md-icon>
+          </md-elevated-button>
 
 
         </div>
@@ -1449,14 +1453,13 @@ export class InferenceSetup extends LitElement {
           ${this.pendingModelInfo ? html`
             <div class="model-details">
               <h4>Model Details</h4>
-              ${this.pendingModelInfo.summary ? html`
+              ${this.pendingModelInfo.description ? html`
+                ${this.pendingModelInfo.description.split('\n').map(line => line.trim()).filter(line => line).map(line => html`<div style="margin-bottom: 4px;">${line}</div>`)}
+              ` : (this.pendingModelInfo.summary ? html`
                 <div>${this.pendingModelInfo.summary}</div>
-              ` : html`<div>No description available.</div>`}
+              ` : html`<div>No description available.</div>`)}
               ${this.pendingModelInfo.task ? html`
                 <div style="margin-top: 6px;">Task: ${this.pendingModelInfo.task}</div>
-              ` : ''}
-              ${this.pendingModelInfo.architecture ? html`
-                <div>Architecture: ${this.pendingModelInfo.architecture}</div>
               ` : ''}
               ${this.pendingModelInfo.fileSize ? html`
                 <div>Download size: ${this.pendingModelInfo.fileSize} MB</div>

@@ -48,6 +48,10 @@ TRT_WORKSPACE_MB = int(os.environ.get('TRT_WORKSPACE_MB', '1024'))
 _MEAN = np.array([103.53, 116.28, 123.675], dtype=np.float32)   # BGR
 _STD  = np.array([57.375, 57.12,  58.395],  dtype=np.float32)   # BGR
 
+# Same constants as GPU tensors (allocated once, reused every frame)
+_MEAN_GPU = torch.tensor([103.53, 116.28, 123.675], dtype=torch.float32, device='cuda').view(1, 1, 3) if torch.cuda.is_available() else None
+_STD_GPU  = torch.tensor([57.375, 57.12,  58.395],  dtype=torch.float32, device='cuda').view(1, 1, 3) if torch.cuda.is_available() else None
+
 # RTMDet FPN strides (same for tiny / s / m / l / x)
 _STRIDES = (8, 16, 32)
 
@@ -188,7 +192,24 @@ def build_engine_from_onnx(model_name: str, onnx_file: str) -> str:
     else:
         logger.warning('FP16 not natively supported on this GPU — building FP32 engine')
 
+    logger.info('TensorRT engine build started — this may take 5-20 minutes on Jetson. Please wait...')
+
+    # Log a heartbeat so the user knows the process is alive
+    import threading
+    _build_done = threading.Event()
+    def _heartbeat():
+        elapsed = 0
+        while not _build_done.is_set():
+            _build_done.wait(60)
+            if not _build_done.is_set():
+                elapsed += 1
+                logger.info('TensorRT engine build still running... (%d min elapsed)', elapsed)
+    hb_thread = threading.Thread(target=_heartbeat, daemon=True)
+    hb_thread.start()
+
     serialised = builder.build_serialized_network(network, config)
+    _build_done.set()
+
     if serialised is None:
         raise RuntimeError('TensorRT engine serialisation failed')
 
@@ -241,15 +262,20 @@ class TRTInferencer:
         # Allocate I/O buffers as torch CUDA tensors
         self._io: Dict[str, torch.Tensor] = {}
         self._io_names: list[str] = []
+        # Map TensorRT dtypes directly to torch dtypes (avoids trt.nptype()
+        # which uses removed np.bool on older TRT + newer NumPy).
+        _trt_to_torch = {
+            trt.float32: torch.float32,
+            trt.float16: torch.float16,
+            trt.int32:   torch.int32,
+            trt.int8:    torch.int8,
+        }
+
         for i in range(self.engine.num_io_tensors):
             name  = self.engine.get_tensor_name(i)
             shape = tuple(self.engine.get_tensor_shape(name))
-            np_dt = trt.nptype(self.engine.get_tensor_dtype(name))
-            t_dt  = {
-                np.float32: torch.float32,
-                np.float16: torch.float16,
-                np.int32:   torch.int32,
-            }.get(np_dt, torch.float32)
+            trt_dt = self.engine.get_tensor_dtype(name)
+            t_dt   = _trt_to_torch.get(trt_dt, torch.float32)
             buf = torch.empty(shape, dtype=t_dt, device='cuda')
             self._io[name] = buf
             self._io_names.append(name)
@@ -258,8 +284,16 @@ class TRTInferencer:
 
         self._stream = torch.cuda.Stream()
 
-        # Pre-compute anchor points for bbox decoding
+        # Pre-compute anchor points for bbox decoding (CPU for numpy fallback)
         self._anchors = self._make_anchors()   # (N, 2)
+        # GPU anchor grid for CUDA-accelerated postprocessing
+        self._anchors_gpu = torch.from_numpy(self._anchors).cuda()  # (N, 2)
+
+        # Persistent GPU pad buffer — avoids re-allocation every frame
+        self._pad_buf = torch.full(
+            (self.input_h, self.input_w, 3), 114,
+            dtype=torch.uint8, device='cuda',
+        )
 
         logger.info(
             'TRT engine ready: %s  input=%dx%d  anchors=%d  classes=%d',
@@ -284,30 +318,47 @@ class TRTInferencer:
     # ── Preprocessing ──────────────────────────────────────────────────
     def preprocess(
         self, frame: np.ndarray,
-    ) -> Tuple[np.ndarray, float, int, int]:
-        """Letterbox resize + normalise.
+    ) -> Tuple[torch.Tensor, float, int, int]:
+        """Letterbox resize + normalise on GPU.
 
-        Returns (blob_nchw, scale, pad_x, pad_y).
+        Uploads the raw frame to CUDA first, then does resize, pad,
+        float conversion, mean/std normalisation, and HWC→NCHW transpose
+        entirely on the GPU — avoiding ~5 heavy CPU operations per frame.
+
+        Returns (blob_nchw_gpu, scale, pad_x, pad_y).
         """
         oh, ow = frame.shape[:2]
         scale = min(self.input_w / ow, self.input_h / oh)
         nw, nh = int(ow * scale), int(oh * scale)
-        resized = cv2.resize(frame, (nw, nh), interpolation=cv2.INTER_LINEAR)
 
+        # Upload raw uint8 frame to GPU (single CPU→GPU copy)
+        frame_gpu = torch.from_numpy(frame).cuda()           # (H, W, 3) uint8
+
+        # GPU resize via torch (bilinear, same quality as cv2.INTER_LINEAR)
+        # torch interpolate expects (N, C, H, W) float
+        frame_chw = frame_gpu.permute(2, 0, 1).unsqueeze(0).float()  # (1, 3, H, W)
+        resized = torch.nn.functional.interpolate(
+            frame_chw, size=(nh, nw), mode='bilinear', align_corners=False,
+        )  # (1, 3, nh, nw)
+        resized_hwc = resized.squeeze(0).permute(1, 2, 0).to(torch.uint8)  # (nh, nw, 3)
+
+        # Pad on GPU (re-use persistent buffer)
         px = (self.input_w - nw) // 2
         py = (self.input_h - nh) // 2
-        padded = np.full((self.input_h, self.input_w, 3), 114, dtype=np.uint8)
-        padded[py:py + nh, px:px + nw] = resized
+        self._pad_buf.fill_(114)
+        self._pad_buf[py:py + nh, px:px + nw] = resized_hwc
 
-        blob = (padded.astype(np.float32) - _MEAN) / _STD
-        blob = blob.transpose(2, 0, 1)[np.newaxis]          # HWC → NCHW
-        return np.ascontiguousarray(blob), scale, px, py
+        # Normalise: float conversion + (pixel - mean) / std, then HWC → NCHW
+        blob = (self._pad_buf.float() - _MEAN_GPU) / _STD_GPU  # (H, W, 3)
+        blob = blob.permute(2, 0, 1).unsqueeze(0)              # (1, 3, H, W)
+        blob = blob.contiguous()
+        return blob, scale, px, py
 
     # ── Postprocessing ─────────────────────────────────────────────────
     def postprocess(
         self,
-        scores_raw: np.ndarray,
-        bboxes_raw: np.ndarray,
+        scores_gpu: torch.Tensor,
+        bboxes_gpu: torch.Tensor,
         scale: float,
         pad_x: int,
         pad_y: int,
@@ -315,60 +366,70 @@ class TRTInferencer:
         iou_threshold: float,
         class_list: list | None,
     ) -> sv.Detections | None:
-        """Decode bbox distances, undo letterbox, run NMS → sv.Detections."""
-        # Sigmoid for class probabilities (raw logits from head)
-        scores = 1.0 / (1.0 + np.exp(-np.clip(scores_raw, -80, 80)))
+        """Decode bbox distances, undo letterbox, run NMS — all on GPU.
 
-        # Decode: anchor ± distance → xyxy
-        # NOTE: bbox_head.forward_single already multiplied by stride in
-        # eval mode, so bboxes_raw are pixel-level distances.
-        x1 = self._anchors[:, 0] - bboxes_raw[:, 0]
-        y1 = self._anchors[:, 1] - bboxes_raw[:, 1]
-        x2 = self._anchors[:, 0] + bboxes_raw[:, 2]
-        y2 = self._anchors[:, 1] + bboxes_raw[:, 3]
-        bboxes = np.stack([x1, y1, x2, y2], axis=1)
-
-        # Undo letterbox padding → original image coordinates
-        bboxes[:, [0, 2]] = (bboxes[:, [0, 2]] - pad_x) / scale
-        bboxes[:, [1, 3]] = (bboxes[:, [1, 3]] - pad_y) / scale
+        Only the final kept detections (~50-200) are downloaded to CPU,
+        instead of all ~8400 anchors.
+        """
+        # Sigmoid on GPU (fused, vectorised)
+        scores = torch.sigmoid(scores_gpu)                        # (N, C)
 
         # Best class per anchor
-        class_ids  = scores.argmax(axis=1)
-        max_scores = scores[np.arange(len(scores)), class_ids]
+        max_scores, class_ids = scores.max(dim=1)                 # (N,), (N,)
 
-        # Confidence + class filter
+        # Confidence pre-filter on GPU (eliminates ~90%+ of anchors early)
         keep = max_scores >= conf_threshold
         if class_list:
-            keep &= np.isin(class_ids, class_list)
+            class_mask = torch.zeros(self.num_classes, dtype=torch.bool, device='cuda')
+            class_mask[class_list] = True
+            keep &= class_mask[class_ids]
 
-        bboxes     = bboxes[keep]
         max_scores = max_scores[keep]
         class_ids  = class_ids[keep]
+        bboxes_k   = bboxes_gpu[keep]                             # (K, 4)
+        anchors_k  = self._anchors_gpu[keep]                      # (K, 2)
 
-        if len(bboxes) == 0:
+        if max_scores.numel() == 0:
             return None
 
-        # NMS via torchvision (CUDA-accelerated on Jetson)
+        # Decode: anchor ± distance → xyxy (on GPU)
+        x1 = anchors_k[:, 0] - bboxes_k[:, 0]
+        y1 = anchors_k[:, 1] - bboxes_k[:, 1]
+        x2 = anchors_k[:, 0] + bboxes_k[:, 2]
+        y2 = anchors_k[:, 1] + bboxes_k[:, 3]
+        bboxes = torch.stack([x1, y1, x2, y2], dim=1)            # (K, 4)
+
+        # Undo letterbox padding → original image coordinates (on GPU)
+        bboxes[:, 0] = (bboxes[:, 0] - pad_x) / scale
+        bboxes[:, 2] = (bboxes[:, 2] - pad_x) / scale
+        bboxes[:, 1] = (bboxes[:, 1] - pad_y) / scale
+        bboxes[:, 3] = (bboxes[:, 3] - pad_y) / scale
+
+        # NMS on GPU via torchvision
         try:
             import torchvision
-            bboxes_t = torch.from_numpy(bboxes).float().cuda()
-            scores_t = torch.from_numpy(max_scores).float().cuda()
-            nms_idx  = torchvision.ops.nms(bboxes_t, scores_t, iou_threshold)
-            nms_idx  = nms_idx.cpu().numpy()
+            nms_idx = torchvision.ops.nms(bboxes, max_scores, iou_threshold)
         except Exception:
-            nms_idx = _nms_numpy(bboxes, max_scores, iou_threshold)
+            # Fallback: download to CPU for numpy NMS
+            nms_idx_np = _nms_numpy(
+                bboxes.cpu().numpy(),
+                max_scores.cpu().numpy(),
+                iou_threshold,
+            )
+            nms_idx = torch.from_numpy(nms_idx_np).cuda()
 
         bboxes     = bboxes[nms_idx]
         max_scores = max_scores[nms_idx]
         class_ids  = class_ids[nms_idx]
 
-        if len(bboxes) == 0:
+        if bboxes.numel() == 0:
             return None
 
+        # Only now download the final ~50-200 kept detections to CPU
         return sv.Detections(
-            xyxy=bboxes.astype(np.float32),
-            confidence=max_scores.astype(np.float32),
-            class_id=class_ids.astype(np.int64),
+            xyxy=bboxes.cpu().numpy().astype(np.float32),
+            confidence=max_scores.cpu().numpy().astype(np.float32),
+            class_id=class_ids.cpu().numpy().astype(np.int64),
         )
 
     # ── Inference ──────────────────────────────────────────────────────
@@ -380,10 +441,10 @@ class TRTInferencer:
         class_list: list | None = None,
     ) -> sv.Detections | None:
         """Run end-to-end inference on a BGR uint8 frame."""
-        blob, scale, px, py = self.preprocess(frame)
+        blob_gpu, scale, px, py = self.preprocess(frame)
 
-        # Upload input to GPU (copy_ handles dtype conversion automatically)
-        self._io['images'].copy_(torch.from_numpy(blob))
+        # Copy preprocessed GPU tensor directly into the engine input buffer
+        self._io['images'].copy_(blob_gpu)
 
         # Execute the engine
         with torch.cuda.stream(self._stream):
@@ -397,16 +458,16 @@ class TRTInferencer:
                 )
         self._stream.synchronize()
 
-        # Download outputs
-        scores_np = self._io['scores'].float().cpu().numpy()[0]   # (N, C)
-        boxes_np  = self._io['boxes'].float().cpu().numpy()[0]    # (N, 4)
+        # Keep outputs on GPU as float32 tensors for GPU postprocessing
+        scores_gpu = self._io['scores'].float()[0]   # (N, C)
+        boxes_gpu  = self._io['boxes'].float()[0]    # (N, 4)
 
         # Sanity: swap if ONNX output order differs from expected
-        if scores_np.shape[-1] == 4 and boxes_np.shape[-1] != 4:
-            scores_np, boxes_np = boxes_np, scores_np
+        if scores_gpu.shape[-1] == 4 and boxes_gpu.shape[-1] != 4:
+            scores_gpu, boxes_gpu = boxes_gpu, scores_gpu
 
         return self.postprocess(
-            scores_np, boxes_np, scale, px, py,
+            scores_gpu, boxes_gpu, scale, px, py,
             conf, iou, class_list,
         )
 

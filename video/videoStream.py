@@ -111,12 +111,27 @@ def setVideoSource(device):
                 logger.warning('YouTube resolution failed: %s, trying direct URL', err)
                 cap = cv2.VideoCapture(device)
         else:
-            # Direct HTTPS/HTTP streaming with OpenCV (GStreamer preferred)
-            logger.info('Opening HTTP(S) video with OpenCV: %s', device)
-            cap = cv2.VideoCapture(device)
-            if not cap.isOpened():
-                logger.warning('FFmpeg backend failed, trying without explicit backend: %s', device)
+            # Direct HTTPS/HTTP streaming — try GStreamer HW decode on Jetson
+            logger.info('Opening HTTP(S) video: %s', device)
+            cap = None
+            if torch.cuda.is_available():
+                gst_pipe = (
+                    f"souphttpsrc location={device} ! queue"
+                    " ! h264parse ! nvv4l2decoder"
+                    " ! nvvidconv ! video/x-raw, format=BGR ! appsink drop=1"
+                )
+                logger.info('Trying GStreamer HW decode for HTTP: %s', gst_pipe)
+                cap = cv2.VideoCapture(gst_pipe, cv2.CAP_GSTREAMER)
+                if not cap.isOpened():
+                    logger.warning('GStreamer HTTP HW decode failed, falling back')
+                    cap = None
+
+            if cap is None:
                 cap = cv2.VideoCapture(device)
+                if not cap.isOpened():
+                    logger.warning('FFmpeg backend failed, trying without explicit backend: %s', device)
+                    cap = cv2.VideoCapture(device)
+
             if cap.isOpened():
                 actual_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
                 actual_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -128,7 +143,21 @@ def setVideoSource(device):
                 logger.error('Failed to open HTTP video: %s', device)
 
     elif device.startswith('rtsp:'):
-        cap = cv2.VideoCapture(device)
+        # Use GStreamer pipeline with HW decoder on Jetson for zero-copy GPU decode.
+        # Falls back to default OpenCV backend if GStreamer is unavailable.
+        if torch.cuda.is_available():
+            gst_pipe = (
+                f"rtspsrc location={device} latency=200 ! queue"
+                " ! rtph264depay ! h264parse ! nvv4l2decoder"
+                " ! nvvidconv ! video/x-raw, format=BGR ! appsink drop=1"
+            )
+            logger.info('RTSP via GStreamer HW decode: %s', gst_pipe)
+            cap = cv2.VideoCapture(gst_pipe, cv2.CAP_GSTREAMER)
+            if not cap.isOpened():
+                logger.warning('GStreamer RTSP pipeline failed, falling back to default')
+                cap = cv2.VideoCapture(device)
+        else:
+            cap = cv2.VideoCapture(device)
     elif device.startswith('demoVideo'):
         # Use FFmpeg backend — GStreamer can't reliably re-open m4v files
         # (fails with "unable to query duration of stream" on subsequent opens)
@@ -175,7 +204,10 @@ async def main(_saved_masks):
             # only detects NAL type 5 as keyframes, NOT non-IDR I-frames (type 1).
             # h264parse normalises NAL unit boundaries for clean RTP packetisation.
             # config-interval=-1 inserts SPS/PPS with every IDR (not every N seconds).
-            outputFormat = ("queue ! videoconvert ! nvvidconv ! queue"
+            # NOTE: nvvidconv handles BGR→I420 conversion + upload to NVMM in one GPU
+            # pass — no CPU videoconvert needed.
+            outputFormat = ("queue ! video/x-raw, format=BGR"
+                " ! nvvidconv"
                 " ! video/x-raw(memory:NVMM), format=I420"
                 " ! nvv4l2h264enc maxperf-enable=true preset-level=1 profile=0"
                 "   insert-sps-pps=true insert-vui=true iframeinterval=10 idrinterval=1"
@@ -377,8 +409,8 @@ async def main(_saved_masks):
 _publish_pool = ThreadPoolExecutor(max_workers=1)
 
 def _encode_image(frame):
-    """CPU-intensive JPEG + base64 encoding — runs in a thread to avoid blocking the event loop."""
-    _, encoded_frame = cv2.imencode('.jpg', frame)
+    """WebP + base64 encoding — ~30% smaller than JPEG at equivalent quality."""
+    _, encoded_frame = cv2.imencode('.webp', frame, [cv2.IMWRITE_WEBP_QUALITY, 80])
     return base64.b64encode(encoded_frame.tobytes()).decode('utf-8')
 
 def publishImage(frame):
@@ -386,7 +418,7 @@ def publishImage(frame):
         loop = get_event_loop()
         base64_encoded_frame = await loop.run_in_executor(_publish_pool, _encode_image, frame.copy())
         now = datetime.now().astimezone().isoformat()
-        await ironflock.publish_to_table('images', {"tsp": now, "image": 'data:image/jpeg;base64,' + base64_encoded_frame})
+        await ironflock.publish_to_table('images', {"tsp": now, "image": 'data:image/webp;base64,' + base64_encoded_frame})
     get_event_loop().create_task(_publish())
 
 def publishCameras():

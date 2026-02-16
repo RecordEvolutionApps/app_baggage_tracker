@@ -67,7 +67,8 @@ RUN uv pip install --system mmengine==0.10.4 mmdet==3.3.0
 # Install remaining dependencies (changes more frequently)
 RUN uv pip install --system ironflock==1.0.6 matplotlib==3.7.5 pyyaml==6.0.1 defusedxml==0.7.1 \
 				pillow==10.3.0 lapx==0.5.5 yt_dlp==2024.4.9 \
-				fastapi==0.115.0 "uvicorn[standard]==0.30.6"
+				fastapi==0.115.0 "uvicorn[standard]==0.30.6" \
+				onnx onnxruntime
 
 # Install supervision separately (version compatibility)
 RUN uv pip install --system supervision==0.25.1 --no-deps

@@ -19,6 +19,7 @@ let cachedModels: {
     task?: string;
     paper?: string;
     summary?: string;
+    description?: string;
     openVocab?: boolean;
     fileSize?: number;
 }[] | null = null
@@ -32,6 +33,7 @@ async function fetchAvailableModels(): Promise<{
     task?: string;
     paper?: string;
     summary?: string;
+    description?: string;
     openVocab?: boolean;
     fileSize?: number;
 }[]> {

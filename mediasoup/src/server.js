@@ -236,7 +236,6 @@ function startSignaling() {
 }
 
 async function handleMessage(msg, ws, consumerTransports, consumers) {
-  console.log(`[signaling] Received message: ${msg.type}`, msg.camId || '');
   switch (msg.type) {
 
     // ── Step 1: Browser requests router RTP capabilities ───────────────
