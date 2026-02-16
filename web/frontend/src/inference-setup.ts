@@ -2,6 +2,7 @@ import { LitElement, html, css, PropertyValueMap } from 'lit';
 import { property, customElement, state } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { mainStyles, CamSetup, ModelOption, ClassOption } from './utils.js';
+import prettyBytes from 'pretty-bytes';
 import '@material/web/chips/filter-chip.js';
 import '@material/web/dialog/dialog.js';
 import { MdDialog } from '@material/web/dialog/dialog.js';
@@ -27,10 +28,19 @@ export class InferenceSetup extends LitElement {
   declare useSahi: boolean;
 
   @state()
+  declare useSmoothing: boolean;
+
+  @state()
   declare frameBuffer: number;
 
   @state()
   declare confidence: number;
+
+  @state()
+  declare iou: number;
+
+  @state()
+  declare overlapRatio: number;
 
   @state()
   declare modelFilter: string;
@@ -91,6 +101,8 @@ export class InferenceSetup extends LitElement {
   } | null;
 
   private backendPollTimer: ReturnType<typeof setInterval> | null = null;
+  private modelSizeTimer: ReturnType<typeof setTimeout> | null = null;
+  private modelSizeAttempts = 0;
 
   classDialog?: MdDialog;
   modelDialog?: MdDialog;
@@ -102,8 +114,11 @@ export class InferenceSetup extends LitElement {
     this.models = [];
     this.selectedModel = 'rtmdet_tiny_8xb32-300e_coco';
     this.useSahi = true;
+    this.useSmoothing = true;
     this.frameBuffer = 64;
     this.confidence = 0.1;
+    this.iou = 0.8;
+    this.overlapRatio = 0.2;
     this.modelFilter = '';
     this.selectedDataset = '';
     this.selectedArch = '';
@@ -681,6 +696,10 @@ export class InferenceSetup extends LitElement {
       clearInterval(this.backendPollTimer);
       this.backendPollTimer = null;
     }
+    if (this.modelSizeTimer) {
+      clearTimeout(this.modelSizeTimer);
+      this.modelSizeTimer = null;
+    }
   }
 
   private async fetchBackendStatus() {
@@ -734,8 +753,11 @@ export class InferenceSetup extends LitElement {
         this.selectedModel = this.camSetup.camera.model;
       }
       this.useSahi = this.camSetup.camera?.useSahi ?? true;
+      this.useSmoothing = this.camSetup.camera?.useSmoothing ?? true;
       this.frameBuffer = this.camSetup.camera?.frameBuffer ?? 64;
       this.confidence = this.camSetup.camera?.confidence ?? 0.1;
+      this.iou = this.camSetup.camera?.iou ?? 0.8;
+      this.overlapRatio = this.camSetup.camera?.overlapRatio ?? 0.2;
       // Restore persisted class selection
       if (this.camSetup.camera?.classList && this.camSetup.camera.classList.length > 0) {
         this.selectedClassIds = new Set(this.camSetup.camera.classList);
@@ -760,6 +782,8 @@ export class InferenceSetup extends LitElement {
     } catch (err) {
       console.error('Failed to fetch models', err);
     }
+    this.modelSizeAttempts = 0;
+    this.scheduleModelSizeRefresh();
     // Set current model from camSetup if available
     if (this.camSetup?.camera?.model) {
       this.selectedModel = this.camSetup.camera.model;
@@ -768,6 +792,46 @@ export class InferenceSetup extends LitElement {
       this.fetchModelClasses(this.selectedModel);
       this.syncModelSelection();
     }
+  }
+
+  private scheduleModelSizeRefresh(delayMs: number = 2000) {
+    if (this.modelSizeTimer) {
+      clearTimeout(this.modelSizeTimer);
+    }
+    const missingSizes = this.models.some(m => m.id !== 'none' && m.fileSize === undefined);
+    if (!missingSizes || this.modelSizeAttempts >= 6) return;
+    this.modelSizeTimer = setTimeout(() => this.fetchModelSizes(), delayMs);
+  }
+
+  private async fetchModelSizes() {
+    this.modelSizeAttempts += 1;
+    try {
+      const res = await fetch(`${this.basepath}/cameras/models`);
+      if (!res.ok) {
+        this.scheduleModelSizeRefresh(3000);
+        return;
+      }
+      const fresh = await res.json();
+      if (!Array.isArray(fresh)) {
+        this.scheduleModelSizeRefresh(3000);
+        return;
+      }
+      const sizeMap = new Map<string, number>();
+      for (const m of fresh) {
+        if (m?.id && typeof m.fileSize === 'number') {
+          sizeMap.set(m.id, m.fileSize);
+        }
+      }
+      if (sizeMap.size) {
+        this.models = this.models.map(m =>
+          sizeMap.has(m.id) ? { ...m, fileSize: sizeMap.get(m.id) } : m,
+        );
+      }
+    } catch (err) {
+      console.error('Failed to refresh model sizes', err);
+    }
+
+    this.scheduleModelSizeRefresh(3000 + this.modelSizeAttempts * 500);
   }
 
   /** Models filtered by the search term and grouped by architecture */
@@ -858,6 +922,11 @@ export class InferenceSetup extends LitElement {
     return this.models.find(m => m.id === this.pendingModelId);
   }
 
+  private get modelSizesPending(): boolean {
+    const missing = this.models.some(m => m.id !== 'none' && m.fileSize === undefined);
+    return missing && this.modelSizeAttempts < 6;
+  }
+
   /** Whether the currently selected model is an open-vocabulary model */
   private get isOpenVocab(): boolean {
     const model = this.models.find(m => m.id === this.selectedModel);
@@ -869,6 +938,18 @@ export class InferenceSetup extends LitElement {
     if (!current) return;
     this.selectedDataset = this.normalizeDataset(current);
     this.selectedArch = (current as any).arch || current.id.split('_')[0];
+  }
+
+  /**
+   * Format a status message by replacing raw byte counts
+   * (e.g. "123456789/987654321 bytes") with human-readable sizes.
+   */
+  private formatStatusMessage(msg: string): string {
+    return msg.replace(
+      /(\d+)\/(\d+)\s*bytes/gi,
+      (_match, downloaded, total) =>
+        `${prettyBytes(Number(downloaded))} / ${prettyBytes(Number(total))}`,
+    );
   }
 
   private get _statusIcon(): string {
@@ -1048,6 +1129,21 @@ export class InferenceSetup extends LitElement {
     }
   }
 
+  private async onSmoothingToggle(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    const useSmoothing = input.checked;
+    this.useSmoothing = useSmoothing;
+    try {
+      await fetch(`${this.basepath}/cameras/smoothing`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ camStream: this.camStream, useSmoothing }),
+      });
+    } catch (err) {
+      console.error('Failed to update smoothing setting', err);
+    }
+  }
+
   private async onFrameBufferChange(ev: Event) {
     const input = ev.target as HTMLInputElement;
     const frameBuffer = Math.max(0, parseInt(input.value, 10) || 0);
@@ -1059,7 +1155,7 @@ export class InferenceSetup extends LitElement {
         body: JSON.stringify({ camStream: this.camStream, frameBuffer }),
       });
     } catch (err) {
-      console.error('Failed to update frame buffer', err);
+      console.error('Failed to update sahi padding', err);
     }
   }
 
@@ -1075,6 +1171,37 @@ export class InferenceSetup extends LitElement {
       });
     } catch (err) {
       console.error('Failed to update confidence', err);
+    }
+  }
+
+  private async onIouChange(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    const iou = Math.min(1, Math.max(0.1, parseFloat(input.value)));
+    this.iou = iou;
+    try {
+      await fetch(`${this.basepath}/cameras/iou`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ camStream: this.camStream, iou }),
+      });
+    } catch (err) {
+      console.error('Failed to update IOU', err);
+    }
+  }
+
+  private async onOverlapRatioChange(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    const percentValue = Math.min(50, Math.max(5, parseFloat(input.value) || 0));
+    const overlapRatio = percentValue / 100;
+    this.overlapRatio = overlapRatio;
+    try {
+      await fetch(`${this.basepath}/cameras/overlapRatio`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ camStream: this.camStream, overlapRatio }),
+      });
+    } catch (err) {
+      console.error('Failed to update overlap ratio', err);
     }
   }
 
@@ -1247,7 +1374,7 @@ export class InferenceSetup extends LitElement {
 
         ${this.modelStatus !== 'idle' ? html`
           <div class="model-status-bar ${this.modelStatus}">
-            <span>${this._statusIcon} ${this.modelStatusMessage}</span>
+            <span>${this._statusIcon} ${this.formatStatusMessage(this.modelStatusMessage)}</span>
             ${this.modelStatus === 'downloading' ? html`
               <div class="progress-track">
                 <div class="progress-fill" style="width: ${this.modelProgress}%"></div>
@@ -1283,7 +1410,7 @@ export class InferenceSetup extends LitElement {
           class="frame-buffer-row"
           style="display:${this.useSahi ? 'flex' : 'none'}"
         >
-          <label for="frameBuffer" class="fb-label">Frame Buffer (px)</label>
+          <label for="frameBuffer" class="fb-label">SAHI padding (px)</label>
           <input
             id="frameBuffer"
             type="number"
@@ -1295,6 +1422,48 @@ export class InferenceSetup extends LitElement {
           />
         </div>
 
+        <div
+          class="frame-buffer-row"
+          style="display:${this.useSahi ? 'flex' : 'none'}"
+        >
+          <label for="iou" class="fb-label">IOU (SAHI)</label>
+          <input
+            id="iou"
+            type="number"
+            min="0.1"
+            max="1.0"
+            step="0.05"
+            .value=${String(this.iou)}
+            @change=${this.onIouChange}
+            class="fb-input"
+          />
+        </div>
+
+        <div
+          class="frame-buffer-row"
+          style="display:${this.useSahi ? 'flex' : 'none'}"
+        >
+          <label for="overlapRatio" class="fb-label">Overlap % (SAHI)</label>
+          <input
+            id="overlapRatio"
+            type="number"
+            min="0.05"
+            max="0.5"
+            step="0.05"
+            .value=${String((this.overlapRatio * 100).toFixed(0))}
+            @change=${this.onOverlapRatioChange}
+            class="fb-input"
+          />
+        </div>
+
+        <label class="sahi-toggle">
+          <input
+            type="checkbox"
+            .checked=${this.useSmoothing}
+            @change=${this.onSmoothingToggle}
+          />
+          Detection Smoothing
+        </label>
 
 
         <div class="class-filter-section">

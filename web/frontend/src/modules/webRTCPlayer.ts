@@ -341,7 +341,7 @@ async function subscribeToCamera(
     if (videoEl.videoWidth > 0 || videoEl.videoHeight > 0) return;
 
     scheduleResubscribe(camId, videoEl, forSessionId);
-  }, 15000);
+  }, 60000);
   noFramesTimers.set(camId, noFramesId);
 
   // resumeConsumer already sent above

@@ -328,6 +328,10 @@ class TRTInferencer:
         Returns (blob_nchw_gpu, scale, pad_x, pad_y).
         """
         oh, ow = frame.shape[:2]
+        if oh == 0 or ow == 0:
+            # Empty frame — return a zero-filled blob so inference produces no detections
+            blob = torch.zeros(1, 3, self.input_h, self.input_w, dtype=torch.float32, device='cuda')
+            return blob, 1.0, 0, 0
         scale = min(self.input_w / ow, self.input_h / oh)
         nw, nh = int(ow * scale), int(oh * scale)
 

@@ -24,6 +24,10 @@ let cachedModels: {
     fileSize?: number;
 }[] | null = null
 
+let cachedAt = 0
+const CACHE_TTL_MS = 60_000
+const SIZE_REFRESH_TTL_MS = 5_000
+
 async function fetchAvailableModels(): Promise<{ 
     id: string; 
     label: string; 
@@ -37,7 +41,12 @@ async function fetchAvailableModels(): Promise<{
     openVocab?: boolean;
     fileSize?: number;
 }[]> {
-    if (cachedModels) return cachedModels
+    if (cachedModels) {
+        const now = Date.now()
+        const missingSizes = cachedModels.some(m => m.id !== 'none' && m.fileSize === undefined)
+        const ttl = missingSizes ? SIZE_REFRESH_TTL_MS : CACHE_TTL_MS
+        if (now - cachedAt < ttl) return cachedModels
+    }
     try {
         const res = await fetch(`${VIDEO_API}/models`, { signal: AbortSignal.timeout(30000) })
         if (res.ok) {
@@ -55,6 +64,7 @@ async function fetchAvailableModels(): Promise<{
                 }
             }
             cachedModels = [{ id: 'none', label: 'No Inference' }, ...models]
+            cachedAt = Date.now()
             console.log(`Fetched ${models.length} models from video API`)
             return cachedModels
         }

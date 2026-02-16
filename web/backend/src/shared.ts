@@ -19,8 +19,11 @@ export type Camera = {
     camStream: string
     model?: string
     useSahi?: boolean
+    useSmoothing?: boolean
     confidence?: number
     frameBuffer?: number
+    iou?: number
+    overlapRatio?: number
     classList?: number[]
     classNames?: string[]
 }
@@ -62,8 +65,11 @@ export async function writeStreamSettings(camStream: string, cam: Camera) {
     const settings: Record<string, any> = {
         model: cam.model ?? 'rtmdet_tiny_8xb32-300e_coco',
         useSahi: cam.useSahi ?? true,
+        useSmoothing: cam.useSmoothing ?? true,
         confidence: cam.confidence ?? 0.1,
         frameBuffer: cam.frameBuffer ?? 64,
+        iou: cam.iou ?? 0.8,
+        overlapRatio: cam.overlapRatio ?? 0.2,
         classList: cam.classList ?? [],
         classNames: cam.classNames ?? [],
     }

@@ -43,7 +43,7 @@ import base64
 import torch
 import functools
 
-from model_utils import getModel, processFrame, initSliceInferer, move_detections, get_extreme_points, infer, get_youtube_video, overlay_text, count_polygon_zone, count_detections, watchMaskFile, watchSettingsFile, empty_detections, FRAME_BUFFER, write_backend_status
+from model_utils import getModel, processFrame, initSliceInferer, move_detections, get_extreme_points, infer, get_youtube_video, overlay_text, draw_sahi_grid, count_polygon_zone, count_detections, watchMaskFile, watchSettingsFile, empty_detections, FRAME_BUFFER, write_backend_status
 import model_utils  # for updating CLASS_LIST dynamically
 
 # Configure logging for the whole video service
@@ -192,11 +192,7 @@ async def main(_saved_masks):
         fps_monitor = sv.FPSMonitor()
         start_time = time.time()
         start_time1 = time.time()
-        start_time2 = time.time()
         
-        # CPU encoding
-        # outputFormat = " videoconvert ! vp8enc deadline=2 threads=4 keyframe-max-dist=10 ! video/x-vp8 ! rtpvp8pay pt=96"
-
         if torch.cuda.is_available():
             # Hardware h264 encoding on Jetson
             # profile=0 (Baseline) matches mediasoup's declared profile-level-id 42e01f
@@ -204,9 +200,10 @@ async def main(_saved_masks):
             # only detects NAL type 5 as keyframes, NOT non-IDR I-frames (type 1).
             # h264parse normalises NAL unit boundaries for clean RTP packetisation.
             # config-interval=-1 inserts SPS/PPS with every IDR (not every N seconds).
-            # NOTE: nvvidconv handles BGR→I420 conversion + upload to NVMM in one GPU
-            # pass — no CPU videoconvert needed.
-            outputFormat = ("queue ! video/x-raw, format=BGR"
+            # NOTE: videoconvert (CPU) is required because nvvidconv cannot accept
+            # BGR directly from OpenCV's appsrc — it only handles I420/NV12/RGBA.
+            # videoconvert converts BGR→I420, then nvvidconv uploads to NVMM for HW encode.
+            outputFormat = ("queue ! videoconvert ! video/x-raw, format=I420"
                 " ! nvvidconv"
                 " ! video/x-raw(memory:NVMM), format=I420"
                 " ! nvv4l2h264enc maxperf-enable=true preset-level=1 profile=0"
@@ -215,10 +212,16 @@ async def main(_saved_masks):
                 " ! rtph264pay pt=96 ssrc=11111111 config-interval=-1")
         else:
             # CPU software encoding (x264)
-            # key-int-max=15 ensures an IDR every ~0.5s at 30fps.
+            # bitrate=8000: default is 2048 kbps which is far too low for
+            # 1280x720 — produces heavy macro-blocking.  8 Mbps gives ~4x
+            # more bits per frame for much better visual quality.
+            # key-int-max=1: every frame is an IDR keyframe — at low actual
+            # fps the overhead is negligible and the browser can start
+            # decoding instantly on the very first frame after (re)connecting.
             # h264parse + config-interval=-1: same rationale as the HW path above.
             outputFormat = ("videoconvert ! video/x-raw, format=I420"
-                " ! x264enc tune=zerolatency key-int-max=15 bframes=0 speed-preset=veryfast"
+                " ! x264enc tune=zerolatency bitrate=8000"
+                "   key-int-max=1 bframes=0 speed-preset=veryfast"
                 " ! h264parse"
                 " ! rtph264pay pt=96 ssrc=11111111 config-interval=-1")
 
@@ -237,6 +240,9 @@ async def main(_saved_masks):
         else:
             logger.error('GStreamer VideoWriter FAILED to open — check GStreamer plugin availability')
 
+        # SAHI slicer (created lazily)
+        slicer = initSliceInferer(model, stream_settings) if USE_SAHI else None
+
         logger.info('Starting main video loop...')
         success = True
         frame = None
@@ -244,13 +250,20 @@ async def main(_saved_masks):
         frame_interval = 1.0 / FRAMERATE  # seconds per frame
         next_frame_time = time.monotonic()
         aggCounts = []
-        slicer = initSliceInferer(model, stream_settings) if USE_SAHI else None
+        zoneCounts = []
+        lineCounts = []
 
         while cap.isOpened():
-            await sleep(0) # Give other task time to run, not a hack: https://superfastpython.com/what-is-asyncio-sleep-zero/#:~:text=You%20can%20force%20the%20current,before%20resuming%20the%20current%20task.
+            await sleep(0) # Give other task time to run
             elapsed_time = time.time() - start_time
             elapsed_time1 = time.time() - start_time1
-            elapsed_time2 = time.time() - start_time2
+
+            sahi_rect = None
+            sahi_slice_wh = None
+            sahi_overlap_wh = None
+            use_sahi = False
+            iou_threshold = model_utils.IOU
+            overlap_ratio = 0.2
 
             skip_inference = stream_settings.get('model', '') == 'none'
 
@@ -263,7 +276,6 @@ async def main(_saved_masks):
                     CLASS_LIST[:] = new_list
                     logger.info('Updated CLASS_LIST from settings: %s', new_list)
             elif settings_class_list is not None and len(settings_class_list) == 0:
-                # Empty list means "all classes" (no filter)
                 if model_utils.CLASS_LIST != []:
                     model_utils.CLASS_LIST = []
                     CLASS_LIST[:] = []
@@ -272,15 +284,15 @@ async def main(_saved_masks):
             # Dynamically update open-vocab class names from stream settings
             settings_class_names = stream_settings.get('classNames', None)
             if settings_class_names is not None and isinstance(settings_class_names, list):
-                if hasattr(model_utils, 'CLASS_NAMES') and settings_class_names != model_utils.CLASS_NAMES:
-                    model_utils.CLASS_NAMES = settings_class_names
-                    logger.info('Updated CLASS_NAMES from settings: %s', settings_class_names)
-                elif not hasattr(model_utils, 'CLASS_NAMES'):
-                    model_utils.CLASS_NAMES = settings_class_names
-                    logger.info('Set CLASS_NAMES from settings: %s', settings_class_names)
+                if len(settings_class_names) > 0:
+                    if hasattr(model_utils, 'CLASS_NAMES') and settings_class_names != model_utils.CLASS_NAMES:
+                        model_utils.CLASS_NAMES = settings_class_names
+                        logger.info('Updated CLASS_NAMES from settings: %s', settings_class_names)
+                    elif not hasattr(model_utils, 'CLASS_NAMES'):
+                        model_utils.CLASS_NAMES = settings_class_names
+                        logger.info('Set CLASS_NAMES from settings: %s', settings_class_names)
 
-            # --- Fixed-timestep pacing (standard game-loop / video-player pattern) ---
-            # Always wait for the next frame slot before reading
+            # --- Fixed-timestep pacing ---
             wait_time = next_frame_time - time.monotonic()
             if wait_time > 0:
                 await sleep(wait_time)
@@ -301,17 +313,11 @@ async def main(_saved_masks):
 
             # Schedule next frame relative to previous target (absorbs jitter)
             next_frame_time += frame_interval
-            # Only hard-reset if we're very far behind (e.g. mode switch, video restart).
-            # Small spikes (publishImage etc.) self-correct: the next wait_time will be
-            # negative, so we skip the sleep and process immediately — catching up in 1-2 frames.
             if next_frame_time < time.monotonic() - 0.5:
                 next_frame_time = time.monotonic() + frame_interval
 
             if not success:
                 if device.startswith('demoVideo'):
-                    # Demo video ended — re-open the file to loop.
-                    # Seek (CAP_PROP_POS_FRAMES=0) is unreliable on m4v with FFmpeg;
-                    # it can silently fail, causing a tight read-fail loop.
                     cap.release()
                     cap = cv2.VideoCapture('/app/video/luggagebelt.m4v', cv2.CAP_FFMPEG)
                     loop_start = time.monotonic()
@@ -329,39 +335,62 @@ async def main(_saved_masks):
                     start_time = time.time()
                 continue
 
-            zoneCounts = {}
-            lineCounts = {}
-            detections = False
             fps_monitor.tick()
 
-            if not skip_inference:
+            # ── Run inference on this frame ──────────────────────────────
+            # Single-threaded: read → infer → annotate → write.
+            # Bounding boxes are always computed on the exact frame shown.
+            if skip_inference:
+                detections = empty_detections()
+            else:
                 use_sahi = stream_settings.get('useSahi', USE_SAHI)
-                # Lazily create or clear slicer when the setting changes
-                if use_sahi and slicer is None:
-                    slicer = initSliceInferer(model, stream_settings)
-                elif not use_sahi:
-                    slicer = None
+                iou_threshold = float(stream_settings.get('iou', model_utils.IOU))
+                overlap_ratio = float(stream_settings.get('overlapRatio', 0.2))
+                try:
+                    # Lazily create or clear slicer when the setting changes
+                    if use_sahi and (slicer is None or getattr(slicer, '_sahi_iou', None) != iou_threshold or getattr(slicer, '_sahi_overlap_ratio', None) != overlap_ratio):
+                        slicer = initSliceInferer(model, stream_settings)
+                    elif not use_sahi:
+                        slicer = None
 
-                if use_sahi and slicer is not None:
-                    frame_buf = int(stream_settings.get('frameBuffer', FRAME_BUFFER))
-                    low_x, low_y, high_x, high_y = get_extreme_points(_saved_masks, frame_buf)
-                    # print('CROPPING', low_x, low_y, high_x, high_y)
-                    frame_ = frame[low_y:high_y, low_x:high_x]
-                    detections = slicer(frame_)
-                    detections = move_detections(detections, low_x, low_y)
-                    cv2.rectangle(frame, (low_x, low_y), (high_x, high_y), (255, 0, 0), 2)
-                    # print('SLICER detections:', detections)
-                else:
-                    conf = float(stream_settings.get('confidence', model_utils.CONF))
-                    detections = infer(frame, model, confidence=conf)
+                    if use_sahi and slicer is not None:
+                        frame_buf = int(stream_settings.get('frameBuffer', FRAME_BUFFER))
+                        low_x, low_y, high_x, high_y = get_extreme_points(_saved_masks, frame_buf)
+                        sahi_rect = (low_x, low_y, high_x, high_y)
+                        if hasattr(slicer, '_sahi_slice_wh'):
+                            sahi_slice_wh = slicer._sahi_slice_wh
+                        if hasattr(slicer, '_sahi_overlap_wh'):
+                            sahi_overlap_wh = slicer._sahi_overlap_wh
+                        crop_w, crop_h = high_x - low_x, high_y - low_y
+                        logger.debug('[SAHI] crop=(%d,%d)-(%d,%d) size=%dx%d, masks=%d',
+                                    low_x, low_y, high_x, high_y, crop_w, crop_h, len(_saved_masks))
+                        frame_ = frame[low_y:high_y, low_x:high_x]
+                        t_sahi = time.monotonic()
+                        if hasattr(slicer, '_sahi_slice_count'):
+                            slicer._sahi_slice_count[0] = 0
+                        detections = slicer(frame_)
+                        dt_sahi = time.monotonic() - t_sahi
+                        det_count = len(detections) if detections else 0
+                        n_slices = slicer._sahi_slice_count[0] if hasattr(slicer, '_sahi_slice_count') else '?'
+                        logger.debug('[SAHI] %s slices in %.1fms, %d detections (pre-offset)',
+                                    n_slices, dt_sahi * 1000, det_count)
+                        detections = move_detections(detections, low_x, low_y)
+                    else:
+                        conf = float(stream_settings.get('confidence', model_utils.CONF))
+                        detections = infer(frame, model, confidence=conf, iou=iou_threshold)
 
-            start_time2 = time.time()
+                    if not detections:
+                        detections = empty_detections()
+                except Exception as e:
+                    logger.error('Inference error: %s', e, exc_info=True)
+                    detections = empty_detections()
 
-            if detections:
-                frame, zoneCounts, lineCounts = processFrame(frame, detections, _saved_masks)
-            elif skip_inference:
-                # Still draw zone/line overlays even without inference
-                frame, zoneCounts, lineCounts = processFrame(frame, empty_detections(), _saved_masks)
+            # ── Overlay detections & annotate ───────────────────────────
+
+            frame, zoneCounts, lineCounts = processFrame(frame, detections, _saved_masks, stream_settings)
+
+            if use_sahi and sahi_rect and sahi_slice_wh and sahi_overlap_wh:
+                frame = draw_sahi_grid(frame, sahi_rect, sahi_slice_wh, sahi_overlap_wh)
 
             # Draw FPS and Timestamp
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
@@ -379,7 +408,6 @@ async def main(_saved_masks):
 
             # Publish data
             if elapsed_time1 >= 2.0:
-                # print('FPS:', str(fps_monitor.fps))
                 publishImage(frame)
                 for item in zoneCounts:
                     publishClassCount(item["label"], item["count"])

@@ -85,10 +85,65 @@ CLASS_NAMES: list[str] = []
 
 # Supervision Annotations (RTMDet does not use OBB, always use BoxAnnotator)
 bounding_box_annotator = sv.BoxAnnotator()
-label_annotator = sv.LabelAnnotator(text_scale=0.4, text_thickness=1, text_padding=3)
+mask_annotator = sv.MaskAnnotator(opacity=0.4)
+label_annotator = sv.LabelAnnotator(
+    text_scale=0.5,
+    text_thickness=1,
+    text_padding=4,
+    text_color=sv.Color.BLACK,
+)
 
-tracker = sv.ByteTrack()
+tracker = sv.ByteTrack(minimum_consecutive_frames=1)
 smoother = sv.DetectionsSmoother(length=5)
+
+def _maybe_set_class_names_from_model_name(model_name: str) -> None:
+    global CLASS_NAMES
+    if CLASS_NAMES:
+        return
+    if 'coco' not in model_name.lower():
+        return
+    try:
+        from model_catalog import COCO_CLASSES
+        CLASS_NAMES = [str(name) for name in COCO_CLASSES]
+    except Exception:
+        return
+
+def _maybe_set_class_names_from_inferencer(inferencer, model_name: str) -> None:
+    global CLASS_NAMES
+    if CLASS_NAMES:
+        return
+    classes = None
+    try:
+        classes = inferencer.model.dataset_meta.get('classes')
+    except Exception:
+        classes = None
+    if not classes:
+        try:
+            classes = inferencer.dataset_meta.get('classes')
+        except Exception:
+            classes = None
+    if not classes:
+        _maybe_set_class_names_from_model_name(model_name)
+        return
+    CLASS_NAMES = [str(name) for name in classes]
+
+def _class_id_to_name(class_id: int | None) -> str:
+    if class_id is None:
+        return ''
+    try:
+        class_id_int = int(class_id)
+    except Exception:
+        return str(class_id)
+    if CLASS_NAMES and 0 <= class_id_int < len(CLASS_NAMES):
+        name = CLASS_NAMES[class_id_int]
+        if name is not None and str(name).strip() != '':
+            return str(name)
+    return str(class_id_int)
+
+def _build_labels(detections: sv.Detections) -> list[str]:
+    if detections.class_id is None:
+        return []
+    return [_class_id_to_name(class_id) for class_id in detections.class_id]
 
 def empty_detections() -> sv.Detections:
     return sv.Detections(
@@ -362,6 +417,7 @@ def get_mmdet_model(model_name: str) -> Dict[str, Any]:
             else:
                 raise
 
+    _maybe_set_class_names_from_inferencer(inferencer, model_name)
     native_wh = MMDET_MODEL_ZOO.get(model_name, {}).get('native_input_wh', (640, 640))
     return {
         'backend': 'mmdet',
@@ -434,6 +490,7 @@ def get_tensorrt_model(model_name: str) -> Dict[str, Any]:
                 str(trt_backend.engine_path(model_name)), input_wh,
             )
             logger.info('TensorRT engine loaded from cache for %s (FP16)', model_name)
+            _maybe_set_class_names_from_model_name(model_name)
             return {
                 'backend': 'tensorrt',
                 'inferencer': trt_inferencer,
@@ -506,6 +563,72 @@ def get_youtube_video(url, height):
 # Function to display frame rate and timestamp on the frame
 def overlay_text(frame, text, position=(10, 30), font_scale=1, color=(0, 255, 0), thickness=2):
     cv2.putText(frame, text, position, cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, thickness, cv2.LINE_AA)
+
+def draw_sahi_grid(
+    frame: np.ndarray,
+    crop_rect: tuple[int, int, int, int],
+    slice_wh: tuple[int, int],
+    overlap_wh: tuple[int, int],
+    line_color: tuple[int, int, int] = (160, 160, 160),
+    overlap_color: tuple[int, int, int] = (120, 120, 120),
+    line_thickness: int = 1,
+    overlay_alpha: float = 0.25,
+) -> np.ndarray:
+    low_x, low_y, high_x, high_y = crop_rect
+    if low_x >= high_x or low_y >= high_y:
+        return frame
+
+    slice_w, slice_h = slice_wh
+    overlap_w, overlap_h = overlap_wh
+    step_x = max(1, slice_w - overlap_w)
+    step_y = max(1, slice_h - overlap_h)
+
+    draw_high_x = max(low_x, high_x - 1)
+    draw_high_y = max(low_y, high_y - 1)
+    limit_x = draw_high_x + 1
+    limit_y = draw_high_y + 1
+
+    if overlay_alpha > 0:
+        overlay = frame.copy()
+        for y in range(low_y, limit_y, step_y):
+            for x in range(low_x, limit_x, step_x):
+                x2 = min(x + slice_w, limit_x)
+                y2 = min(y + slice_h, limit_y)
+                x2_draw = max(x, x2 - 1)
+                y2_draw = max(y, y2 - 1)
+
+                if overlap_w > 0 and x2 < limit_x:
+                    ox1 = max(x2 - overlap_w, low_x)
+                    ox2 = min(x2, limit_x) - 1
+                    if ox2 >= ox1:
+                        cv2.rectangle(overlay, (ox1, y), (ox2, y2_draw), overlap_color, -1)
+
+                if overlap_h > 0 and y2 < limit_y:
+                    oy1 = max(y2 - overlap_h, low_y)
+                    oy2 = min(y2, limit_y) - 1
+                    if oy2 >= oy1:
+                        cv2.rectangle(overlay, (x, oy1), (x2_draw, oy2), overlap_color, -1)
+
+                if overlap_w > 0 and overlap_h > 0 and x2 < limit_x and y2 < limit_y:
+                    ox1 = max(x2 - overlap_w, low_x)
+                    oy1 = max(y2 - overlap_h, low_y)
+                    ox2 = min(x2, limit_x) - 1
+                    oy2 = min(y2, limit_y) - 1
+                    if ox2 >= ox1 and oy2 >= oy1:
+                        cv2.rectangle(overlay, (ox1, oy1), (ox2, oy2), overlap_color, -1)
+
+        frame = cv2.addWeighted(overlay, overlay_alpha, frame, 1 - overlay_alpha, 0)
+
+    for y in range(low_y, limit_y, step_y):
+        for x in range(low_x, limit_x, step_x):
+            x2 = min(x + slice_w, limit_x)
+            y2 = min(y + slice_h, limit_y)
+            x2_draw = max(x, x2 - 1)
+            y2_draw = max(y, y2 - 1)
+            cv2.rectangle(frame, (x, y), (x2_draw, y2_draw), line_color, line_thickness)
+
+    cv2.rectangle(frame, (low_x, low_y), (draw_high_x, draw_high_y), line_color, line_thickness)
+    return frame
 
 def count_polygon_zone(zone, class_list):
     count_dict = {}
@@ -655,42 +778,70 @@ def get_extreme_points(masks, frame_buffer=FRAME_BUFFER):
     high_x = -1
     high_y = -1
     for mask in masks:
-        points = np.array(mask["points"])
-        points.astype(int)
+        points = np.array(mask["points"], dtype=np.int32)
         for point in points:
             low_x = point[0] if point[0] < low_x else low_x
             low_y = point[1] if point[1] < low_y else low_y
             high_x = point[0] if point[0] > high_x else high_x
             high_y = point[1] if point[1] > high_y else high_y
 
-    return max(0, low_x - frame_buffer), max(0, low_y - frame_buffer), min(RESOLUTION_X - 1, high_x + frame_buffer), min(RESOLUTION_Y - 1, high_y + frame_buffer)
+    low_x  = max(0, low_x - frame_buffer)
+    low_y  = max(0, low_y - frame_buffer)
+    high_x = min(RESOLUTION_X - 1, high_x + frame_buffer)
+    high_y = min(RESOLUTION_Y - 1, high_y + frame_buffer)
+
+    # Ensure valid bounds (low < high) — avoids zero-size crops
+    if low_x >= high_x or low_y >= high_y:
+        return 0, 0, RESOLUTION_X, RESOLUTION_Y
+
+    return low_x, low_y, high_x, high_y
 
 
 def initSliceInferer(model_bundle: Dict[str, Any], settings_dict=None):
     native_w, native_h = model_bundle.get('native_input_wh', (640, 640))
+    slice_count = [0]  # mutable counter for logging
 
     def inferSlice(image_slice: np.ndarray) -> Optional[sv.Detections]:
+        import time as _time
+        slice_count[0] += 1
+        t0 = _time.monotonic()
         conf = float(settings_dict.get('confidence', CONF)) if settings_dict else CONF
         detections = infer_frame(image_slice, model_bundle, confidence=conf)
+        dt = _time.monotonic() - t0
+        det_count = len(detections) if detections and detections is not False else 0
+        logger.debug('[SAHI] slice #%d (%dx%d) inferred in %.1fms → %d detections',
+                     slice_count[0], image_slice.shape[1], image_slice.shape[0], dt * 1000, det_count)
         return detections if detections is not False else empty_detections()
 
+    overlap_w, overlap_h = int(0.2 * native_w), int(0.2 * native_h)
+    iou_threshold = float(settings_dict.get('iou', IOU)) if settings_dict else IOU
+    overlap_ratio = float(settings_dict.get('overlapRatio', 0.2)) if settings_dict else 0.2
+    overlap_w = int(overlap_ratio * native_w)
+    overlap_h = int(overlap_ratio * native_h)
     slicer = sv.InferenceSlicer(
         callback=inferSlice,
         slice_wh=(native_w, native_h),
         overlap_ratio_wh=None,
-        overlap_wh=(int(0.2 * native_w), int(0.2 * native_h)),
-        iou_threshold=IOU,
+        overlap_wh=(overlap_w, overlap_h),
+        iou_threshold=iou_threshold,
         thread_workers=6
     )
+    slicer._sahi_slice_count = slice_count  # expose for reset
+    slicer._sahi_slice_wh = (native_w, native_h)
+    slicer._sahi_overlap_wh = (overlap_w, overlap_h)
+    slicer._sahi_iou = iou_threshold
+    slicer._sahi_overlap_ratio = overlap_ratio
+    logger.debug('[SAHI] InferenceSlicer created: slice=%dx%d, overlap=%dx%d (%.0f%%), iou=%.2f',
+                native_w, native_h, overlap_w, overlap_h, overlap_ratio * 100, iou_threshold)
     return slicer
 
-def infer(frame, model_bundle, confidence=None):
-    return infer_frame(frame, model_bundle, confidence=confidence)
+def infer(frame, model_bundle, confidence=None, iou=None):
+    return infer_frame(frame, model_bundle, confidence=confidence, iou=iou)
 
-def infer_frame(frame: np.ndarray, model_bundle: Dict[str, Any], confidence=None):
+def infer_frame(frame: np.ndarray, model_bundle: Dict[str, Any], confidence=None, iou=None):
     backend = model_bundle.get('backend')
     if backend == 'tensorrt':
-        return infer_tensorrt(frame, model_bundle, confidence=confidence)
+        return infer_tensorrt(frame, model_bundle, confidence=confidence, iou=iou)
     if backend == 'mmdet':
         return infer_mmdet(frame, model_bundle['inferencer'], confidence=confidence)
     raise ValueError(f'Unsupported backend in model bundle: {backend}')
@@ -708,6 +859,9 @@ def infer_mmdet(frame: np.ndarray, inferencer, confidence=None) -> Optional[sv.D
         if bboxes.size == 0:
             return False
 
+        # Extract instance masks if the model provides them (e.g. Mask R-CNN)
+        raw_masks = pred.get('masks', None)
+
         conf_threshold = confidence if confidence is not None else CONF
         keep = scores >= conf_threshold
         if CLASS_LIST:
@@ -721,23 +875,35 @@ def infer_mmdet(frame: np.ndarray, inferencer, confidence=None) -> Optional[sv.D
         if bboxes.size == 0:
             return False
 
+        # Build mask array: (N, H, W) boolean if masks were returned
+        masks_np = None
+        if raw_masks is not None and len(raw_masks) > 0:
+            try:
+                masks_arr = np.array(raw_masks, dtype=np.uint8)
+                if masks_arr.ndim == 3:
+                    masks_np = masks_arr[keep].astype(bool)
+            except Exception as mask_err:
+                logger.debug('Could not parse instance masks: %s', mask_err)
+
         return sv.Detections(
             xyxy=bboxes,
             confidence=scores,
             class_id=labels,
+            mask=masks_np,
         )
     except Exception as e:
         logger.error('Failed to extract detections from MMDetection result: %s', e, exc_info=True)
         return False
 
 
-def infer_tensorrt(frame: np.ndarray, model_bundle: Dict[str, Any], confidence=None) -> Optional[sv.Detections]:
+def infer_tensorrt(frame: np.ndarray, model_bundle: Dict[str, Any], confidence=None, iou=None) -> Optional[sv.Detections]:
     """Run inference through the TensorRT engine."""
     trt_inf = model_bundle['inferencer']
     conf = confidence if confidence is not None else CONF
+    iou_threshold = iou if iou is not None else IOU
     class_list = CLASS_LIST if CLASS_LIST else None
     try:
-        result = trt_inf(frame, conf=conf, iou=IOU, class_list=class_list)
+        result = trt_inf(frame, conf=conf, iou=iou_threshold, class_list=class_list)
         return result if result is not None else False
     except Exception as e:
         logger.error('TensorRT inference failed: %s', e, exc_info=True)
@@ -754,11 +920,20 @@ def move_detections(detections: sv.Detections, offset_x: int, offset_y: int) -> 
 
   return detections
 
-def processFrame(frame, detections, saved_masks):
+def processFrame(frame, detections, saved_masks, settings_dict=None):
+
+    # Suppress harmless numpy warnings from supervision's ByteTrack / zone
+    # triggers when detections have edge-case coordinates (zero-area boxes,
+    # NaN from empty slices, etc.).  These are non-fatal floating-point noise.
+    with np.errstate(all='ignore'):
+        return _processFrameInner(frame, detections, saved_masks, settings_dict)
+
+def _processFrameInner(frame, detections, saved_masks, settings_dict=None):
 
     try:
         detections = tracker.update_with_detections(detections)
-        if SMOOTHING:
+        use_smoothing = settings_dict.get('useSmoothing', SMOOTHING) if settings_dict else SMOOTHING
+        if use_smoothing:
             detections = smoother.update_with_detections(detections)
     except Exception as e:
         logger.warning('Error when smoothing detections or updating tracker: %s', e, exc_info=True)
@@ -774,9 +949,12 @@ def processFrame(frame, detections, saved_masks):
 
     # Annotate all detections if no zones are defined
     if len(zoneMasks) == 0:
+        if detections.mask is not None:
+            frame = mask_annotator.annotate(scene=frame, detections=detections)
         frame = bounding_box_annotator.annotate(scene=frame, detections=detections)
         # labels = [f"#{tracker_id}" for tracker_id in detections.tracker_id]
-        frame = label_annotator.annotate(scene=frame, detections=detections)
+        labels = _build_labels(detections)
+        frame = label_annotator.annotate(scene=frame, detections=detections, labels=labels)
 
         count_dict = count_detections(detections)
         zoneCounts.append({'label': DEVICE_NAME + "_" + "default", 'count': count_dict})
@@ -800,8 +978,11 @@ def processFrame(frame, detections, saved_masks):
             count_dict = count_polygon_zone(zone, CLASS_LIST)
             zoneCounts.append({'label': saved_mask['label'], 'count': count_dict})
 
+            if filtered_detections.mask is not None:
+                frame = mask_annotator.annotate(scene=frame, detections=filtered_detections)
             frame = bounding_box_annotator.annotate(scene=frame, detections=filtered_detections)
-            frame = label_annotator.annotate(scene=frame, detections=filtered_detections)
+            labels = _build_labels(filtered_detections)
+            frame = label_annotator.annotate(scene=frame, detections=filtered_detections, labels=labels)
             frame = zone_annotator.annotate(scene=frame, label=zone_label)
 
     for saved_mask in lineMasks:

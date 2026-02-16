@@ -60,6 +60,30 @@ export async function updateStreamSahi(ctx: Context) {
     return { status: 'ok', camStream, useSahi }
 }
 
+export async function updateStreamSmoothing(ctx: Context) {
+    let body: any
+    try {
+        body = typeof ctx.body === 'string' ? JSON.parse(ctx.body) : ctx.body
+    } catch {
+        ctx.set.status = 400
+        return { error: 'Invalid JSON' }
+    }
+    const { camStream, useSmoothing } = body
+    if (!camStream || typeof useSmoothing !== 'boolean') {
+        ctx.set.status = 400
+        return { error: 'camStream (string) and useSmoothing (boolean) are required' }
+    }
+    const cam = streamSetup[camStream]
+    if (!cam) {
+        ctx.set.status = 404
+        return { error: `Stream "${camStream}" not found` }
+    }
+    cam.useSmoothing = useSmoothing
+    await Bun.write(streamSetupFile, JSON.stringify(streamSetup))
+    await writeStreamSettings(camStream, cam)
+    return { status: 'ok', camStream, useSmoothing }
+}
+
 export async function updateStreamConfidence(ctx: Context) {
     let body: any
     try {
@@ -106,6 +130,54 @@ export async function updateStreamFrameBuffer(ctx: Context) {
     await Bun.write(streamSetupFile, JSON.stringify(streamSetup))
     await writeStreamSettings(camStream, cam)
     return { status: 'ok', camStream, frameBuffer }
+}
+
+export async function updateStreamIou(ctx: Context) {
+    let body: any
+    try {
+        body = typeof ctx.body === 'string' ? JSON.parse(ctx.body) : ctx.body
+    } catch {
+        ctx.set.status = 400
+        return { error: 'Invalid JSON' }
+    }
+    const { camStream, iou } = body
+    if (!camStream || typeof iou !== 'number' || iou < 0 || iou > 1) {
+        ctx.set.status = 400
+        return { error: 'camStream (string) and iou (number 0-1) are required' }
+    }
+    const cam = streamSetup[camStream]
+    if (!cam) {
+        ctx.set.status = 404
+        return { error: `Stream "${camStream}" not found` }
+    }
+    cam.iou = iou
+    await Bun.write(streamSetupFile, JSON.stringify(streamSetup))
+    await writeStreamSettings(camStream, cam)
+    return { status: 'ok', camStream, iou }
+}
+
+export async function updateStreamOverlapRatio(ctx: Context) {
+    let body: any
+    try {
+        body = typeof ctx.body === 'string' ? JSON.parse(ctx.body) : ctx.body
+    } catch {
+        ctx.set.status = 400
+        return { error: 'Invalid JSON' }
+    }
+    const { camStream, overlapRatio } = body
+    if (!camStream || typeof overlapRatio !== 'number' || overlapRatio < 0.01 || overlapRatio > 0.5) {
+        ctx.set.status = 400
+        return { error: 'camStream (string) and overlapRatio (number 0.01-0.5) are required' }
+    }
+    const cam = streamSetup[camStream]
+    if (!cam) {
+        ctx.set.status = 404
+        return { error: `Stream "${camStream}" not found` }
+    }
+    cam.overlapRatio = overlapRatio
+    await Bun.write(streamSetupFile, JSON.stringify(streamSetup))
+    await writeStreamSettings(camStream, cam)
+    return { status: 'ok', camStream, overlapRatio }
 }
 
 export async function updateStreamClassList(ctx: Context) {

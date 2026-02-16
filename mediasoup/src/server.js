@@ -39,7 +39,7 @@ const cameras = new Map();
 // ── mediasoup setup ────────────────────────────────────────────────────────
 async function startMediasoup() {
   worker = await createWorker({
-    logLevel: 'debug',
+    logLevel: 'warn',
     rtcMinPort: RTP_PORT_MIN,
     rtcMaxPort: RTP_PORT_MAX,
   });
@@ -108,15 +108,9 @@ async function createCameraIngest(camId, rtpPort) {
     },
   });
 
-  // Log PlainTransport events for debugging
+  // Log PlainTransport events only at debug level
   plainTransport.on('tuple', (tuple) => {
-    console.log(`[mediasoup] PlainTransport ${camId} tuple: ${JSON.stringify(tuple)}`);
-  });
-  plainTransport.on('rtcptuple', (tuple) => {
-    console.log(`[mediasoup] PlainTransport ${camId} rtcpTuple: ${JSON.stringify(tuple)}`);
-  });
-  producer.on('score', (score) => {
-    console.log(`[mediasoup] Producer ${camId} score:`, JSON.stringify(score));
+    console.debug(`[mediasoup] PlainTransport ${camId} tuple: ${JSON.stringify(tuple)}`);
   });
 
   cameras.set(camId, { plainTransport, producer });
@@ -269,7 +263,6 @@ async function handleMessage(msg, ws, consumerTransports, consumers) {
         preferUdp: true,
       });
 
-      // Log WebRTC transport events
       transport.on('icestatechange', (iceState) => {
         console.log(`[mediasoup] WebRTC transport ${camId} ICE state: ${iceState}`);
       });
@@ -279,8 +272,7 @@ async function handleMessage(msg, ws, consumerTransports, consumers) {
 
       consumerTransports.set(camId, transport);
 
-      console.log(`[mediasoup] WebRTC transport ${camId} created — ICE candidates:`,
-        transport.iceCandidates.map(c => `${c.protocol}://${c.ip}:${c.port}`).join(', '));
+      console.log(`[mediasoup] WebRTC transport ${camId} created`);
 
       return {
         type: 'consumerTransportCreated',
@@ -297,10 +289,10 @@ async function handleMessage(msg, ws, consumerTransports, consumers) {
     // ── Step 3: Browser connects the transport (DTLS handshake) ────────
     case 'connectConsumerTransport': {
       const camId = msg.camId || 'frontCam';
+      console.log(`[mediasoup] connectConsumerTransport called for ${camId}`);
       const transport = consumerTransports.get(camId);
       if (!transport) throw new Error(`No transport for ${camId}`);
       await transport.connect({ dtlsParameters: msg.dtlsParameters });
-      console.log(`[mediasoup] WebRTC transport ${camId} ICE state: ${transport.iceState}, DTLS state: ${transport.dtlsState}`);
       return { type: 'consumerTransportConnected', camId };
     }
 
@@ -323,12 +315,6 @@ async function handleMessage(msg, ws, consumerTransports, consumers) {
         paused:          false,
       });
 
-      consumer.on('score', (score) => {
-        console.log(`[mediasoup] Consumer ${camId} score:`, JSON.stringify(score));
-      });
-      consumer.on('layerschange', (layers) => {
-        console.log(`[mediasoup] Consumer ${camId} layers changed:`, JSON.stringify(layers));
-      });
       consumer.on('producerpause', () => {
         console.log(`[mediasoup] Consumer ${camId}: producer paused`);
       });
@@ -338,8 +324,7 @@ async function handleMessage(msg, ws, consumerTransports, consumers) {
 
       consumers.set(camId, consumer);
 
-      console.log(`[mediasoup] Consumer created for ${camId}: id=${consumer.id}, paused=${consumer.paused}, producerPaused=${consumer.producerPaused}, kind=${consumer.kind}`);
-      console.log(`[mediasoup] Consumer ${camId} rtpParameters:`, JSON.stringify(consumer.rtpParameters.codecs));
+      console.log(`[mediasoup] Consumer created for ${camId}`);
 
       return {
         type: 'consumed',
@@ -367,21 +352,6 @@ async function handleMessage(msg, ws, consumerTransports, consumers) {
       const consumer = consumers.get(camId);
       if (!consumer) throw new Error(`No consumer for ${camId}`);
       const camera = cameras.get(camId);
-
-      // Log producer and consumer stats on every 5th keyframe request
-      if (!globalThis._kfCount) globalThis._kfCount = {};
-      globalThis._kfCount[camId] = (globalThis._kfCount[camId] || 0) + 1;
-      if (globalThis._kfCount[camId] % 5 === 1) {
-        try {
-          const pStats = await camera?.producer?.getStats();
-          const cStats = await consumer.getStats();
-          console.log(`[mediasoup] Producer ${camId} stats:`, JSON.stringify(pStats));
-          console.log(`[mediasoup] Consumer ${camId} stats:`, JSON.stringify(cStats));
-          console.log(`[mediasoup] Consumer ${camId} paused=${consumer.paused}, producerPaused=${consumer.producerPaused}`);
-        } catch (err) {
-          console.warn(`[mediasoup] Stats error for ${camId}:`, err.message);
-        }
-      }
 
       if (typeof consumer.requestKeyFrame !== 'function') {
         throw new Error(`requestKeyFrame not supported for ${camId}`);

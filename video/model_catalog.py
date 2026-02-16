@@ -606,30 +606,35 @@ def build_model_description(arch_key: str, config_name: str, architecture_field:
 
 # ── File size fetcher ───────────────────────────────────────────────────────
 
-def populate_file_sizes(models: list[dict]) -> None:
+def populate_file_sizes(models: list[dict], url_map: dict[str, str] | None = None) -> None:
     """Fetch checkpoint file sizes for all models using concurrent HEAD requests."""
     from concurrent.futures import ThreadPoolExecutor
 
-    url_map: dict[int, str] = {}
-    for i, m in enumerate(models):
-        url = m.get('_weight_url', '')
-        if url and url.startswith('http'):
-            url_map[i] = url
+    if url_map is None:
+        url_map = {}
+        for m in models:
+            model_id = m.get('id', '')
+            url = m.get('_weight_url', '')
+            if model_id and url and url.startswith('http'):
+                url_map[model_id] = url
 
     if not url_map:
         return
 
-    results: dict[int, int | None] = {}
+    results: dict[str, int | None] = {}
     with ThreadPoolExecutor(max_workers=20) as pool:
-        futures = {pool.submit(head_content_length, url): idx for idx, url in url_map.items()}
+        futures = {pool.submit(head_content_length, url): model_id for model_id, url in url_map.items()}
         for future in futures:
-            idx = futures[future]
-            results[idx] = future.result()
+            model_id = futures[future]
+            results[model_id] = future.result()
 
-    for idx, size_bytes in results.items():
+    size_by_id = {m.get('id', ''): m for m in models}
+    for model_id, size_bytes in results.items():
         if size_bytes and size_bytes > 0:
-            size_mb = round(size_bytes / (1024 * 1024), 1)
-            models[idx]['fileSize'] = size_mb
+            # Match pretty-bytes (decimal) units used in download progress.
+            size_mb = round(size_bytes / 1_000_000, 1)
+            if model_id in size_by_id:
+                size_by_id[model_id]['fileSize'] = size_mb
 
 
 # ── Model discovery ─────────────────────────────────────────────────────────
@@ -744,9 +749,22 @@ def discover_mmdet_models() -> list[dict]:
             })
 
         # Fetch checkpoint file sizes in background (don't block the response)
+        try:
+            from model_utils import MMDET_MODEL_ZOO
+        except Exception:
+            MMDET_MODEL_ZOO = {}
+
+        size_url_map = {}
+        for m in models:
+            model_id = m.get('id', '')
+            curated = MMDET_MODEL_ZOO.get(model_id, {}).get('checkpoint')
+            url = curated or m.get('_weight_url', '')
+            if model_id and url and url.startswith('http'):
+                size_url_map[model_id] = url
+
         def _bg_populate():
             try:
-                populate_file_sizes(models)
+                populate_file_sizes(models, size_url_map)
             except Exception:
                 pass
         threading.Thread(target=_bg_populate, daemon=True).start()

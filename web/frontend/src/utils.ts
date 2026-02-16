@@ -145,8 +145,11 @@ export type Camera = {
   password?: string
   model?: string
   useSahi?: boolean
+  useSmoothing?: boolean
   frameBuffer?: number
   confidence?: number
+  iou?: number
+  overlapRatio?: number
   classList?: number[]
   classNames?: string[]
 }

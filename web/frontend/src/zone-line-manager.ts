@@ -22,6 +22,10 @@ export class ZoneLineManager extends LitElement {
 
   zoneDialog?: MdDialog;
   lineDialog?: MdDialog;
+  private polygonUpdateHandler = () => {
+    this.requestUpdate();
+  };
+  private lastPolygonManager?: PolygonManager;
 
   constructor() {
     super();
@@ -85,6 +89,27 @@ export class ZoneLineManager extends LitElement {
     this.lineDialog = this.shadowRoot?.getElementById(
       'linedialog',
     ) as MdDialog;
+  }
+
+  protected updated(
+    changedProperties: PropertyValueMap<any> | Map<PropertyKey, unknown>,
+  ): void {
+    if (changedProperties.has('polygonManager')) {
+      if (this.lastPolygonManager) {
+        this.lastPolygonManager.removeEventListener(
+          'update',
+          this.polygonUpdateHandler,
+        );
+      }
+      if (this.polygonManager) {
+        this.polygonManager.addEventListener(
+          'update',
+          this.polygonUpdateHandler,
+        );
+      }
+      this.lastPolygonManager = this.polygonManager;
+    }
+    super.updated(changedProperties);
   }
 
   handleMaskNameInput(ev: { target: { value: string } }) {

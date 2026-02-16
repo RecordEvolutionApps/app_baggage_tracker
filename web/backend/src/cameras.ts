@@ -9,4 +9,4 @@
  */
 export { getModels, getModelStatus, prepareModel, getModelClasses } from './models.js'
 export { getStreamSetup, listStreams, createStream, deleteStream, selectCamera, getUSBCameras, getStreamBackendStatus } from './streams.js'
-export { updateStreamModel, updateStreamSahi, updateStreamConfidence, updateStreamFrameBuffer, updateStreamClassList, updateStreamClassNames } from './settings.js'
+export { updateStreamModel, updateStreamSahi, updateStreamSmoothing, updateStreamConfidence, updateStreamFrameBuffer, updateStreamIou, updateStreamOverlapRatio, updateStreamClassList, updateStreamClassNames } from './settings.js'
