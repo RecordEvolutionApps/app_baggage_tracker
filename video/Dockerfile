@@ -73,10 +73,12 @@ RUN uv pip install --system ironflock==1.0.6 matplotlib==3.7.5 pyyaml==6.0.1 def
 # Install supervision separately (version compatibility)
 RUN uv pip install --system supervision==0.25.1 --no-deps
 
-# Download latest yt-dlp standalone binary (bundles its own Python,
-# independent of system Python 3.10). The pip yt_dlp is kept as a
+# Download the latest yt-dlp compiled binary for aarch64 (Jetson).
+# This is a real standalone executable — NOT the Python zipapp which
+# would fail on Python 3.8.  The pip yt_dlp package is kept as a
 # fallback but the standalone binary handles nsig extraction correctly.
-RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && \
+RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64 \
+        -o /usr/local/bin/yt-dlp && \
     chmod +x /usr/local/bin/yt-dlp
 
 # Create model cache directory

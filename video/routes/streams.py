@@ -7,6 +7,7 @@ import signal
 import subprocess
 import sys
 import urllib.parse
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -25,8 +26,8 @@ processes: dict[str, subprocess.Popen] = {}
 class StreamRequest(BaseModel):
     camPath: str
     camStream: str
-    width: int | None = None
-    height: int | None = None
+    width: Optional[int] = None
+    height: Optional[int] = None
 
 
 # ── Mediasoup helpers ───────────────────────────────────────────────────────
