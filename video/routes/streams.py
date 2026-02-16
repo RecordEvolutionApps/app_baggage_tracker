@@ -25,6 +25,8 @@ processes: dict[str, subprocess.Popen] = {}
 class StreamRequest(BaseModel):
     camPath: str
     camStream: str
+    width: int | None = None
+    height: int | None = None
 
 
 # ── Mediasoup helpers ───────────────────────────────────────────────────────
@@ -85,6 +87,9 @@ def start_stream(req: StreamRequest):
         raise HTTPException(502, f"Could not create mediasoup ingest: {e}")
 
     cmd = ["python3", "-u", "/app/video/videoStream.py", req.camPath, req.camStream, "--port", str(port)]
+
+    if req.width and req.height:
+        cmd.extend(["--width", str(req.width), "--height", str(req.height)])
 
     print(f"[api] Starting stream: {' '.join(cmd)}")
 

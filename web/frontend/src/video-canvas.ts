@@ -105,6 +105,15 @@ export class VideoCanvas extends LitElement {
       return;
     }
 
+    // Auto-resize canvas to match the actual video source resolution.
+    // This is the single source of truth — overrides any backend/config values.
+    if (this.video.videoWidth !== this.width || this.video.videoHeight !== this.height) {
+      this.width = this.video.videoWidth;
+      this.height = this.video.videoHeight;
+      this.canvasElement.width = this.width;
+      this.canvasElement.height = this.height;
+    }
+
     // First real frame — hide loading indicator
     if (this.loading) {
       this.loading = false;

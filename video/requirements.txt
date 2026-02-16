@@ -4,7 +4,7 @@ pyyaml==6.0.1
 defusedxml==0.7.1
 pillow==10.3.0
 lapx==0.5.5
-yt_dlp==2024.10.22
+yt_dlp==2024.4.9
 opencv-python==4.8.1.78
 numpy==1.26.4
 fastapi==0.115.0

@@ -83,8 +83,16 @@ parser = argparse.ArgumentParser(description='Start a Video Stream for the given
 parser.add_argument('device', type=str, help='A device path like e.g. /dev/video0')
 parser.add_argument('camStream', type=str, help='Stream name (e.g. frontCam)')
 parser.add_argument('--port', type=int, required=True, help='RTP port assigned by mediasoup')
+parser.add_argument('--width', type=int, default=None, help='Requested capture width (overrides RESOLUTION_X)')
+parser.add_argument('--height', type=int, default=None, help='Requested capture height (overrides RESOLUTION_Y)')
 
 args = parser.parse_args()
+
+# Per-stream resolution overrides (from --width/--height CLI args)
+if args.width:
+    RESOLUTION_X = args.width
+if args.height:
+    RESOLUTION_Y = args.height
 
 device = args.device
 logger.info('Camera: %s', device)
@@ -99,16 +107,29 @@ def setVideoSource(device):
     global RESOLUTION_Y
     if device.startswith('http'):
         if device.startswith('https://youtu') or device.startswith('https://www.youtube.com'):
-            # Get YouTube stream URL via yt_dlp, then use OpenCV
+            # yt_dlp resolves the YouTube page URL into a direct CDN stream URL.
+            # Using format='best' picks a muxed format that works with plain HTTP GET.
             try:
                 video = get_youtube_video(device, RESOLUTION_Y)
-                RESOLUTION_X = video.get("width", RESOLUTION_X)
-                RESOLUTION_Y = video.get("height", RESOLUTION_Y)
                 stream_url = video.get('url', device)
-                logger.info('YouTube resolved to %dx%d, streaming with OpenCV', RESOLUTION_X, RESOLUTION_Y)
-                cap = cv2.VideoCapture(stream_url)
+                if video.get('width'):
+                    RESOLUTION_X = video['width']
+                if video.get('height'):
+                    RESOLUTION_Y = video['height']
+                logger.info('YouTube resolved to %dx%d, opening stream...', RESOLUTION_X, RESOLUTION_Y)
+                # Force FFmpeg backend — GStreamer mishandles googlevideo.com URLs
+                cap = cv2.VideoCapture(stream_url, cv2.CAP_FFMPEG)
+                if not cap.isOpened():
+                    logger.info('FFmpeg backend failed, trying auto backend')
+                    cap = cv2.VideoCapture(stream_url)
+                if cap.isOpened():
+                    actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    logger.info('YouTube opened: %dx%d', actual_w, actual_h)
+                else:
+                    logger.error('YouTube VideoCapture FAILED to open stream URL')
             except Exception as err:
-                logger.warning('YouTube resolution failed: %s, trying direct URL', err)
+                logger.warning('YouTube yt-dlp failed: %s — trying direct URL', err)
                 cap = cv2.VideoCapture(device)
         else:
             # Direct HTTPS/HTTP streaming — try GStreamer HW decode on Jetson
@@ -158,6 +179,14 @@ def setVideoSource(device):
                 cap = cv2.VideoCapture(device)
         else:
             cap = cv2.VideoCapture(device)
+        # Read actual resolution from RTSP stream
+        if cap.isOpened():
+            actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            if actual_w > 0 and actual_h > 0:
+                RESOLUTION_X = actual_w
+                RESOLUTION_Y = actual_h
+                logger.info('RTSP stream opened: %dx%d', RESOLUTION_X, RESOLUTION_Y)
     elif device.startswith('demoVideo'):
         # Use FFmpeg backend — GStreamer can't reliably re-open m4v files
         # (fails with "unable to query duration of stream" on subsequent opens)
@@ -169,8 +198,24 @@ def setVideoSource(device):
         # RESOLUTION_X = 1280
         # RESOLUTION_Y = 720
     else:
-        device = int(device[-1])
-        cap = cv2.VideoCapture(device)
+        # USB camera: expect /dev/videoN path
+        if device.startswith('/dev/video'):
+            dev_index = int(device.replace('/dev/video', ''))
+        elif device[-1].isdigit():
+            dev_index = int(device[-1])
+        else:
+            logger.error('Unrecognised device string: %s', device)
+            sys.exit(1)
+        cap = cv2.VideoCapture(dev_index)
+        # Read actual resolution from USB camera after setting requested resolution
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, RESOLUTION_X)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, RESOLUTION_Y)
+        actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        if actual_w > 0 and actual_h > 0:
+            RESOLUTION_X = actual_w
+            RESOLUTION_Y = actual_h
+            logger.info('USB camera actual resolution: %dx%d', RESOLUTION_X, RESOLUTION_Y)
     return cap
 
 cap = setVideoSource(device)
@@ -178,6 +223,15 @@ cap = setVideoSource(device)
 logger.info('Resolution: %dx%d, source: %s', RESOLUTION_X, RESOLUTION_Y, device)
 cap.set(3, RESOLUTION_X)
 cap.set(4, RESOLUTION_Y)
+
+# Write the actual resolved resolution so the web backend / frontend can read it
+_status_dir = os.path.join('/data', 'status')
+os.makedirs(_status_dir, exist_ok=True)
+_resolution_file = os.path.join(_status_dir, f'{args.camStream}.resolution.json')
+with open(_resolution_file, 'w') as _rf:
+    import json as _json
+    _json.dump({'width': RESOLUTION_X, 'height': RESOLUTION_Y}, _rf)
+logger.info('Wrote resolution status: %dx%d → %s', RESOLUTION_X, RESOLUTION_Y, _resolution_file)
 
 model = getModel(OBJECT_MODEL)
 current_model_name = OBJECT_MODEL

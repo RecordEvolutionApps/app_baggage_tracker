@@ -26,8 +26,10 @@ services:
         network_mode: service:mediasoup
         privileged: true  # **WARNING: Security Risk**
         devices:
-            - /dev/bus/usb:/dev/bus/usb
+            - /dev/bus/usb:/dev/bus/usb    # USB cameras (UVC)
             - /dev/nvidia*:/dev/nvidia*
+            # MIPI CSI / GMSL cameras are available via privileged mode
+            # (they appear as /dev/video* through the Jetson ISP / deserializer drivers)
         runtime: nvidia
         environment:
             - MEDIASOUP_URL=http://127.0.0.1:1200

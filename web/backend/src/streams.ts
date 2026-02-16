@@ -30,10 +30,14 @@ export async function startVideoStream(cam: Camera, camStream: string) {
     }
 
     try {
+        const body: Record<string, any> = { camPath, camStream }
+        if (cam.width) body.width = cam.width
+        if (cam.height) body.height = cam.height
+
         const res = await fetch(`${VIDEO_API}/streams`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ camPath, camStream }),
+            body: JSON.stringify(body),
         })
         if (!res.ok) {
             const text = await res.text()
@@ -43,7 +47,7 @@ export async function startVideoStream(cam: Camera, camStream: string) {
             const retry = await fetch(`${VIDEO_API}/streams`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ camPath, camStream }),
+                body: JSON.stringify(body),
             })
             if (!retry.ok) {
                 console.error(`Retry failed for ${camStream}:`, retry.status, await retry.text())
@@ -65,7 +69,7 @@ export async function startVideoStream(cam: Camera, camStream: string) {
             const retry = await fetch(`${VIDEO_API}/streams`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ camPath, camStream }),
+                body: JSON.stringify(body),
             })
             if (retry.ok) {
                 const data: any = await retry.json()
@@ -131,7 +135,7 @@ async function initStreams() {
     try {
         camList = await getUSBCameras()
     } catch (error) {
-        console.error('Failed to load USB cameras', error)
+        console.error('Failed to load cameras', error)
     }
     console.log("CAMERA LIST", { camList })
 
@@ -154,13 +158,20 @@ async function initStreams() {
     if (Object.keys(loaded).length === 0 && !firstCam) {
         const demoCam: Camera = {
             id: 'frontCam',
-            type: 'IP',
-            name: 'frontCam',
+            type: 'Demo',
+            name: 'Demo Video',
             path: 'demoVideo',
             camStream: 'frontCam',
         }
         loaded = { frontCam: demoCam }
         await Bun.write(streamSetupFile, JSON.stringify(loaded))
+    }
+
+    // Migrate legacy entries: IP + demoVideo → Demo type
+    for (const cam of Object.values(loaded)) {
+        if (cam.type === 'IP' && cam.path === 'demoVideo') {
+            (cam as any).type = 'Demo'
+        }
     }
 
     setStreamSetup(loaded)
@@ -184,10 +195,34 @@ initStreams()
 
 // ── Route handlers ─────────────────────────────────────────────────────────
 
-export function getStreamSetup(ctx: Context): any {
+export async function getStreamSetup(ctx: Context): Promise<any> {
     const params = new URLSearchParams(ctx.request.url.split('?')[1])
-    console.log('getStreamSetup', params.get('camStream'))
-    return { "camera": streamSetup[params.get('camStream') ?? ''], "width": process.env.RESOLUTION_X, "height": process.env.RESOLUTION_Y }
+    const camStream = params.get('camStream') ?? ''
+    console.log('getStreamSetup', camStream)
+    const cam = streamSetup[camStream]
+
+    let width = cam?.width
+    let height = cam?.height
+
+    // If the camera config doesn't have a resolution (Demo, YouTube, IP/RTSP),
+    // read the actual resolution written by the video process after it opened
+    // the source.
+    if (!width || !height) {
+        try {
+            const resFile = Bun.file(`/data/status/${camStream}.resolution.json`)
+            if (await resFile.exists()) {
+                const res = await resFile.json()
+                width = res.width ?? width
+                height = res.height ?? height
+            }
+        } catch (_) { /* resolution file not written yet */ }
+    }
+
+    return {
+        "camera": cam,
+        "width": width ?? 640,
+        "height": height ?? 480,
+    }
 }
 
 export function listStreams(): Camera[] {
@@ -244,9 +279,15 @@ export async function deleteStream(ctx: Context) {
 }
 
 export const selectCamera = async (ctx: Context) => {
-    const cam: Camera = JSON.parse(ctx.body as any)
+    const cam: Camera = typeof ctx.body === 'string' ? JSON.parse(ctx.body) : ctx.body as Camera
     console.log('selected camera', cam)
-    if (cam.type === 'IP') {
+
+    // Migrate legacy type: demoVideo path → Demo type
+    if (cam.type === 'IP' && cam.path === 'demoVideo') {
+        cam.type = 'Demo'
+    }
+
+    if (cam.type === 'IP' || cam.type === 'YouTube' || cam.type === 'Demo') {
         streamSetup[cam.camStream] = cam
     }
     else {
@@ -256,7 +297,14 @@ export const selectCamera = async (ctx: Context) => {
             ctx.set.status = 404
             return { error: `Camera "${cam.id}" not found` }
         }
-        streamSetup[cam.camStream] = cameraDev
+        // Merge USB device info with user-chosen resolution
+        streamSetup[cam.camStream] = {
+            ...cameraDev,
+            camStream: cam.camStream,
+            type: 'USB',
+            width: cam.width,
+            height: cam.height,
+        }
     }
 
     const startCam = streamSetup[cam.camStream]
@@ -268,7 +316,9 @@ export const selectCamera = async (ctx: Context) => {
     startVideoStream(startCam, cam.camStream)
 }
 
-export async function getUSBCameras(): Promise<Camera[]> {
+export const getUSBCameras = getDeviceCameras   // backward compat alias
+
+export async function getDeviceCameras(): Promise<Camera[]> {
     try {
         const res = await fetch(`${VIDEO_API}/cameras`)
         if (!res.ok) {

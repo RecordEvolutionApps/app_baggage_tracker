@@ -79,6 +79,12 @@ RUN cd /tmp && \
 # Install supervision separately (version compatibility)
 RUN uv pip install --system supervision==0.25.1 --no-deps
 
+# Download latest yt-dlp standalone binary (bundles its own Python,
+# independent of system Python 3.10). The pip yt_dlp is kept as a
+# fallback but the standalone binary handles nsig extraction correctly.
+RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && \
+    chmod +x /usr/local/bin/yt-dlp
+
 # Create model cache directory
 RUN mkdir -p /app/download /data/mmdet
 

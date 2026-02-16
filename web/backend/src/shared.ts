@@ -11,12 +11,14 @@ export const settingsDir = '/data/settings'
 
 export type Camera = {
     id: string
-    type: 'USB' | 'IP'
+    type: 'USB' | 'IP' | 'Demo' | 'YouTube'
     name: string
     path?: string
     username?: string
     password?: string
     camStream: string
+    width?: number
+    height?: number
     model?: string
     useSahi?: boolean
     useSmoothing?: boolean
@@ -27,6 +29,15 @@ export type Camera = {
     overlapRatio?: number
     classList?: number[]
     classNames?: string[]
+}
+
+export type USBCameraInfo = DeviceCameraInfo   // backward compat alias
+export type DeviceCameraInfo = {
+    path: string
+    name: string
+    id: string
+    resolutions: { width: number; height: number }[]
+    interface: 'usb' | 'csi' | 'gmsl' | 'other'
 }
 
 // ── Shared mutable state ───────────────────────────────────────────────────

@@ -532,36 +532,158 @@ def get_tensorrt_model(model_name: str) -> Dict[str, Any]:
         return mmdet_bundle
 
 
-def get_youtube_video(url, height):
+def get_youtube_video(url, height=None):
+    """Resolve a YouTube URL into a direct playable stream URL.
+
+    Uses the standalone yt-dlp binary (/usr/local/bin/yt-dlp) which bundles its
+    own Python and stays up-to-date with YouTube's nsig extraction changes,
+    independent of the system Python 3.10 constraint.
+
+    Falls back to the yt_dlp Python library if the binary is not available.
+    """
+    import shutil
+    import subprocess
+    import json as _json
+
+    cookie_file = '/data/cookies.txt'
+
+    # Prefer muxed format so OpenCV can open it with a plain HTTP GET.
+    if height and height > 0:
+        format_str = f'best[height<={height}]/best'
+    else:
+        format_str = 'best'
+
+    logger.info('[yt-dlp] Resolving: %s (format=%s)', url, format_str)
+
+    yt_dlp_bin = shutil.which('yt-dlp')
+    if yt_dlp_bin is None:
+        logger.warning('[yt-dlp] Standalone binary not found — falling back to Python yt_dlp library')
+        return _get_youtube_video_lib(url, height)
+
+    # Build the command:
+    #   -f <format>       : format selector
+    #   -g                : print the resolved stream URL to stdout
+    #   --print %(width)sx%(height)s : print WIDTHxHEIGHT on a second line
+    #   --no-warnings     : keep stderr clean
+    #   --no-playlist     : single video only
+    cmd = [
+        yt_dlp_bin,
+        '-f', format_str,
+        '--print', '%(url)s',                   # line 1: stream URL
+        '--print', '%(width)sx%(height)s',      # line 2: WIDTHxHEIGHT
+        '--no-warnings',
+        '--no-playlist',
+    ]
+
+    if os.path.isfile(cookie_file):
+        logger.info('[yt-dlp] Using cookie file: %s', cookie_file)
+        cmd += ['--cookies', cookie_file]
+
+    cmd.append(url)
+
+    logger.info('[yt-dlp] Running: %s', ' '.join(cmd))
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        logger.error('[yt-dlp] Timed out after 30 s')
+        return {'url': url, 'width': 0, 'height': 0}
+
+    if result.returncode != 0:
+        logger.error('[yt-dlp] Failed (exit %d): %s', result.returncode, result.stderr.strip())
+        # Fall back to the Python library in case the binary is outdated too
+        return _get_youtube_video_lib(url, height)
+
+    lines = result.stdout.strip().splitlines()
+    stream_url = lines[0] if len(lines) >= 1 else ''
+    resolution_str = lines[1] if len(lines) >= 2 else '0x0'
+
+    width, height_val = 0, 0
+    try:
+        parts = resolution_str.split('x')
+        width = int(parts[0]) if parts[0] not in ('NA', 'None', '') else 0
+        height_val = int(parts[1]) if len(parts) > 1 and parts[1] not in ('NA', 'None', '') else 0
+    except (ValueError, IndexError):
+        pass
+
+    if stream_url:
+        logger.info('[yt-dlp] Resolved %dx%d — URL starts with: %s',
+                     width, height_val, stream_url[:120])
+    else:
+        logger.error('[yt-dlp] No URL in stdout: %s', result.stdout[:200])
+
+    return {
+        'url': stream_url or url,
+        'width': width,
+        'height': height_val,
+    }
+
+
+def _get_youtube_video_lib(url, height=None):
+    """Fallback: use the yt_dlp Python library (may have stale nsig extraction)."""
     import yt_dlp
+
+    if height and height > 0:
+        format_str = f'best[height<={height}]/best'
+    else:
+        format_str = 'best'
+
+    cookie_file = '/data/cookies.txt'
+
     ydl_opts = {
+        'format': format_str,
         'quiet': True,
         'no_warnings': True,
         'extractor_args': {
             'youtube': {
-                'player_client': ['web'],
+                'player_client': ['mweb', 'android'],
             },
         },
     }
+
+    if os.path.isfile(cookie_file):
+        ydl_opts['cookiefile'] = cookie_file
+
+    logger.info('[yt_dlp-lib] Resolving: %s (format=%s)', url, format_str)
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info_dict = ydl.extract_info(url, download=False)
-        formats = info_dict.get('formats', [])
-        output_resolution = {"height": 0, "width": 0}
-        for format in formats:
-            resolution = format.get('height')
-            if resolution == None:
-                continue
-            if height and height == int(resolution):
-                output_resolution = format
-                break
-            elif output_resolution is None or resolution > output_resolution['height']:
-                output_resolution = format
-        if output_resolution is None:
-            output_resolution = {}
-        output_resolution['http_headers'] = info_dict.get('http_headers', {})
-        if 'Referer' not in output_resolution['http_headers']:
-            output_resolution['http_headers']['Referer'] = 'https://www.youtube.com/'
-        return output_resolution
+        info = ydl.extract_info(url, download=False)
+
+        stream_url = info.get('url', '')
+
+        if not stream_url:
+            for fmt in info.get('requested_formats', []):
+                if fmt.get('vcodec', 'none') != 'none' and fmt.get('url'):
+                    stream_url = fmt['url']
+                    break
+
+        if not stream_url:
+            for fmt in reversed(info.get('formats', [])):
+                if (fmt.get('vcodec', 'none') != 'none' and
+                    fmt.get('acodec', 'none') != 'none' and
+                    fmt.get('url')):
+                    stream_url = fmt['url']
+                    if fmt.get('width'):
+                        info['width'] = fmt['width']
+                    if fmt.get('height'):
+                        info['height'] = fmt['height']
+                    break
+
+        if stream_url:
+            logger.info('[yt_dlp-lib] Resolved — URL len=%d', len(stream_url))
+        else:
+            logger.error('[yt_dlp-lib] Could not find any playable URL')
+
+        return {
+            'url': stream_url or url,
+            'width': info.get('width', 0),
+            'height': info.get('height', 0),
+        }
 
 # Function to display frame rate and timestamp on the frame
 def overlay_text(frame, text, position=(10, 30), font_scale=1, color=(0, 255, 0), thickness=2):

@@ -1,22 +1,10 @@
 import { css } from 'lit';
 
 export const mainStyles = css`
-  md-outlined-select,
-  md-outlined-text-field,
-  md-list-item,
-  md-list,
-  md-dialog,
-  md-text-button,
-  md-elevated-button {
-    --my-brand-font: sans-serif;
-    --md-ref-typeface-brand: var(--my-brand-font);
-    --md-ref-typeface-plain: var(--my-brand-font);
-    --md-outlined-text-field-input-text-font: sans-serif;
-    --md-sys-typescale-body-font: var(--my-brand-font);
-    --md-sys-typescale-display-font: var(--my-brand-font);
-    --md-sys-typescale-headline-font: var(--my-brand-font);
-    --my-sys-typescale-label-font: var(--my-brand-font);
-    --md-sys-typescale-title-font: var(--my-brand-font);
+  /* Font tokens are set globally in index.html :root.
+     This block only needs colour / layout overrides. */
+  :host {
+    font-family: sans-serif;
   }
 
   md-outlined-select::part(menu) {
@@ -136,13 +124,15 @@ export type PolygonState = {
 }
 
 export type Camera = {
-  type: 'USB' | 'IP'
+  type: 'USB' | 'IP' | 'Demo' | 'YouTube'
   name?: string
   id?: string
   camStream: string
   path?: string
   username?: string
   password?: string
+  width?: number
+  height?: number
   model?: string
   useSahi?: boolean
   useSmoothing?: boolean
@@ -153,6 +143,15 @@ export type Camera = {
   overlapRatio?: number
   classList?: number[]
   classNames?: string[]
+}
+
+export type USBCameraInfo = DeviceCameraInfo   // backward compat alias
+export type DeviceCameraInfo = {
+  path: string
+  name: string
+  id: string
+  resolutions: { width: number; height: number }[]
+  interface: 'usb' | 'csi' | 'gmsl' | 'other'
 }
 
 export type ModelOption = {

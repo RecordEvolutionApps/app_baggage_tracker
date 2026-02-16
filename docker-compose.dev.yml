@@ -45,7 +45,10 @@ services:
       - FRAMERATE=30
       - MEDIASOUP_URL=http://127.0.0.1:1200
     devices:
-      - /dev/bus/usb:/dev/bus/usb
+      - /dev/bus/usb:/dev/bus/usb  # USB cameras (UVC)
+    # V4L2 video devices (USB, MIPI CSI, GMSL) are accessed via
+    # privileged mode above.  On hosts without /dev/bus/usb (e.g. macOS)
+    # the USB line is silently ignored.
     # No nvidia runtime for local dev
   web:
     build: ./web

@@ -10,7 +10,7 @@ router = APIRouter()
 
 @router.get("/cameras")
 def list_cameras():
-    """List USB cameras attached to the system."""
+    """List local cameras (USB, MIPI CSI, GMSL) with supported resolutions."""
     try:
         result = subprocess.run(
             ["/app/video/list-cameras.sh"],
@@ -23,9 +23,31 @@ def list_cameras():
             parts = line.split(":")
             if len(parts) < 3:
                 continue
-            path, name, devpath = parts[0], parts[1], parts[2]
+            path = parts[0]
+            name = parts[1]
+            devpath = parts[2]
+            resolutions_str = parts[3] if len(parts) > 3 else ""
+            interface = parts[4] if len(parts) > 4 else "usb"
             dev_id = devpath.replace("/devices/platform/", "").split("/video4linux")[0]
-            cameras.append({"path": path, "name": name, "id": dev_id})
+
+            resolutions = []
+            if resolutions_str:
+                for res in resolutions_str.split(","):
+                    res = res.strip()
+                    if "x" in res:
+                        try:
+                            w, h = res.split("x")
+                            resolutions.append({"width": int(w), "height": int(h)})
+                        except ValueError:
+                            continue
+
+            cameras.append({
+                "path": path,
+                "name": name,
+                "id": dev_id,
+                "resolutions": resolutions,
+                "interface": interface,
+            })
         return cameras
     except FileNotFoundError:
         return []

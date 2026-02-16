@@ -8,10 +8,23 @@ Start with:  uvicorn api:app
 """
 from __future__ import annotations
 
+import logging
 import signal
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+
+
+# -- Suppress noisy polling endpoints from Uvicorn access log ----------------
+class _NoisyEndpointFilter(logging.Filter):
+    """Drop access-log records for high-frequency polling routes."""
+    _quiet_paths = ("/backend",)
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        return not any(p in msg for p in self._quiet_paths)
+
+logging.getLogger("uvicorn.access").addFilter(_NoisyEndpointFilter())
 
 from routes.streams import router as streams_router, processes, delete_mediasoup_ingest
 from routes.cameras import router as cameras_router
