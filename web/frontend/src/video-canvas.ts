@@ -106,13 +106,19 @@ export class VideoCanvas extends LitElement {
     }
 
     // Auto-resize canvas to match the actual video source resolution.
-    // This is the single source of truth — overrides any backend/config values.
-    if (this.video.videoWidth !== this.width || this.video.videoHeight !== this.height) {
-      this.width = this.video.videoWidth;
-      this.height = this.video.videoHeight;
-      this.canvasElement.width = this.width;
-      this.canvasElement.height = this.height;
+    // Compare against canvasElement dimensions (not this.width/height) because
+    // the parent component may have already updated this.width/height via
+    // property bindings before the canvas buffer was resized — causing a
+    // false "no change" when comparing this.width vs video.videoWidth.
+    const vw = this.video.videoWidth;
+    const vh = this.video.videoHeight;
+    if (vw !== this.canvasElement.width || vh !== this.canvasElement.height) {
+      this.canvasElement.width = vw;
+      this.canvasElement.height = vh;
     }
+    // Keep reactive properties in sync (used for polygon coordinate mapping)
+    if (this.width !== vw) this.width = vw;
+    if (this.height !== vh) this.height = vh;
 
     // First real frame — hide loading indicator
     if (this.loading) {
@@ -121,7 +127,7 @@ export class VideoCanvas extends LitElement {
 
     // Draw Image
     const context = this.canvasElement?.getContext('2d', { alpha: false })!;
-    context.drawImage(this.video!, 0, 0, this.width, this.height);
+    context.drawImage(this.video!, 0, 0, vw, vh);
 
     this.drawPolygons(context);
 
