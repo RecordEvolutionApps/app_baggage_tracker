@@ -208,6 +208,7 @@ async def main(_saved_masks):
                 " ! video/x-raw(memory:NVMM), format=I420"
                 " ! nvv4l2h264enc maxperf-enable=true preset-level=1 profile=0"
                 "   insert-sps-pps=true insert-vui=true iframeinterval=10 idrinterval=1"
+                "   control-rate=1 bitrate=8000000"
                 " ! h264parse"
                 " ! rtph264pay pt=96 ssrc=11111111 config-interval=-1")
         else:
@@ -262,7 +263,8 @@ async def main(_saved_masks):
             sahi_slice_wh = None
             sahi_overlap_wh = None
             use_sahi = False
-            iou_threshold = model_utils.IOU
+            nms_iou = model_utils.NMS_IOU
+            sahi_iou = model_utils.SAHI_IOU
             overlap_ratio = 0.2
 
             skip_inference = stream_settings.get('model', '') == 'none'
@@ -344,11 +346,12 @@ async def main(_saved_masks):
                 detections = empty_detections()
             else:
                 use_sahi = stream_settings.get('useSahi', USE_SAHI)
-                iou_threshold = float(stream_settings.get('iou', model_utils.IOU))
+                nms_iou = float(stream_settings.get('nmsIou', model_utils.NMS_IOU))
+                sahi_iou = float(stream_settings.get('sahiIou', model_utils.SAHI_IOU))
                 overlap_ratio = float(stream_settings.get('overlapRatio', 0.2))
                 try:
                     # Lazily create or clear slicer when the setting changes
-                    if use_sahi and (slicer is None or getattr(slicer, '_sahi_iou', None) != iou_threshold or getattr(slicer, '_sahi_overlap_ratio', None) != overlap_ratio):
+                    if use_sahi and (slicer is None or getattr(slicer, '_sahi_iou', None) != sahi_iou or getattr(slicer, '_sahi_overlap_ratio', None) != overlap_ratio):
                         slicer = initSliceInferer(model, stream_settings)
                     elif not use_sahi:
                         slicer = None
@@ -377,7 +380,7 @@ async def main(_saved_masks):
                         detections = move_detections(detections, low_x, low_y)
                     else:
                         conf = float(stream_settings.get('confidence', model_utils.CONF))
-                        detections = infer(frame, model, confidence=conf, iou=iou_threshold)
+                        detections = infer(frame, model, confidence=conf, iou=nms_iou)
 
                     if not detections:
                         detections = empty_detections()

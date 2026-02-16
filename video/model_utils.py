@@ -65,7 +65,10 @@ RESOLUTION_X = int(os.environ.get('RESOLUTION_X', 640))
 RESOLUTION_Y = int(os.environ.get('RESOLUTION_Y', 480))
 DEVICE_NAME = os.environ.get('DEVICE_NAME', 'UNKNOWN_DEVICE')
 CONF = float(os.environ.get('CONF', '0.1'))
-IOU = float(os.environ.get('IOU', '0.8'))
+NMS_IOU = float(os.environ.get('NMS_IOU', '0.5'))
+SAHI_IOU = float(os.environ.get('SAHI_IOU', '0.5'))
+# Keep legacy IOU as alias for backward compatibility
+IOU = NMS_IOU
 SMOOTHING = (os.environ.get('SMOOTHING', 'true') == 'true')
 FRAME_BUFFER = int(os.environ.get('FRAME_BUFFER', 64))
 CLASS_LIST = os.environ.get('CLASS_LIST', '')
@@ -813,8 +816,7 @@ def initSliceInferer(model_bundle: Dict[str, Any], settings_dict=None):
                      slice_count[0], image_slice.shape[1], image_slice.shape[0], dt * 1000, det_count)
         return detections if detections is not False else empty_detections()
 
-    overlap_w, overlap_h = int(0.2 * native_w), int(0.2 * native_h)
-    iou_threshold = float(settings_dict.get('iou', IOU)) if settings_dict else IOU
+    sahi_iou = float(settings_dict.get('sahiIou', SAHI_IOU)) if settings_dict else SAHI_IOU
     overlap_ratio = float(settings_dict.get('overlapRatio', 0.2)) if settings_dict else 0.2
     overlap_w = int(overlap_ratio * native_w)
     overlap_h = int(overlap_ratio * native_h)
@@ -823,16 +825,16 @@ def initSliceInferer(model_bundle: Dict[str, Any], settings_dict=None):
         slice_wh=(native_w, native_h),
         overlap_ratio_wh=None,
         overlap_wh=(overlap_w, overlap_h),
-        iou_threshold=iou_threshold,
+        iou_threshold=sahi_iou,
         thread_workers=6
     )
     slicer._sahi_slice_count = slice_count  # expose for reset
     slicer._sahi_slice_wh = (native_w, native_h)
     slicer._sahi_overlap_wh = (overlap_w, overlap_h)
-    slicer._sahi_iou = iou_threshold
+    slicer._sahi_iou = sahi_iou
     slicer._sahi_overlap_ratio = overlap_ratio
-    logger.debug('[SAHI] InferenceSlicer created: slice=%dx%d, overlap=%dx%d (%.0f%%), iou=%.2f',
-                native_w, native_h, overlap_w, overlap_h, overlap_ratio * 100, iou_threshold)
+    logger.debug('[SAHI] InferenceSlicer created: slice=%dx%d, overlap=%dx%d (%.0f%%), sahiIou=%.2f',
+                native_w, native_h, overlap_w, overlap_h, overlap_ratio * 100, sahi_iou)
     return slicer
 
 def infer(frame, model_bundle, confidence=None, iou=None):
@@ -900,7 +902,7 @@ def infer_tensorrt(frame: np.ndarray, model_bundle: Dict[str, Any], confidence=N
     """Run inference through the TensorRT engine."""
     trt_inf = model_bundle['inferencer']
     conf = confidence if confidence is not None else CONF
-    iou_threshold = iou if iou is not None else IOU
+    iou_threshold = iou if iou is not None else NMS_IOU
     class_list = CLASS_LIST if CLASS_LIST else None
     try:
         result = trt_inf(frame, conf=conf, iou=iou_threshold, class_list=class_list)

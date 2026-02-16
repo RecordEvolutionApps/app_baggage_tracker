@@ -2,7 +2,7 @@ import { Elysia } from "elysia";
 import { staticPlugin } from '@elysiajs/static'
 import { html } from '@elysiajs/html'
 import { cors } from '@elysiajs/cors'
-import { getUSBCameras, getStreamSetup, selectCamera, listStreams, createStream, deleteStream, getModels, getModelClasses, getModelStatus, prepareModel, updateStreamModel, updateStreamSahi, updateStreamSmoothing, updateStreamConfidence, updateStreamFrameBuffer, updateStreamIou, updateStreamOverlapRatio, updateStreamClassList, updateStreamClassNames, getStreamBackendStatus } from './cameras.js'
+import { getUSBCameras, getStreamSetup, selectCamera, listStreams, createStream, deleteStream, getModels, getModelClasses, getModelStatus, prepareModel, updateStreamModel, updateStreamSahi, updateStreamSmoothing, updateStreamConfidence, updateStreamFrameBuffer, updateStreamNmsIou, updateStreamSahiIou, updateStreamOverlapRatio, updateStreamClassList, updateStreamClassNames, getStreamBackendStatus } from './cameras.js'
 import { getMask, saveMask } from "./mask.js";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -44,7 +44,8 @@ app.post('/cameras/sahi', updateStreamSahi)
 app.post('/cameras/smoothing', updateStreamSmoothing)
 app.post('/cameras/confidence', updateStreamConfidence)
 app.post('/cameras/frameBuffer', updateStreamFrameBuffer)
-app.post('/cameras/iou', updateStreamIou)
+app.post('/cameras/nmsIou', updateStreamNmsIou)
+app.post('/cameras/sahiIou', updateStreamSahiIou)
 app.post('/cameras/overlapRatio', updateStreamOverlapRatio)
 app.post('/cameras/classList', updateStreamClassList)
 app.post('/cameras/classNames', updateStreamClassNames)

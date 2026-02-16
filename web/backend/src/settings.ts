@@ -132,7 +132,7 @@ export async function updateStreamFrameBuffer(ctx: Context) {
     return { status: 'ok', camStream, frameBuffer }
 }
 
-export async function updateStreamIou(ctx: Context) {
+export async function updateStreamNmsIou(ctx: Context) {
     let body: any
     try {
         body = typeof ctx.body === 'string' ? JSON.parse(ctx.body) : ctx.body
@@ -140,20 +140,44 @@ export async function updateStreamIou(ctx: Context) {
         ctx.set.status = 400
         return { error: 'Invalid JSON' }
     }
-    const { camStream, iou } = body
-    if (!camStream || typeof iou !== 'number' || iou < 0 || iou > 1) {
+    const { camStream, nmsIou } = body
+    if (!camStream || typeof nmsIou !== 'number' || nmsIou < 0 || nmsIou > 1) {
         ctx.set.status = 400
-        return { error: 'camStream (string) and iou (number 0-1) are required' }
+        return { error: 'camStream (string) and nmsIou (number 0-1) are required' }
     }
     const cam = streamSetup[camStream]
     if (!cam) {
         ctx.set.status = 404
         return { error: `Stream "${camStream}" not found` }
     }
-    cam.iou = iou
+    cam.nmsIou = nmsIou
     await Bun.write(streamSetupFile, JSON.stringify(streamSetup))
     await writeStreamSettings(camStream, cam)
-    return { status: 'ok', camStream, iou }
+    return { status: 'ok', camStream, nmsIou }
+}
+
+export async function updateStreamSahiIou(ctx: Context) {
+    let body: any
+    try {
+        body = typeof ctx.body === 'string' ? JSON.parse(ctx.body) : ctx.body
+    } catch {
+        ctx.set.status = 400
+        return { error: 'Invalid JSON' }
+    }
+    const { camStream, sahiIou } = body
+    if (!camStream || typeof sahiIou !== 'number' || sahiIou < 0 || sahiIou > 1) {
+        ctx.set.status = 400
+        return { error: 'camStream (string) and sahiIou (number 0-1) are required' }
+    }
+    const cam = streamSetup[camStream]
+    if (!cam) {
+        ctx.set.status = 404
+        return { error: `Stream "${camStream}" not found` }
+    }
+    cam.sahiIou = sahiIou
+    await Bun.write(streamSetupFile, JSON.stringify(streamSetup))
+    await writeStreamSettings(camStream, cam)
+    return { status: 'ok', camStream, sahiIou }
 }
 
 export async function updateStreamOverlapRatio(ctx: Context) {

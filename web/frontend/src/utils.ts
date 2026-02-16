@@ -148,7 +148,8 @@ export type Camera = {
   useSmoothing?: boolean
   frameBuffer?: number
   confidence?: number
-  iou?: number
+  nmsIou?: number
+  sahiIou?: number
   overlapRatio?: number
   classList?: number[]
   classNames?: string[]

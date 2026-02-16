@@ -37,7 +37,10 @@ export class InferenceSetup extends LitElement {
   declare confidence: number;
 
   @state()
-  declare iou: number;
+  declare nmsIou: number;
+
+  @state()
+  declare sahiIou: number;
 
   @state()
   declare overlapRatio: number;
@@ -117,7 +120,8 @@ export class InferenceSetup extends LitElement {
     this.useSmoothing = true;
     this.frameBuffer = 64;
     this.confidence = 0.1;
-    this.iou = 0.8;
+    this.nmsIou = 0.5;
+    this.sahiIou = 0.5;
     this.overlapRatio = 0.2;
     this.modelFilter = '';
     this.selectedDataset = '';
@@ -756,7 +760,8 @@ export class InferenceSetup extends LitElement {
       this.useSmoothing = this.camSetup.camera?.useSmoothing ?? true;
       this.frameBuffer = this.camSetup.camera?.frameBuffer ?? 64;
       this.confidence = this.camSetup.camera?.confidence ?? 0.1;
-      this.iou = this.camSetup.camera?.iou ?? 0.8;
+      this.nmsIou = this.camSetup.camera?.nmsIou ?? 0.5;
+      this.sahiIou = this.camSetup.camera?.sahiIou ?? 0.5;
       this.overlapRatio = this.camSetup.camera?.overlapRatio ?? 0.2;
       // Restore persisted class selection
       if (this.camSetup.camera?.classList && this.camSetup.camera.classList.length > 0) {
@@ -1174,18 +1179,33 @@ export class InferenceSetup extends LitElement {
     }
   }
 
-  private async onIouChange(ev: Event) {
+  private async onNmsIouChange(ev: Event) {
     const input = ev.target as HTMLInputElement;
-    const iou = Math.min(1, Math.max(0.1, parseFloat(input.value)));
-    this.iou = iou;
+    const nmsIou = Math.min(1, Math.max(0.1, parseFloat(input.value)));
+    this.nmsIou = nmsIou;
     try {
-      await fetch(`${this.basepath}/cameras/iou`, {
+      await fetch(`${this.basepath}/cameras/nmsIou`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ camStream: this.camStream, iou }),
+        body: JSON.stringify({ camStream: this.camStream, nmsIou }),
       });
     } catch (err) {
-      console.error('Failed to update IOU', err);
+      console.error('Failed to update NMS IOU', err);
+    }
+  }
+
+  private async onSahiIouChange(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    const sahiIou = Math.min(1, Math.max(0.1, parseFloat(input.value)));
+    this.sahiIou = sahiIou;
+    try {
+      await fetch(`${this.basepath}/cameras/sahiIou`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ camStream: this.camStream, sahiIou }),
+      });
+    } catch (err) {
+      console.error('Failed to update SAHI IOU', err);
     }
   }
 
@@ -1426,15 +1446,15 @@ export class InferenceSetup extends LitElement {
           class="frame-buffer-row"
           style="display:${this.useSahi ? 'flex' : 'none'}"
         >
-          <label for="iou" class="fb-label">IOU (SAHI)</label>
+          <label for="sahiIou" class="fb-label">SAHI Merge IoU</label>
           <input
-            id="iou"
+            id="sahiIou"
             type="number"
             min="0.1"
             max="1.0"
             step="0.05"
-            .value=${String(this.iou)}
-            @change=${this.onIouChange}
+            .value=${String(this.sahiIou)}
+            @change=${this.onSahiIouChange}
             class="fb-input"
           />
         </div>
@@ -1452,6 +1472,20 @@ export class InferenceSetup extends LitElement {
             step="0.05"
             .value=${String((this.overlapRatio * 100).toFixed(0))}
             @change=${this.onOverlapRatioChange}
+            class="fb-input"
+          />
+        </div>
+
+        <div class="frame-buffer-row">
+          <label for="nmsIou" class="fb-label">NMS IoU</label>
+          <input
+            id="nmsIou"
+            type="number"
+            min="0.1"
+            max="1.0"
+            step="0.05"
+            .value=${String(this.nmsIou)}
+            @change=${this.onNmsIouChange}
             class="fb-input"
           />
         </div>

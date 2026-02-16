@@ -22,7 +22,8 @@ export type Camera = {
     useSmoothing?: boolean
     confidence?: number
     frameBuffer?: number
-    iou?: number
+    nmsIou?: number
+    sahiIou?: number
     overlapRatio?: number
     classList?: number[]
     classNames?: string[]
@@ -68,7 +69,8 @@ export async function writeStreamSettings(camStream: string, cam: Camera) {
         useSmoothing: cam.useSmoothing ?? true,
         confidence: cam.confidence ?? 0.1,
         frameBuffer: cam.frameBuffer ?? 64,
-        iou: cam.iou ?? 0.8,
+        nmsIou: cam.nmsIou ?? 0.5,
+        sahiIou: cam.sahiIou ?? 0.5,
         overlapRatio: cam.overlapRatio ?? 0.2,
         classList: cam.classList ?? [],
         classNames: cam.classNames ?? [],
