@@ -393,6 +393,7 @@ export class InferenceSetup extends LitElement {
       }
 
       .frame-buffer-row {
+        display: flex;
         align-items: center;
         gap: 8px;
         padding: 0 0 4px;
@@ -403,6 +404,17 @@ export class InferenceSetup extends LitElement {
         font-family: sans-serif;
         font-size: 0.875rem;
         white-space: nowrap;
+        display: inline-block;
+        min-width: 130px;
+      }
+
+      .sahi-subsettings {
+        margin-left: 26px;
+        padding-left: 10px;
+        border-left: 2px solid #d0d0d0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
       }
 
       .fb-input {
@@ -1403,7 +1415,7 @@ export class InferenceSetup extends LitElement {
           </div>
         ` : ''}
 
-        <div class="frame-buffer-row" style="display: flex;">
+        <div class="frame-buffer-row">
           <label for="confidence" class="fb-label">Confidence</label>
           <input
             id="confidence"
@@ -1426,55 +1438,50 @@ export class InferenceSetup extends LitElement {
           Use SAHI (Slicing Aided Hyper Inference)
         </label>
 
-        <div
-          class="frame-buffer-row"
-          style="display:${this.useSahi ? 'flex' : 'none'}"
-        >
-          <label for="frameBuffer" class="fb-label">SAHI padding (px)</label>
-          <input
-            id="frameBuffer"
-            type="number"
-            min="0"
-            max="500"
-            .value=${String(this.frameBuffer)}
-            @change=${this.onFrameBufferChange}
-            class="fb-input"
-          />
-        </div>
+        ${this.useSahi ? html`
+        <div class="sahi-subsettings">
+          <div class="frame-buffer-row">
+            <label for="frameBuffer" class="fb-label">Padding (px)</label>
+            <input
+              id="frameBuffer"
+              type="number"
+              min="0"
+              max="500"
+              .value=${String(this.frameBuffer)}
+              @change=${this.onFrameBufferChange}
+              class="fb-input"
+            />
+          </div>
 
-        <div
-          class="frame-buffer-row"
-          style="display:${this.useSahi ? 'flex' : 'none'}"
-        >
-          <label for="sahiIou" class="fb-label">SAHI Merge IoU</label>
-          <input
-            id="sahiIou"
-            type="number"
-            min="0.1"
-            max="1.0"
-            step="0.05"
-            .value=${String(this.sahiIou)}
-            @change=${this.onSahiIouChange}
-            class="fb-input"
-          />
-        </div>
+          <div class="frame-buffer-row">
+            <label for="sahiIou" class="fb-label">Merge IoU</label>
+            <input
+              id="sahiIou"
+              type="number"
+              min="0.1"
+              max="1.0"
+              step="0.05"
+              .value=${String(this.sahiIou)}
+              @change=${this.onSahiIouChange}
+              class="fb-input"
+            />
+          </div>
 
-        <div
-          class="frame-buffer-row"
-          style="display:${this.useSahi ? 'flex' : 'none'}"
-        >
-          <label for="overlapRatio" class="fb-label">Overlap % (SAHI)</label>
-          <input
-            id="overlapRatio"
-            type="number"
-            min="0.05"
-            max="0.5"
-            step="0.05"
-            .value=${String((this.overlapRatio * 100).toFixed(0))}
-            @change=${this.onOverlapRatioChange}
-            class="fb-input"
-          />
+          <div class="frame-buffer-row">
+            <label for="overlapRatio" class="fb-label">Overlap %</label>
+            <input
+              id="overlapRatio"
+              type="number"
+              min="0.05"
+              max="0.5"
+              step="0.05"
+              .value=${String((this.overlapRatio * 100).toFixed(0))}
+              @change=${this.onOverlapRatioChange}
+              class="fb-input"
+            />
+          </div>
         </div>
+        ` : ''}
 
         <div class="frame-buffer-row">
           <label for="nmsIou" class="fb-label">NMS IoU</label>
