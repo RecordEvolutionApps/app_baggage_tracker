@@ -151,6 +151,46 @@ export async function prepareModel(ctx: Context): Promise<Response> {
     }
 }
 
+export async function buildTrtModel(ctx: Context): Promise<Response> {
+    let body: any
+    try {
+        body = typeof ctx.body === 'string' ? JSON.parse(ctx.body) : ctx.body
+    } catch {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' },
+        })
+    }
+    const { model } = body
+    if (!model) {
+        return new Response(JSON.stringify({ error: 'model is required' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' },
+        })
+    }
+    try {
+        const res = await fetch(`${VIDEO_API}/models/build-trt`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model }),
+        })
+        return new Response(res.body, {
+            status: res.status,
+            headers: {
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+            },
+        })
+    } catch (err) {
+        console.error('Failed to build TRT model:', err)
+        return new Response(JSON.stringify({ error: 'Could not reach video API' }), {
+            status: 502,
+            headers: { 'Content-Type': 'application/json' },
+        })
+    }
+}
+
 export async function getModelClasses(ctx: Context): Promise<any> {
     const url = new URL(ctx.request.url)
     const modelId = (ctx as any).params?.modelId ?? url.pathname.split('/cameras/models/')[1]?.split('/')[0]

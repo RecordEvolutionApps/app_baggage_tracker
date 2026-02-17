@@ -697,32 +697,76 @@ def get_tensorrt_model(model_name: str) -> Dict[str, Any]:
         except Exception as e:
             logger.warning('Cached TRT engine failed to load: %s — rebuilding', e)
 
-    # ── Slow path: build engine from MMDet model ──────────────────────
-    mmdet_bundle = get_mmdet_model(model_name)
-    input_wh = mmdet_bundle['native_input_wh']
-    num_classes = mmdet_bundle['inferencer'].model.bbox_head.num_classes
+    # ── No cached engine: fall back to mmdet (TRT build is user-triggered) ─
+    logger.info('No cached TRT engine for %s — using mmdet (TRT build is manual)', model_name)
+    return get_mmdet_model(model_name)
+
+
+def build_trt_for_model(model_name: str, progress_callback=None):
+    """Explicitly build a TensorRT engine for a model.
+
+    This is triggered by the user via the UI, not automatically on model switch.
+    progress_callback(status, progress, message) is called with SSE-style events.
+    """
+    def _report(status, progress=0, message=''):
+        if progress_callback:
+            progress_callback(status, progress, message)
+
+    if model_name in ('none', ''):
+        _report('error', 0, 'Cannot build TRT engine for "none"')
+        return
 
     try:
-        trt_inferencer = trt_backend.build_trt_model(
-            model_name, mmdet_bundle['inferencer'], input_wh, num_classes,
-        )
+        import trt_backend
+    except ImportError:
+        _report('error', 0, 'TensorRT backend module not available')
+        return
 
-        # Free the PyTorch model to reclaim GPU memory
+    if not trt_backend.is_available():
+        _report('error', 0, 'TensorRT or CUDA not available on this device')
+        return
+
+    # Check if engine is already cached
+    if trt_backend.is_engine_cached(model_name):
+        _report('ready', 100, f'TensorRT engine already cached for {model_name}')
+        return
+
+    _report('building', 5, f'Loading MMDetection model {model_name}...')
+
+    try:
+        mmdet_bundle = get_mmdet_model(model_name)
+    except Exception as e:
+        _report('error', 0, f'Failed to load model: {e}')
+        return
+
+    input_wh = mmdet_bundle['native_input_wh']
+    try:
+        num_classes = mmdet_bundle['inferencer'].model.bbox_head.num_classes
+    except Exception:
+        num_classes = 80
+
+    _report('building', 15, 'Exporting to ONNX...')
+
+    try:
+        onnx_file = trt_backend.export_to_onnx(model_name, mmdet_bundle['inferencer'], input_wh)
+        _report('building', 30, 'ONNX export complete. Building TensorRT FP16 engine (this may take 5-20 min)...')
+    except Exception as e:
+        _report('error', 0, f'ONNX export failed: {e}')
+        return
+
+    try:
+        trt_backend.build_engine_from_onnx(model_name, onnx_file)
+        _report('ready', 100, f'TensorRT FP16 engine built and cached for {model_name}')
+    except Exception as e:
+        _report('error', 0, f'TensorRT engine build failed: {e}')
+        return
+
+    # Free the PyTorch model to reclaim GPU memory
+    try:
         del mmdet_bundle['inferencer']
         torch.cuda.empty_cache()
-
-        logger.info('TensorRT backend ready for %s (FP16)', model_name)
-        return {
-            'backend': 'tensorrt',
-            'inferencer': trt_inferencer,
-            'model_name': model_name,
-            'native_input_wh': input_wh,
-            'num_classes': num_classes,
-            'trt_cached': False,
-        }
-    except Exception as e:
-        logger.error('TensorRT build failed: %s — falling back to mmdet', e, exc_info=True)
-        return mmdet_bundle
+    except Exception:
+        pass
 
 
 def get_youtube_video(url, height=None):
@@ -744,13 +788,19 @@ def get_youtube_video(url, height=None):
     # high-quality formats (720p+) only as separate video/audio DASH tracks;
     # the muxed "best" format is often just 360p.  OpenCV only needs the
     # video track, so video-only is fine.
+    #
+    # Exclude AV1 (vcodec!=av01): Jetson Xavier/Orin have no AV1 HW decoder,
+    # so FFmpeg falls back to libaom software decode which is too slow for
+    # real-time and produces corrupt-frame errors.  Prefer H.264/H.265.
     if height and height > 0:
-        format_str = (f'bestvideo[height<={height}][ext=mp4]'
-                      f'/bestvideo[height<={height}]'
-                      f'/best[height<={height}]'
-                      f'/bestvideo[ext=mp4]/bestvideo/best')
+        format_str = (f'bestvideo[height<={height}][vcodec!=av01][ext=mp4]'
+                      f'/bestvideo[height<={height}][vcodec!=av01]'
+                      f'/best[height<={height}][vcodec!=av01]'
+                      f'/bestvideo[vcodec!=av01][ext=mp4]'
+                      f'/bestvideo[vcodec!=av01]/best')
     else:
-        format_str = 'bestvideo[ext=mp4]/bestvideo/best'
+        format_str = ('bestvideo[vcodec!=av01][ext=mp4]'
+                      '/bestvideo[vcodec!=av01]/best')
 
     logger.info('[yt-dlp] Resolving: %s (format=%s)', url, format_str)
 
@@ -828,13 +878,16 @@ def _get_youtube_video_lib(url, height=None):
     import yt_dlp
 
     # Prefer video-only DASH streams for higher resolution (see get_youtube_video).
+    # Exclude AV1 — no HW decoder on Jetson; software libaom is too slow.
     if height and height > 0:
-        format_str = (f'bestvideo[height<={height}][ext=mp4]'
-                      f'/bestvideo[height<={height}]'
-                      f'/best[height<={height}]'
-                      f'/bestvideo[ext=mp4]/bestvideo/best')
+        format_str = (f'bestvideo[height<={height}][vcodec!=av01][ext=mp4]'
+                      f'/bestvideo[height<={height}][vcodec!=av01]'
+                      f'/best[height<={height}][vcodec!=av01]'
+                      f'/bestvideo[vcodec!=av01][ext=mp4]'
+                      f'/bestvideo[vcodec!=av01]/best')
     else:
-        format_str = 'bestvideo[ext=mp4]/bestvideo/best'
+        format_str = ('bestvideo[vcodec!=av01][ext=mp4]'
+                      '/bestvideo[vcodec!=av01]/best')
 
     cookie_file = '/data/cookies.txt'
 

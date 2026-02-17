@@ -17,26 +17,84 @@ export class StreamEditor extends LitElement {
   @property({ type: String }) declare camStream: string;
 
   @state() declare showDeleteDialog: boolean;
+  @state() declare stopped: boolean;
+  @state() declare toggling: boolean;
 
   constructor() {
     super();
     this.showDeleteDialog = false;
+    this.stopped = false;
+    this.toggling = false;
   }
 
   private basepath = window.location.protocol + '//' + window.location.host;
+
+  connectedCallback() {
+    super.connectedCallback();
+    this.loadStoppedState();
+  }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     stopMediasoup();
   }
 
+  private async loadStoppedState() {
+    try {
+      const res = await fetch(`${this.basepath}/cameras/setup?camStream=${this.camStream}`);
+      const data = await res.json();
+      this.stopped = !!data.camera?.stopped;
+    } catch (err) {
+      console.error('Failed to load stream state', err);
+    }
+  }
+
   private onVideoReady(_event: CustomEvent) {
+    if (this.stopped) return;          // don't init WebRTC if stopped
     const videoPlayers: Record<string, HTMLVideoElement | undefined> = {};
     const player = this.shadowRoot?.querySelector('camera-player') as CameraPlayer;
     if (player?.id && player.videoElement) {
       videoPlayers[player.id] = player.videoElement;
     }
     initMediasoup(videoPlayers);
+  }
+
+  private async toggleStream() {
+    if (this.toggling) return;
+    this.toggling = true;
+    try {
+      const action = this.stopped ? 'start' : 'stop';
+      const res = await fetch(
+        `${this.basepath}/cameras/streams/${encodeURIComponent(this.camStream)}/${action}`,
+        { method: 'POST' },
+      );
+      if (!res.ok) {
+        console.error(`Failed to ${action} stream`, await res.text());
+        return;
+      }
+      this.stopped = !this.stopped;
+
+      if (this.stopped) {
+        // Tear down WebRTC player
+        stopMediasoup();
+      } else {
+        // Re-init WebRTC after the video process comes back
+        await this.updateComplete;
+        // Small delay to let the video process start and begin producing RTP
+        setTimeout(() => {
+          const videoPlayers: Record<string, HTMLVideoElement | undefined> = {};
+          const player = this.shadowRoot?.querySelector('camera-player') as CameraPlayer;
+          if (player?.id && player.videoElement) {
+            videoPlayers[player.id] = player.videoElement;
+          }
+          initMediasoup(videoPlayers);
+        }, 500);
+      }
+    } catch (err) {
+      console.error('Error toggling stream', err);
+    } finally {
+      this.toggling = false;
+    }
   }
 
   private goBack() {
@@ -140,6 +198,51 @@ export class StreamEditor extends LitElement {
       .back-btn {
         --md-icon-button-icon-color: #002e6a;
       }
+
+      .stop-btn {
+        --md-outlined-button-outline-color: #c77900;
+        --md-outlined-button-label-text-color: #c77900;
+        --md-outlined-button-hover-label-text-color: #fff;
+        --md-outlined-button-hover-state-layer-color: #c77900;
+        --md-outlined-button-pressed-label-text-color: #fff;
+        --md-outlined-button-pressed-state-layer-color: #c77900;
+      }
+
+      .stop-btn md-icon {
+        color: #c77900;
+      }
+
+      .play-btn {
+        --md-filled-button-container-color: #1a7d2f;
+      }
+
+      .stopped-overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #1a1a2eee;
+        z-index: 10;
+        gap: 16px;
+      }
+
+      .stopped-overlay md-icon {
+        font-size: 64px;
+        color: #5e7ce0;
+      }
+
+      .stopped-overlay span {
+        font-family: sans-serif;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #ccd0e0;
+      }
+
+      .editor-body {
+        position: relative;
+      }
     `,
   ];
 
@@ -150,6 +253,19 @@ export class StreamEditor extends LitElement {
           <md-icon>arrow_back</md-icon>
         </md-icon-button>
         <h3>${this.camStream}</h3>
+
+        ${this.stopped ? html`
+          <md-filled-button class="play-btn" @click=${this.toggleStream} ?disabled=${this.toggling}>
+            <md-icon slot="icon">play_arrow</md-icon>
+            Start
+          </md-filled-button>
+        ` : html`
+          <md-outlined-button class="stop-btn" @click=${this.toggleStream} ?disabled=${this.toggling}>
+            <md-icon slot="icon">stop</md-icon>
+            Stop
+          </md-outlined-button>
+        `}
+
         <md-outlined-button class="delete-btn" @click=${this.openDeleteDialog}>
           <md-icon slot="icon">delete</md-icon>
           Delete
@@ -158,6 +274,12 @@ export class StreamEditor extends LitElement {
       </div>
 
       <div class="editor-body">
+        ${this.stopped ? html`
+          <div class="stopped-overlay">
+            <md-icon>videocam_off</md-icon>
+            <span>Stream stopped</span>
+          </div>
+        ` : html``}
         <camera-player
           id=${this.camStream}
           label=${this.camStream}

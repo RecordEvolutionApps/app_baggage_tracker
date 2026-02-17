@@ -47,9 +47,9 @@ export class StreamGallery extends LitElement {
       this.streams = [];
     }
 
-    // Mark only streams with a configured source as loading
+    // Mark only streams with a configured source (and not stopped) as loading
     this.loadingStreams = new Set(
-      this.streams.filter((s) => !!s.path).map((s) => s.camStream)
+      this.streams.filter((s) => !!s.path && !s.stopped).map((s) => s.camStream)
     );
 
     // Wait for render, then init mediasoup with all video elements
@@ -76,7 +76,7 @@ export class StreamGallery extends LitElement {
 
   private initVideoPlayers() {
     const configuredStreams = new Set(
-      this.streams.filter((s) => !!s.path).map((s) => s.camStream)
+      this.streams.filter((s) => !!s.path && !s.stopped).map((s) => s.camStream)
     );
     const videoPlayers: Record<string, HTMLVideoElement | undefined> = {};
     this.shadowRoot?.querySelectorAll<HTMLVideoElement>('video[data-cam]').forEach((v) => {
@@ -270,6 +270,35 @@ export class StreamGallery extends LitElement {
         color: #8a8b9e;
       }
 
+      .tile-stopped {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        gap: 8px;
+        font-family: sans-serif;
+        background: #1a1a2e;
+      }
+
+      .tile-stopped md-icon {
+        font-size: 36px;
+        color: #5e7ce0;
+      }
+
+      .tile-stopped span:first-of-type {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #ccd0e0;
+      }
+
+      .tile-stopped span:last-of-type {
+        font-size: 0.8rem;
+        color: #c77900;
+        font-weight: 500;
+      }
+
       .add-tile {
         border-radius: 12px;
         border: 2px dashed #788894;
@@ -331,7 +360,13 @@ export class StreamGallery extends LitElement {
           (s) => s.camStream,
           (s) => html`
             <div class="tile" @click=${() => this.onTileClick(s.camStream)}>
-              ${s.path ? html`
+              ${s.stopped ? html`
+                <div class="tile-stopped">
+                  <md-icon>videocam_off</md-icon>
+                  <span>${s.name || s.camStream}</span>
+                  <span>Stopped</span>
+                </div>
+              ` : s.path ? html`
                 <div class="tile-loading" ?hidden=${!this.loadingStreams.has(s.camStream)}>
                   <div class="spinner"></div>
                   <span>${s.name || s.camStream}</span>

@@ -26,8 +26,8 @@ export async function updateStreamModel(ctx: Context) {
     await Bun.write(streamSetupFile, JSON.stringify(streamSetup))
     await writeStreamSettings(camStream, cam)
 
-    // Restart the stream so it picks up the new model
-    if (cam.path) {
+    // Restart the stream so it picks up the new model (skip if stopped)
+    if (cam.path && !cam.stopped) {
         console.log(`Restarting stream ${camStream} for model change to ${model}`)
         await killVideoStream(cam.path, camStream)
         startVideoStream(cam, camStream)

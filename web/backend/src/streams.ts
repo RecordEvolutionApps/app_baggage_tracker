@@ -184,7 +184,7 @@ async function initStreams() {
     }
 
     for (const [camStream, cam] of Object.entries(streamSetup)) {
-        if (camStream && cam) {
+        if (camStream && cam && !cam.stopped) {
             writeStreamSettings(camStream, cam)
             startVideoStream(cam, camStream)
         }
@@ -308,6 +308,7 @@ export const selectCamera = async (ctx: Context) => {
     }
 
     const startCam = streamSetup[cam.camStream]
+    startCam.stopped = false                       // user chose a new source → resume
     await Bun.write(streamSetupFile, JSON.stringify(streamSetup));
     await writeStreamSettings(cam.camStream, startCam)
 
@@ -330,4 +331,47 @@ export async function getDeviceCameras(): Promise<Camera[]> {
         console.error('Error fetching cameras:', err)
         return []
     }
+}
+
+// ── Stop / Start (keep config) ─────────────────────────────────────────────
+
+export async function stopStream(ctx: Context) {
+    const url = new URL(ctx.request.url)
+    const segments = url.pathname.split('/')
+    // /cameras/streams/<camStream>/stop
+    const camStream = decodeURIComponent(segments[segments.length - 2])
+    if (!camStream) {
+        ctx.set.status = 400
+        return { error: 'camStream is required' }
+    }
+    const cam = streamSetup[camStream]
+    if (!cam) {
+        ctx.set.status = 404
+        return { error: `Stream "${camStream}" not found` }
+    }
+    await killVideoStream(cam.path ?? '', camStream)
+    cam.stopped = true
+    await Bun.write(streamSetupFile, JSON.stringify(streamSetup))
+    return { status: 'stopped', camStream }
+}
+
+export async function startStream(ctx: Context) {
+    const url = new URL(ctx.request.url)
+    const segments = url.pathname.split('/')
+    // /cameras/streams/<camStream>/start
+    const camStream = decodeURIComponent(segments[segments.length - 2])
+    if (!camStream) {
+        ctx.set.status = 400
+        return { error: 'camStream is required' }
+    }
+    const cam = streamSetup[camStream]
+    if (!cam) {
+        ctx.set.status = 404
+        return { error: `Stream "${camStream}" not found` }
+    }
+    cam.stopped = false
+    await Bun.write(streamSetupFile, JSON.stringify(streamSetup))
+    await writeStreamSettings(camStream, cam)
+    startVideoStream(cam, camStream)
+    return { status: 'started', camStream }
 }

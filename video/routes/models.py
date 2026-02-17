@@ -26,6 +26,10 @@ class PrepareRequest(BaseModel):
     model: str
 
 
+class BuildTrtRequest(BaseModel):
+    model: str
+
+
 # ── Endpoints ───────────────────────────────────────────────────────────────
 
 @router.get("/models")
@@ -117,6 +121,51 @@ async def prepare_model_endpoint(req: PrepareRequest):
                 loop.call_soon_threadsafe(queue.put_nowait, None)  # sentinel
 
         thread = threading.Thread(target=run_prepare, daemon=True)
+        thread.start()
+
+        while True:
+            event = await queue.get()
+            if event is None:
+                break
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@router.post("/models/build-trt")
+async def build_trt_endpoint(req: BuildTrtRequest):
+    """Build a TensorRT FP16 engine for a model, streaming progress via SSE.
+
+    The response is a text/event-stream with JSON events:
+      data: {"status": "building", "progress": 15, "message": "..."}
+      data: {"status": "ready", "progress": 100, "message": "..."}
+      data: {"status": "error", "progress": 0, "message": "..."}
+    """
+    model_name = req.model
+
+    async def event_stream():
+        queue: asyncio.Queue = asyncio.Queue()
+        loop = asyncio.get_event_loop()
+
+        def progress_callback(status: str, progress: int, message: str):
+            loop.call_soon_threadsafe(
+                queue.put_nowait,
+                {"status": status, "progress": progress, "message": message},
+            )
+
+        def run_build():
+            try:
+                from model_utils import build_trt_for_model
+                build_trt_for_model(model_name, progress_callback=progress_callback)
+            except Exception as e:
+                loop.call_soon_threadsafe(
+                    queue.put_nowait,
+                    {"status": "error", "progress": 0, "message": str(e)},
+                )
+            finally:
+                loop.call_soon_threadsafe(queue.put_nowait, None)  # sentinel
+
+        thread = threading.Thread(target=run_build, daemon=True)
         thread.start()
 
         while True:

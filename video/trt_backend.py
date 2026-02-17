@@ -42,7 +42,7 @@ except ImportError:
 # Configuration
 # --------------------------------------------------------------------------- #
 TRT_CACHE = Path(os.environ.get('TRT_CACHE_DIR', '/data/tensorrt'))
-TRT_WORKSPACE_MB = int(os.environ.get('TRT_WORKSPACE_MB', '1024'))
+TRT_WORKSPACE_MB = int(os.environ.get('TRT_WORKSPACE_MB', '8192'))
 
 # RTMDet preprocessing constants (ImageNet BGR mean / std used by mmdet)
 _MEAN = np.array([103.53, 116.28, 123.675], dtype=np.float32)   # BGR

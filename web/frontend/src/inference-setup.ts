@@ -112,6 +112,15 @@ export class InferenceSetup extends LitElement {
     message: string;
   } | null;
 
+  @state()
+  declare trtBuildStatus: 'idle' | 'building' | 'ready' | 'error';
+
+  @state()
+  declare trtBuildProgress: number;
+
+  @state()
+  declare trtBuildMessage: string;
+
   private backendPollTimer: ReturnType<typeof setInterval> | null = null;
   private fastPollTimer: ReturnType<typeof setInterval> | null = null;
   private modelSizeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -151,6 +160,9 @@ export class InferenceSetup extends LitElement {
     this.modelProgress = 0;
     this.modelStatusMessage = '';
     this.backendInfo = null;
+    this.trtBuildStatus = 'idle';
+    this.trtBuildProgress = 0;
+    this.trtBuildMessage = '';
   }
 
   static styles = [
@@ -937,6 +949,59 @@ export class InferenceSetup extends LitElement {
         font-style: italic;
         padding-left: 14px;
       }
+
+      .trt-build-btn {
+        margin-left: auto;
+        padding: 2px 8px;
+        border: 1px solid #8bc48b;
+        border-radius: 4px;
+        background: #eef6ee;
+        color: #2d5a2d;
+        font-size: 0.7rem;
+        font-family: sans-serif;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .trt-build-btn:hover {
+        background: #d4eed4;
+        border-color: #4caf50;
+      }
+
+      .trt-build-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .trt-build-status {
+        flex-basis: 100%;
+        font-size: 0.7rem;
+        padding-left: 14px;
+        color: #5e5f61;
+      }
+
+      .trt-build-status.error {
+        color: #b33;
+      }
+
+      .trt-build-status.ready {
+        color: #2d5a2d;
+      }
+
+      .trt-progress-track {
+        flex-basis: 100%;
+        height: 3px;
+        background: #e0e0e0;
+        border-radius: 2px;
+        margin-left: 14px;
+        overflow: hidden;
+      }
+
+      .trt-progress-fill {
+        height: 100%;
+        background: #4caf50;
+        transition: width 0.3s;
+      }
     `,
   ];
 
@@ -1037,6 +1102,90 @@ export class InferenceSetup extends LitElement {
   private get _backendDetail(): string {
     if (!this.backendInfo) return '';
     return this.backendInfo.device || '';
+  }
+
+  /** Show the "Build TensorRT" button when running mmdet on a CUDA device (TRT available but not built). */
+  private get _canBuildTrt(): boolean {
+    if (!this.backendInfo) return false;
+    if (this.trtBuildStatus === 'ready') return false;
+    const { backend, device } = this.backendInfo;
+    // Only show when running PyTorch (mmdet) on a CUDA device — TRT is possible but not built
+    if (backend === 'tensorrt') return false;
+    if (!device || !device.includes('cuda')) return false;
+    if (this.selectedModel === 'none' || !this.selectedModel) return false;
+    return true;
+  }
+
+  private async buildTrt() {
+    if (this.trtBuildStatus === 'building') return;
+    const model = this.selectedModel;
+    if (!model || model === 'none') return;
+
+    this.trtBuildStatus = 'building';
+    this.trtBuildProgress = 0;
+    this.trtBuildMessage = 'Starting TensorRT build...';
+
+    try {
+      const res = await fetch(`${this.basepath}/cameras/models/build-trt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model }),
+      });
+
+      if (!res.ok || !res.body) {
+        this.trtBuildStatus = 'error';
+        this.trtBuildMessage = `Failed to start TRT build (HTTP ${res.status})`;
+        return;
+      }
+
+      // Read SSE stream
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        let updated = false;
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const event = JSON.parse(line.slice(6));
+              this.trtBuildStatus = event.status === 'building' ? 'building' : event.status;
+              this.trtBuildProgress = event.progress ?? 0;
+              this.trtBuildMessage = event.message ?? '';
+              updated = true;
+            } catch { /* ignore parse errors */ }
+          }
+        }
+        if (updated) {
+          await new Promise(r => requestAnimationFrame(r));
+        }
+      }
+
+      if (this.trtBuildStatus === 'ready') {
+        // TRT engine built — restart stream to pick it up
+        this.trtBuildMessage = 'TensorRT engine built! Restarting stream...';
+        await this.applyModel(model);
+        // Refresh backend status
+        setTimeout(() => this.fetchBackendStatus(), 3000);
+        this._startFastBackendPoll();
+        // Auto-clear after a few seconds
+        setTimeout(() => {
+          if (this.trtBuildStatus === 'ready') {
+            this.trtBuildStatus = 'idle';
+          }
+        }, 6000);
+      }
+    } catch (err) {
+      console.error('TRT build failed', err);
+      this.trtBuildStatus = 'error';
+      this.trtBuildMessage = `Error: ${err}`;
+    }
   }
 
   update(
@@ -1808,11 +1957,30 @@ export class InferenceSetup extends LitElement {
           ${this._backendDetail ? html`
             <span class="badge-detail">${this._backendDetail}</span>
           ` : ''}
+          ${this._canBuildTrt ? html`
+            <button
+              class="trt-build-btn"
+              @click=${this.buildTrt}
+              ?disabled=${this.trtBuildStatus === 'building'}
+            >${this.trtBuildStatus === 'building' ? 'Building…' : 'Build TensorRT'}</button>
+          ` : ''}
           ${this._runningModelName ? html`
             <span class="running-model" title="${this._runningModelName}">${this._runningModelName}</span>
           ` : ''}
           ${this._isModelMismatch ? html`
             <span class="model-switching">⟶ Switching model…</span>
+          ` : ''}
+          ${this.trtBuildStatus === 'building' ? html`
+            <div class="trt-progress-track">
+              <div class="trt-progress-fill" style="width: ${this.trtBuildProgress}%"></div>
+            </div>
+            <span class="trt-build-status">${this.trtBuildMessage}</span>
+          ` : ''}
+          ${this.trtBuildStatus === 'error' ? html`
+            <span class="trt-build-status error">${this.trtBuildMessage}</span>
+          ` : ''}
+          ${this.trtBuildStatus === 'ready' ? html`
+            <span class="trt-build-status ready">${this.trtBuildMessage}</span>
           ` : ''}
         </div>
         ` : ''}

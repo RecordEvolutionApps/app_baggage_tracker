@@ -143,6 +143,7 @@ export type Camera = {
   overlapRatio?: number
   classList?: number[]
   classNames?: string[]
+  stopped?: boolean
 }
 
 export type USBCameraInfo = DeviceCameraInfo   // backward compat alias
