@@ -41,6 +41,29 @@ def list_tags():
     return get_all_tags(models)
 
 
+# ── Cache management (must be before {model_id} parameterised routes) ───────
+
+@router.get("/models/cache")
+def list_cached_models():
+    """Return all locally cached models with their on-disk sizes."""
+    from model_utils import get_cached_models
+    return get_cached_models()
+
+
+@router.delete("/models/cache")
+def clear_cache():
+    """Delete ALL cached model files (checkpoints + TensorRT engines)."""
+    from model_utils import clear_all_cache
+    return clear_all_cache()
+
+
+@router.delete("/models/{model_id}/cache")
+def delete_model_cache(model_id: str):
+    """Delete cached files for a specific model."""
+    from model_utils import delete_cached_model
+    return delete_cached_model(model_id)
+
+
 @router.get("/models/{model_id}/classes")
 def model_classes(model_id: str):
     """Return the detection class list for a specific model."""

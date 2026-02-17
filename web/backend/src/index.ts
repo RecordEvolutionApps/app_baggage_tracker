@@ -2,7 +2,7 @@ import { Elysia } from "elysia";
 import { staticPlugin } from '@elysiajs/static'
 import { html } from '@elysiajs/html'
 import { cors } from '@elysiajs/cors'
-import { getUSBCameras, getStreamSetup, selectCamera, listStreams, createStream, deleteStream, getModels, getModelTags, getModelClasses, getModelStatus, prepareModel, updateStreamModel, updateStreamSahi, updateStreamSmoothing, updateStreamConfidence, updateStreamFrameBuffer, updateStreamNmsIou, updateStreamSahiIou, updateStreamOverlapRatio, updateStreamClassList, updateStreamClassNames, getStreamBackendStatus } from './cameras.js'
+import { getUSBCameras, getStreamSetup, selectCamera, listStreams, createStream, deleteStream, getModels, getModelTags, getModelClasses, getModelStatus, prepareModel, getCachedModels, deleteCachedModel, clearAllCache, updateStreamModel, updateStreamSahi, updateStreamSmoothing, updateStreamConfidence, updateStreamFrameBuffer, updateStreamNmsIou, updateStreamSahiIou, updateStreamOverlapRatio, updateStreamClassList, updateStreamClassNames, getStreamBackendStatus } from './cameras.js'
 import { getMask, saveMask } from "./mask.js";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -35,6 +35,9 @@ app.post('/cameras/streams', createStream)
 app.delete('/cameras/streams/*', deleteStream)
 app.get('/cameras/models', getModels)
 app.get('/cameras/models/tags', getModelTags)
+app.get('/cameras/models/cache', getCachedModels)
+app.delete('/cameras/models/cache', clearAllCache)
+app.delete('/cameras/models/:modelId/cache', deleteCachedModel)
 app.get('/cameras/models/:modelId/classes', getModelClasses)
 app.get('/cameras/models/*/classes', getModelClasses)
 app.get('/cameras/models/:modelId/status', getModelStatus)

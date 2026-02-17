@@ -169,3 +169,52 @@ export async function getModelClasses(ctx: Context): Promise<any> {
         return { error: 'Could not reach video API' }
     }
 }
+
+// ── Cache management ───────────────────────────────────────────────────────
+
+export async function getCachedModels(): Promise<any> {
+    try {
+        const res = await fetch(`${VIDEO_API}/models/cache`, { signal: AbortSignal.timeout(10000) })
+        if (res.ok) return await res.json()
+    } catch (err) {
+        console.error('Failed to fetch cached models:', err)
+    }
+    return []
+}
+
+export async function deleteCachedModel(ctx: Context): Promise<any> {
+    const modelId = (ctx as any).params?.modelId
+    if (!modelId) {
+        ctx.set.status = 400
+        return { error: 'model id is required' }
+    }
+    try {
+        const res = await fetch(`${VIDEO_API}/models/${encodeURIComponent(modelId)}/cache`, {
+            method: 'DELETE',
+            signal: AbortSignal.timeout(10000),
+        })
+        if (res.ok) return await res.json()
+        ctx.set.status = res.status
+        return { error: `Video API returned ${res.status}` }
+    } catch (err) {
+        console.error('Failed to delete cached model:', err)
+        ctx.set.status = 502
+        return { error: 'Could not reach video API' }
+    }
+}
+
+export async function clearAllCache(ctx: Context): Promise<any> {
+    try {
+        const res = await fetch(`${VIDEO_API}/models/cache`, {
+            method: 'DELETE',
+            signal: AbortSignal.timeout(30000),
+        })
+        if (res.ok) return await res.json()
+        ctx.set.status = (res as any).status
+        return { error: `Video API returned ${res.status}` }
+    } catch (err) {
+        console.error('Failed to clear model cache:', err)
+        ctx.set.status = 502
+        return { error: 'Could not reach video API' }
+    }
+}

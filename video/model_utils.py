@@ -200,6 +200,139 @@ def is_model_cached(model_name: str) -> bool:
     return False
 
 
+def get_cached_models() -> list[dict]:
+    """Return a list of all locally cached models with their on-disk sizes.
+
+    Each entry: {model: str, size_bytes: int, locations: [str, ...]}
+    """
+    from model_catalog import discover_mmdet_models
+
+    # Build a map of known model IDs for reverse-lookup from filenames
+    known_models: dict[str, str] = {}
+    try:
+        for m in discover_mmdet_models():
+            mid = m.get('id', '')
+            if mid and mid != 'none':
+                known_models[mid.replace('-', '_').lower()] = mid
+    except Exception:
+        pass
+    # Also include curated zoo models
+    for mid in MMDET_MODEL_ZOO:
+        known_models[mid.replace('-', '_').lower()] = mid
+
+    results: dict[str, dict] = {}  # model_id → {size_bytes, locations}
+
+    def _add(model_id: str, path: Path):
+        if model_id not in results:
+            results[model_id] = {'model': model_id, 'size_bytes': 0, 'locations': []}
+        try:
+            results[model_id]['size_bytes'] += path.stat().st_size
+        except OSError:
+            pass
+        results[model_id]['locations'].append(str(path))
+
+    # 1) /data/mmdet/checkpoints/*.pth
+    ckpt_dir = Path('/data/mmdet/checkpoints')
+    if ckpt_dir.is_dir():
+        for f in ckpt_dir.iterdir():
+            if f.is_file() and f.suffix == '.pth':
+                model_id = f.stem  # filename without .pth
+                _add(model_id, f)
+
+    # 2) /data/tensorrt/ — .engine and .onnx
+    trt_dir = Path(os.environ.get('TRT_CACHE_DIR', '/data/tensorrt'))
+    if trt_dir.is_dir():
+        for f in trt_dir.iterdir():
+            if f.is_file() and f.suffix in ('.engine', '.onnx'):
+                model_id = f.stem.replace('_fp16', '').replace('_fp32', '').replace('_int8', '')
+                _add(model_id, f)
+
+    # 3) ~/.cache/torch/hub/checkpoints/ and ~/.cache/mim/
+    for cache_dir in [
+        Path.home() / '.cache' / 'torch' / 'hub' / 'checkpoints',
+        Path.home() / '.cache' / 'mim',
+    ]:
+        if not cache_dir.is_dir():
+            continue
+        for f in cache_dir.iterdir():
+            if not f.is_file():
+                continue
+            fname_norm = f.name.replace('-', '_').lower()
+            for key, model_id in known_models.items():
+                if key in fname_norm:
+                    _add(model_id, f)
+                    break
+
+    return list(results.values())
+
+
+def delete_cached_model(model_name: str) -> dict:
+    """Delete all cached files for a specific model. Returns {deleted: [paths]}."""
+    if model_name in ('none', ''):
+        return {'deleted': []}
+
+    deleted: list[str] = []
+    norm = model_name.replace('-', '_').lower()
+
+    # 1) /data/mmdet/checkpoints/{model_name}.pth
+    ckpt = Path('/data/mmdet/checkpoints') / f'{model_name}.pth'
+    if ckpt.is_file():
+        ckpt.unlink()
+        deleted.append(str(ckpt))
+
+    # 2) /data/tensorrt/ — engine + onnx
+    trt_dir = Path(os.environ.get('TRT_CACHE_DIR', '/data/tensorrt'))
+    if trt_dir.is_dir():
+        for suffix in ('_fp16.engine', '_fp32.engine', '_int8.engine', '.engine', '.onnx'):
+            p = trt_dir / f'{model_name}{suffix}'
+            if p.is_file():
+                p.unlink()
+                deleted.append(str(p))
+
+    # 3) ~/.cache/torch/hub/checkpoints/ and ~/.cache/mim/
+    for cache_dir in [
+        Path.home() / '.cache' / 'torch' / 'hub' / 'checkpoints',
+        Path.home() / '.cache' / 'mim',
+    ]:
+        if not cache_dir.is_dir():
+            continue
+        for f in list(cache_dir.iterdir()):
+            if f.is_file() and norm in f.name.replace('-', '_').lower():
+                f.unlink()
+                deleted.append(str(f))
+
+    logger.info('Deleted cached files for %s: %s', model_name, deleted)
+    return {'deleted': deleted}
+
+
+def clear_all_cache() -> dict:
+    """Remove all cached model files. Returns {deleted_count, freed_bytes}."""
+    deleted_count = 0
+    freed_bytes = 0
+
+    dirs_to_clean = [
+        Path('/data/mmdet/checkpoints'),
+        Path(os.environ.get('TRT_CACHE_DIR', '/data/tensorrt')),
+        Path.home() / '.cache' / 'torch' / 'hub' / 'checkpoints',
+        Path.home() / '.cache' / 'mim',
+    ]
+
+    for d in dirs_to_clean:
+        if not d.is_dir():
+            continue
+        for f in list(d.iterdir()):
+            if f.is_file():
+                try:
+                    freed_bytes += f.stat().st_size
+                    f.unlink()
+                    deleted_count += 1
+                except OSError as e:
+                    logger.warning('Failed to delete %s: %s', f, e)
+
+    logger.info('Cleared all caches: %d files, %d bytes freed', deleted_count, freed_bytes)
+    return {'deleted_count': deleted_count, 'freed_bytes': freed_bytes}
+
+
 def prepare_model(model_name: str, progress_callback=None):
     """Download a model checkpoint if not cached. Returns when ready.
 
@@ -288,6 +421,8 @@ def _download_with_progress(url: str, dest: str, report_fn):
 def _resolve_weight_url(model_name: str) -> str | None:
     """Look up the checkpoint download URL from openmim's metafile data."""
     try:
+        from model_catalog import _patch_packaging_version
+        _patch_packaging_version()
         from mim.commands.search import get_model_info
         import pandas as pd
         df = get_model_info('mmdet', shown_fields=['config', 'weight'])
@@ -441,6 +576,8 @@ def _resolve_config_path(model_name: str) -> str | None:
         import mmdet
         mmdet_root = os.path.dirname(mmdet.__file__)
 
+        from model_catalog import _patch_packaging_version
+        _patch_packaging_version()
         from mim.commands.search import get_model_info
         df = get_model_info('mmdet', shown_fields=['config'])
         for _, row in df.iterrows():

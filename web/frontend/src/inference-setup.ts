@@ -87,6 +87,9 @@ export class InferenceSetup extends LitElement {
   @state()
   declare classNamesText: string;
 
+  @state()
+  declare cachedModelIds: Set<string>;
+
   private classNamesDebounce: ReturnType<typeof setTimeout> | null = null;
 
   @state()
@@ -143,6 +146,7 @@ export class InferenceSetup extends LitElement {
     this.classesLoading = false;
     this.classesError = '';
     this.classNamesText = '';
+    this.cachedModelIds = new Set();
     this.modelStatus = 'idle';
     this.modelProgress = 0;
     this.modelStatusMessage = '';
@@ -657,6 +661,52 @@ export class InferenceSetup extends LitElement {
         line-height: 1.2;
       }
 
+      .cached-badge {
+        display: inline-block;
+        font-size: 0.6rem;
+        font-weight: 600;
+        color: #0d6939;
+        background: #d1fae5;
+        border: 1px solid #6ee7b7;
+        border-radius: 3px;
+        padding: 1px 4px;
+        margin-left: 4px;
+        vertical-align: middle;
+        line-height: 1.2;
+      }
+
+      .delete-cache-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 2px 4px;
+        font-size: 0.75rem;
+        color: #999;
+        border-radius: 3px;
+        line-height: 1;
+        flex-shrink: 0;
+      }
+      .delete-cache-btn:hover {
+        color: #c53030;
+        background: #fee2e2;
+      }
+
+      .clear-cache-btn {
+        font-family: sans-serif;
+        font-size: 0.7rem;
+        color: #b33;
+        background: #fff5f5;
+        border: 1px solid #fcc;
+        border-radius: 4px;
+        padding: 3px 8px;
+        cursor: pointer;
+        margin-left: auto;
+      }
+      .clear-cache-btn:hover {
+        background: #fee2e2;
+        border-color: #f99;
+      }
+
       /* ── Tag filter chips ── */
       .tag-filter-bar {
         display: flex;
@@ -1030,6 +1080,7 @@ export class InferenceSetup extends LitElement {
     this.modelSizeAttempts = 0;
     this.scheduleModelSizeRefresh();
     this.fetchTags();
+    this.fetchCachedModels();
     // Set current model from camSetup if available
     if (this.camSetup?.camera?.model) {
       this.selectedModel = this.camSetup.camera.model;
@@ -1046,6 +1097,44 @@ export class InferenceSetup extends LitElement {
       if (res.ok) this.availableTags = await res.json();
     } catch (err) {
       console.error('Failed to fetch model tags', err);
+    }
+  }
+
+  private async fetchCachedModels() {
+    try {
+      const res = await fetch(`${this.basepath}/cameras/models/cache`);
+      if (res.ok) {
+        const data = await res.json();
+        this.cachedModelIds = new Set((data as any[]).map((c: any) => c.model));
+      }
+    } catch (err) {
+      console.error('Failed to fetch cached models', err);
+    }
+  }
+
+  private async deleteCachedModel(modelId: string, ev: Event) {
+    ev.stopPropagation();
+    try {
+      const res = await fetch(`${this.basepath}/cameras/models/${encodeURIComponent(modelId)}/cache`, { method: 'DELETE' });
+      if (res.ok) {
+        const next = new Set(this.cachedModelIds);
+        next.delete(modelId);
+        this.cachedModelIds = next;
+      }
+    } catch (err) {
+      console.error('Failed to delete cached model', err);
+    }
+  }
+
+  private async clearAllCache() {
+    if (!confirm('Delete all cached model files? This will free disk space but models will need to be re-downloaded.')) return;
+    try {
+      const res = await fetch(`${this.basepath}/cameras/models/cache`, { method: 'DELETE' });
+      if (res.ok) {
+        this.cachedModelIds = new Set();
+      }
+    } catch (err) {
+      console.error('Failed to clear cache', err);
     }
   }
 
@@ -1121,10 +1210,16 @@ export class InferenceSetup extends LitElement {
         (m.openVocab && 'open vocab'.includes(q)) ||
         (m.tags || []).some(t => t.toLowerCase().includes(q))
       )) return false;
+      // Special "cached" filter
+      if (activeTags.has('__cached__')) {
+        if (!this.cachedModelIds?.has(m.id)) return false;
+      }
       // Tag filter: model must have ALL active tags
-      if (activeTags.size > 0) {
+      const tagFilter = new Set(activeTags);
+      tagFilter.delete('__cached__');
+      if (tagFilter.size > 0) {
         const modelTags = new Set(m.tags || []);
-        for (const tag of activeTags) {
+        for (const tag of tagFilter) {
           if (!modelTags.has(tag)) return false;
         }
       }
@@ -1294,6 +1389,7 @@ export class InferenceSetup extends LitElement {
     this.modelFilter = '';
     this.pendingModelId = this.selectedModel;
     this.syncModelSelection(this.pendingModelId);
+    this.fetchCachedModels();
     this.modelDialog?.show();
   }
 
@@ -1408,6 +1504,10 @@ export class InferenceSetup extends LitElement {
 
       this.modelStatus = 'ready';
       this.modelStatusMessage = 'Model applied successfully';
+      // Update cached model set (model was just downloaded)
+      const nextCached = new Set(this.cachedModelIds);
+      nextCached.add(model);
+      this.cachedModelIds = nextCached;
       // Refresh backend status after stream restart (with delay for process startup)
       setTimeout(() => this.fetchBackendStatus(), 5000);
       // Poll faster until the running model catches up
@@ -1933,6 +2033,14 @@ export class InferenceSetup extends LitElement {
                   <button class="tag-chip active" type="button" @click=${this.clearTags}
                     style="border-color: #b33; color: #b33; background: #fff0f0;">✕ Clear filters</button>
                 ` : ''}
+                ${(this.cachedModelIds?.size ?? 0) > 0 ? html`
+                  <span class="tag-dim-label">Status</span>
+                  <button
+                    class="tag-chip ${this.activeTags.has('__cached__') ? 'active' : ''}"
+                    type="button"
+                    @click=${() => this.toggleTag('__cached__')}
+                  >Cached <span class="tag-count">${this.cachedModelIds?.size ?? 0}</span></button>
+                ` : ''}
                 ${Object.entries(this.availableTags).map(([dim, tags]) => {
                   const counts = this.getTagCounts();
                   const dimLabels: Record<string, string> = {
@@ -1957,7 +2065,7 @@ export class InferenceSetup extends LitElement {
               </div>
             ` : ''}
             <div class="model-panel">
-              <div class="model-panel-header">Models <span class="model-item-count">${this.filteredModels.length}</span></div>
+              <div class="model-panel-header" style="display:flex;align-items:center;gap:6px;">Models <span class="model-item-count">${this.filteredModels.length}</span>${(this.cachedModelIds?.size ?? 0) > 0 ? html`<button class="clear-cache-btn" type="button" @click=${() => this.clearAllCache()}>🗑 Clear cache</button>` : ''}</div>
               <div class="scroller">
                 ${repeat(this.filteredModels, m => m.id, m => {
                     const outputBadges = this.getOutputBadges(m);
@@ -1969,7 +2077,7 @@ export class InferenceSetup extends LitElement {
                     ?disabled=${this.modelStatus !== 'idle' && this.modelStatus !== 'ready' && this.modelStatus !== 'error'}
                     @click=${() => this.onPendingModelSelect(m.id)}
                     >
-                    <span>${m.label}${m.openVocab ? html`<span class="ov-badge">Open Vocab</span>` : ''}${outputBadges.map(b => html`<span class="output-badge ${b.cls}">${b.label}</span>`)}${speedLevel > 0 ? html`<span class="speed-indicator" title="${speedLevel === 3 ? 'Fast' : speedLevel === 2 ? 'Balanced' : 'Accurate'}">${[1,2,3].map(i => html`<span class="speed-bar ${i <= speedLevel ? 'filled' : ''}"></span>`)}</span>` : ''}</span>${m.fileSize ? html`<span class="model-item-count">${m.fileSize} MB</span>` : ''}
+                    <span>${m.label}${m.openVocab ? html`<span class="ov-badge">Open Vocab</span>` : ''}${this.cachedModelIds?.has(m.id) ? html`<span class="cached-badge">Cached</span>` : ''}${outputBadges.map(b => html`<span class="output-badge ${b.cls}">${b.label}</span>`)}${speedLevel > 0 ? html`<span class="speed-indicator" title="${speedLevel === 3 ? 'Fast' : speedLevel === 2 ? 'Balanced' : 'Accurate'}">${[1,2,3].map(i => html`<span class="speed-bar ${i <= speedLevel ? 'filled' : ''}"></span>`)}</span>` : ''}</span>${this.cachedModelIds?.has(m.id) ? html`<button class="delete-cache-btn" type="button" title="Remove from cache" @click=${(ev: Event) => this.deleteCachedModel(m.id, ev)}>✕</button>` : ''}${m.fileSize ? html`<span class="model-item-count">${m.fileSize} MB</span>` : ''}
                     </button>
                 `;})}
               </div>

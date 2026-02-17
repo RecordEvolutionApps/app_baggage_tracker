@@ -13,6 +13,30 @@ import threading
 
 logger = logging.getLogger('model_catalog')
 
+
+# ── Fix packaging.version on Python 3.8 ─────────────────────────────────────
+# openmim 0.3.x → pkg_resources → packaging.version.Version can receive a
+# non-string version object from certain setuptools builds, causing:
+#   TypeError: expected string or bytes-like object
+# Coercing to str() before the regex search fixes it everywhere.
+
+def _patch_packaging_version():
+    try:
+        import packaging.version
+        _orig_init = packaging.version.Version.__init__
+        if getattr(_orig_init, '_patched', False):
+            return  # already applied
+
+        def _safe_init(self, version):
+            return _orig_init(self, str(version) if version is not None else '0')
+        _safe_init._patched = True
+        packaging.version.Version.__init__ = _safe_init
+    except Exception:
+        pass
+
+_patch_packaging_version()
+
+
 # ── Dataset class lists ─────────────────────────────────────────────────────
 # Standard COCO-2017 80-class list (used by virtually all COCO-pretrained models)
 COCO_CLASSES = [
