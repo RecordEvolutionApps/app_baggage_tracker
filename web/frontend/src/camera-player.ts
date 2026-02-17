@@ -51,13 +51,14 @@ protected async firstUpdated() {
 
   this.getCameraMetadata();
 
-  if (videoElement) { // Only dispatch if the element was found
+  // Force a re-render so video-canvas gets the real <video> element
+  // (on first render, shadow DOM was empty so this.videoElement was null)
+  this.requestUpdate();
+
+  if (videoElement) {
     this.dispatchEvent(new CustomEvent('video-ready', {
-      detail: { videoElement: videoElement } // Pass the element in detail
+      detail: { videoElement: videoElement }
     }));
-    console.log(`[camera-player ${this.id}] Dispatched video-ready with element in detail.`);
-  } else {
-     console.error(`[camera-player ${this.id}] Video element not found in firstUpdated!`);
   }
 }
 
@@ -70,8 +71,6 @@ protected async firstUpdated() {
         align-items: center;
         flex: 1;
         position: relative;
-        margin: 0 auto;
-        padding: 23px 16px;
         box-sizing: border-box;
         background: #fff;
       }
@@ -95,7 +94,6 @@ protected async firstUpdated() {
 
   render() {
     return html`
-      <h3>Baggage Vision</h3>
       <video-canvas
         .video=${this.videoElement}
         .camSetup=${this.camSetup}

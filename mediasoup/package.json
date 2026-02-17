@@ -1,0 +1,13 @@
+{
+  "name": "mediasoup-server",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "mediasoup": "^3.19.17",
+    "ws": "^8.19.0"
+  }
+}

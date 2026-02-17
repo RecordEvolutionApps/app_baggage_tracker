@@ -1,72 +1,107 @@
+
+# Vision AI Streaming System
+
+**See everything. Understand everything. In real time.**
+
+Turn any camera into an intelligent eye. This app brings the power of cutting-edge computer vision AI directly to your cameras — detecting, counting, and tracking objects in a live video stream with stunning accuracy, all viewable from your browser in real time.
+
+Whether you're monitoring a warehouse floor, counting vehicles on a highway, keeping an airport baggage belt running smoothly, or watching wildlife in the field — this is the only app you need.
+
+
 <div style="display:flex;flex-direction:row;align-items:center;justify-content:center;">
     <img src="https://res.cloudinary.com/dotw7ar1m/image/upload/v1717493714/baggaeAppBanner.png" width="650px">
 </div>
 
-<br>
 
-# End-To-End Smart Baggage Tracking System with custom detection zones
+---
 
-Interactive camera application for selective luggage detection. Real-time object counting is available in user-defined areas of the video image.
+## What Can You Do With This App?
 
-Users can interact with the live video and select areas of interest. The detection and counting will be isolated to the detection zones specified by the user. Multiple areas can be defined, and the number of objects will be displayed for each zone.
+### Watch AI-Powered Live Video
 
-## Hardware
+Open your browser and see your camera feed — enhanced with real-time AI detections. Every object is identified, labelled, and highlighted with bounding boxes, right on top of the live video. The stream is ultra low-latency, so what you see is what's happening *right now*.
 
-The Revis box is an End-to-End solution that can be configured for your needs. This means that even though parts can be exchanged, we provide a turnkey solution. While we rely on NVIDIA devices, the camera itself can be selected depending on the use case. This has several advantages such as extending existing cameras with AI functionality or selecting a special camera, for instance, night vision.
+### Detect Anything
 
+Choose from **over 500 pre-trained AI models** spanning 30+ detection architectures. From people and vehicles to animals, furniture, food, and industrial equipment — there's a model for virtually every scenario. Browse models by category, read descriptions of what each one is best at, and switch models on the fly.
 
-## Use on your camera
+Need to detect something unusual? With **open-vocabulary models** like Grounding DINO and YOLO-World, simply type what you're looking for — *"red hard hat"*, *"forklift"*, *"unattended bag"* — and the AI will find it. No retraining required.
 
-To use the app on your own devices:
+### Draw Smart Zones and Counting Lines
 
-1. Register an NVIDIA Jetson PC in your device fleet on IronFlock
-2. Install this app on the device.
-3. Enable remote access in the app settings to access the app's home page for camera configuration and live stream.
+Don't just detect — **focus**. Draw polygon zones directly on the live video to count objects only in the areas that matter to you. Set up counting lines to track how many objects cross a boundary and in which direction. Perfect for:
 
-To create a multi camera setup, just repeat the steps above with as many devices as you like.
+- Counting people entering or leaving a room
+- Monitoring items on a conveyor belt
+- Tracking vehicles passing through an intersection
+- Watching inventory levels in a storage zone
 
-The detection data of all cameras in your swarm will be available in the app dashboard.
+### Run Multiple Cameras
 
-> There is a demo video included in the app. You can use this video by choosing IP Camera in the app configuration and then using `demoVideo` as the url.
+Add as many camera streams as you want. Each stream gets its own model, its own settings, and its own detection zones. Manage them all from a clean, intuitive gallery view. USB cameras, network cameras (RTSP/HTTP), YouTube streams — they all work.
 
-## Dashboarding Insights
+### Fine-Tune to Perfection
 
-<div style="display:flex;flex-direction:row;align-items:center;justify-content:center;">
-    <img src="https://res.cloudinary.com/dotw7ar1m/image/upload/v1717494096/baggageAppScreenshotDashboard.png" width="600px">
-</div>
-<br>
+Every stream is fully configurable:
 
-This app provides a dashboard summarizing detection data from all swarm cameras into a common view. Collected data histories, such as the number of detected objects per class and the current video frame, will be displayed in the dashboard. The history of detections is persisted, providing a summary in different graphs.
+- **Confidence threshold** — control how certain the AI needs to be before reporting a detection.
+- **Class filtering** — choose exactly which object types to detect and ignore the rest.
+- **SAHI sliced inference** — enable tiled detection for spotting tiny objects in high-resolution footage.
+- **Object smoothing** — reduce jitter with temporal averaging across frames.
+- **NMS tuning** — eliminate duplicate detections with adjustable overlap thresholds.
 
-The detection data history is collected in the cloud storage backend of the app. Each swarm automatically uses its own private cloud data storage. This ensures that the app dashboard in a swarm can only access and show the data of that swarm. This is how client data separation is reliably and securely enforced.
+### Dashboard Your Insights
 
-> The video snapshot that is shown in the dashboard is recorded historically with only one frame per second while the live stream (see below) has a higher frame rate and lower latency.
+All detection data — zone counts, line crossings, annotated snapshots — is automatically collected and published to a shared cloud dashboard. See trends over time, compare cameras, and get a bird's-eye view of what's happening across your entire camera fleet. Data from all devices in your swarm flows into one unified view.
 
-## Live footage from the edge
+---
 
-The app additionally provides a web interface on each individual camera that allows users to view the low latency live video stream from that camera. This interface also allows users to configure the video and detection model for the camera.
+## Works With Any Camera
 
-<div style="display:flex;flex-direction:row;align-items:center;justify-content:center;">
-    <img src="https://res.cloudinary.com/dotw7ar1m/image/upload/v1717494386/tunnelBaggageApp.png" width="600px">
-</div>
+| Camera Type | Examples |
+|-------------|----------|
+| USB | Any standard webcam or industrial USB camera |
+| MIPI CSI / GMSL | Jetson-native camera modules and multi-cam setups |
+| Network (RTSP/HTTP) | IP cameras, NVRs, security camera streams |
+| YouTube | Live streams and recorded videos via URL |
+| Demo Video | Built-in test footage — no hardware needed to try it out |
 
-## App Parameters
+---
 
-Each camera can also be configured by external parameters in the app settings on the device. These settings can be given on device or group level for the whole swarm at the same time.
+## AI That Runs on the Edge
 
-Parameter | Default | Description
--|-|-
-Model | Yolov8s | Select a version for one of the YOLO Object Detection Models
-Detection Classes | 24, 26, 28 | A list of class ids from the COCO dataset. If left empty, then all classes are used. See [here](https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/datasets/coco.yaml)
-Smoothing | false | Smoothing uses previous frames to determine the average detection box of an object in the current frame.
-USE_SAHI | false | SAHI is a method to slice a high resolution frame into chunks of 640x640. This improves the detection quality for small objects on high resolution images, but may slow down inference time.
-Confidence | 0.1 | (0 - 1) Sets the minimum confidence threshold for detections. Objects detected with confidence below this threshold will be disregarded. Adjusting this value can help reduce false positives.
-Intersection over Union | 0.7 | (0 - 1) Intersection Over Union (IoU) threshold for Non-Maximum Suppression (NMS). Lower values result in fewer detections by eliminating overlapping boxes, useful for reducing duplicates.
-Width | 1280 | Horizontal Resolution in pixel of the camera stream. The camera should support the selected resolution.
-Height | 720 | Vertical Resolution in pixel of the camera stream. The camera should support the selected resolution.
+This app runs entirely on your device — your video never leaves your network unless you choose to publish snapshots to the dashboard. AI inference happens locally on the NVIDIA GPU with hardware-accelerated TensorRT, delivering real-time performance even on compact Jetson devices.
 
-## Requirements
+For development and testing, the app also runs on standard laptops and desktops without a GPU.
 
-This app can currently only be used NVIDIA Jetson systems.
+---
 
-Any USB or IP camera connected to the Nvidia PC can be used with the app.
+## Built for Scale
+
+Deploy this app on one device or a hundred. Each device in your IronFlock fleet runs independently with its own cameras and models, while all detection data flows into a shared cloud dashboard. Add new cameras and devices at any time — the system grows with your needs.
+
+---
+
+## Key Specs
+
+| Feature | Detail |
+|---------|--------|
+| Detection Models | 300+ from the MMDetection model zoo |
+| Model Architectures | RTMDet, YOLO family, Faster R-CNN, DETR, Grounding DINO, YOLO-World, and 25+ more |
+| Open-Vocabulary Detection | Yes — detect objects by typing text descriptions |
+| GPU Acceleration | NVIDIA TensorRT FP16 (automatic engine caching) |
+| Streaming Protocol | WebRTC via mediasoup SFU — sub-second browser latency |
+| Detection Zones | Interactive polygon zones and directional counting lines |
+| Object Tracking | ByteTrack multi-object tracker |
+| Sliced Inference (SAHI) | Overlapping tile detection for small objects on high-res video |
+| Camera Support | USB, MIPI CSI, GMSL, RTSP, HTTP, YouTube |
+| Cloud Dashboard | Aggregated detection history, snapshots, and analytics |
+| Multi-Device Fleet | Unlimited cameras across unlimited devices via IronFlock |
+
+---
+
+## Get Started
+
+Install this app on your NVIDIA Jetson device through IronFlock, connect a camera, and open the web interface. You'll be watching AI-enhanced live video in minutes — no configuration files, no command lines, no complexity.
+
+> **No camera? No problem.** The app includes a built-in demo video so you can explore every feature right away.

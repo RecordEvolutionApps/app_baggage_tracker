@@ -18,21 +18,39 @@
       position: relative;
       height: 100%;
       width: 100%;
-      margin: 0px;
     }
 
     * {
       box-sizing: border-box;
+      font-family: sans-serif;
+    }
+
+    /* Material Design 3 font tokens — applied globally so all
+       web-components inherit sans-serif without per-component overrides. */
+    :root {
+      --md-ref-typeface-brand: sans-serif;
+      --md-ref-typeface-plain: sans-serif;
+      --md-sys-typescale-body-large-font: sans-serif;
+      --md-sys-typescale-body-medium-font: sans-serif;
+      --md-sys-typescale-body-small-font: sans-serif;
+      --md-sys-typescale-label-large-font: sans-serif;
+      --md-sys-typescale-label-medium-font: sans-serif;
+      --md-sys-typescale-label-small-font: sans-serif;
+      --md-sys-typescale-title-large-font: sans-serif;
+      --md-sys-typescale-title-medium-font: sans-serif;
+      --md-sys-typescale-title-small-font: sans-serif;
+      --md-sys-typescale-headline-large-font: sans-serif;
+      --md-sys-typescale-headline-medium-font: sans-serif;
+      --md-sys-typescale-headline-small-font: sans-serif;
+      --md-sys-typescale-display-large-font: sans-serif;
+      --md-sys-typescale-display-medium-font: sans-serif;
+      --md-sys-typescale-display-small-font: sans-serif;
     }
   </style>
   <title>Live Camera</title>
 </head>
 
 <body>
-  <script src="janus.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/webrtc-adapter/6.1.4/adapter.min.js"
-    integrity="sha512-FZkQmTcqSzV2aNpWszYA/pPUISx6QjI60lKGwnIsfNFCGqUB7gcobQ9StH3hQCKFN92md3fCaXLzzSpoFat57A=="
-    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <camera-shell></camera-shell>
 
   <script type="module" src="/src/camera-shell.ts"></script>

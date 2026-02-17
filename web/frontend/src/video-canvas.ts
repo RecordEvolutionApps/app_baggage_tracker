@@ -1,5 +1,5 @@
 import { LitElement, html, css } from 'lit';
-import { property, customElement } from 'lit/decorators.js';
+import { property, customElement, state } from 'lit/decorators.js';
 import { PolygonManager, Polygon } from './polygon.js';
 
 import '@material/web/elevation/elevation.js';
@@ -28,6 +28,9 @@ export class VideoCanvas extends LitElement {
   @property({ type: Object })
   declare camSetup?: CamSetup;
 
+  @state()
+  declare loading: boolean;
+
   initialized = false;
 
   constructor() {
@@ -36,6 +39,7 @@ export class VideoCanvas extends LitElement {
     this.width = 0;
     this.height = 0;
     this.camStream = 'frontCam';
+    this.loading = true;
 
     this.getCursorPosition = this.getCursorPosition.bind(this);
   }
@@ -45,15 +49,8 @@ export class VideoCanvas extends LitElement {
       'canvas',
     ) as HTMLCanvasElement;
 
-    // // TODO: remove for production
-    // setInterval(() => {
-    //   const context = this.canvasElement?.getContext('2d', { alpha: false })!;
-
-    //   context.fillStyle = 'white';
-    //   context.fillRect(0, 0, this.width, this.height);
-
-    //   this.drawPolygons(context);
-    // }, 1000 / 30);
+    // Set the camStream on the polygon manager now that it's available
+    this.polygonManager.setCamStream(this.camStream);
   }
 
   drawPolygons(context: CanvasRenderingContext2D) {
@@ -103,9 +100,34 @@ export class VideoCanvas extends LitElement {
       return;
     }
 
+    if (!this.video?.videoWidth || !this.video?.videoHeight) {
+      this.animationFrameId = window.requestAnimationFrame(this.step.bind(this));
+      return;
+    }
+
+    // Auto-resize canvas to match the actual video source resolution.
+    // Compare against canvasElement dimensions (not this.width/height) because
+    // the parent component may have already updated this.width/height via
+    // property bindings before the canvas buffer was resized — causing a
+    // false "no change" when comparing this.width vs video.videoWidth.
+    const vw = this.video.videoWidth;
+    const vh = this.video.videoHeight;
+    if (vw !== this.canvasElement.width || vh !== this.canvasElement.height) {
+      this.canvasElement.width = vw;
+      this.canvasElement.height = vh;
+    }
+    // Keep reactive properties in sync (used for polygon coordinate mapping)
+    if (this.width !== vw) this.width = vw;
+    if (this.height !== vh) this.height = vh;
+
+    // First real frame — hide loading indicator
+    if (this.loading) {
+      this.loading = false;
+    }
+
     // Draw Image
     const context = this.canvasElement?.getContext('2d', { alpha: false })!;
-    context.drawImage(this.video!, 0, 0, this.width, this.height);
+    context.drawImage(this.video!, 0, 0, vw, vh);
 
     this.drawPolygons(context);
 
@@ -130,6 +152,15 @@ export class VideoCanvas extends LitElement {
   update(changedProps: any) {
     super.update(changedProps);
 
+    if (changedProps.has('camStream') && this.camStream) {
+      this.polygonManager.setCamStream(this.camStream);
+    }
+
+    // If camSetup loaded and no source configured, stop showing spinner
+    if (changedProps.has('camSetup') && this.camSetup && !this.camSetup.camera?.path) {
+      this.loading = false;
+    }
+
     if (!this.initialized && this.video && this.width && this.height) {
       this.canvasElement.addEventListener('mousedown', this.getCursorPosition);
       this.canvasElement.width = this.width;
@@ -141,6 +172,13 @@ export class VideoCanvas extends LitElement {
         );
       });
 
+      // If video is already playing (we missed the play event), start immediately
+      if (!this.video.paused && !this.video.ended) {
+        this.animationFrameId = window.requestAnimationFrame(
+          this.step.bind(this),
+        );
+      }
+
       this.initialized = true;
     }
   }
@@ -150,6 +188,10 @@ export class VideoCanvas extends LitElement {
     css`
       :host {
         width: 100%;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
       }
       #canvas {
         width: 100%;
@@ -157,8 +199,8 @@ export class VideoCanvas extends LitElement {
       }
       .container {
         height: 100%;
+        flex: 1;
         display: flex;
-        gap: 16px;
         flex-direction: row;
         align-items: start;
         justify-content: space-between;
@@ -169,10 +211,16 @@ export class VideoCanvas extends LitElement {
         flex-direction: column;
         gap: 16px;
         height: 100%;
+        max-height: 100%;
+        min-height: 0;
+        max-width: 300px;
+        min-width: 300px;
         padding: 10px;
         box-sizing: border-box;
         background: #e9eaf2;
-        border-radius: 4px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        flex-shrink: 0;
       }
 
       .surface {
@@ -181,6 +229,41 @@ export class VideoCanvas extends LitElement {
         --md-elevation-level: 1;
         width: 100%;
         border-radius: 4px;
+      }
+
+      .loading-overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        z-index: 2;
+        gap: 16px;
+      }
+
+      .loading-overlay[hidden] {
+        display: none;
+      }
+
+      .spinner {
+        width: 40px;
+        height: 40px;
+        border: 4px solid #d0d2db;
+        border-top-color: #002e6a;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+      .loading-text {
+        font-family: sans-serif;
+        font-size: 0.9rem;
+        color: #5e5f61;
       }
 
       @media only screen and (max-width: 600px) {
@@ -216,7 +299,15 @@ export class VideoCanvas extends LitElement {
         ></polygon-list>
       </div>
       <div class="surface">
-        <md-elevation></md-elevation>
+        <div class="loading-overlay" ?hidden=${!this.loading}>
+          <div class="spinner"></div>
+          <span class="loading-text">Connecting to video stream…</span>
+        </div>
+        ${!this.loading && this.camSetup && !this.camSetup.camera?.path ? html`
+          <div class="loading-overlay">
+            <span class="loading-text">No video source configured</span>
+          </div>
+        ` : ''}
         <canvas id="canvas"></canvas>
       </div>
     </div>`;

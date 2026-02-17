@@ -1,40 +1,66 @@
 import { LitElement, html, css } from 'lit';
-import { customElement } from 'lit/decorators.js';
-import './camera-player.js';
-import { initJanus } from './modules/webRTCPlayer.js';
-import { CameraPlayer } from './camera-player.js';
+import { customElement, state } from 'lit/decorators.js';
+import './stream-gallery.js';
+import './stream-editor.js';
+import { stopMediasoup } from './modules/webRTCPlayer.js';
 import { mainStyles } from './utils.js';
 
 @customElement('camera-shell')
 export class CameraShell extends LitElement {
 
-  protected startJanus(event: CustomEvent): void {
-    
-    const videoElement = event.detail?.videoElement as HTMLVideoElement | undefined;
-    if (!videoElement) {
-      console.error("[camera-shell] videoElement received from event detail is undefined or null! Cannot start Janus.");
-      return; // Stop here if no video element
+  @state() declare private view: 'gallery' | 'editor';
+  @state() declare private editCamStream: string;
+
+  private boundHashChange = this.onHashChange.bind(this);
+
+  constructor() {
+    super();
+    this.view = 'gallery';
+    this.editCamStream = '';
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    window.addEventListener('hashchange', this.boundHashChange);
+    this.parseHash();
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    window.removeEventListener('hashchange', this.boundHashChange);
+  }
+
+  private onHashChange() {
+    this.parseHash();
+  }
+
+  private parseHash() {
+    const hash = window.location.hash;
+    if (hash.startsWith('#edit/')) {
+      const camStream = decodeURIComponent(hash.slice('#edit/'.length));
+      if (camStream) {
+        // Stop any previous mediasoup connections before switching view
+        stopMediasoup();
+        this.editCamStream = camStream;
+        this.view = 'editor';
+        return;
+      }
     }
+    // Default: gallery
+    stopMediasoup();
+    this.view = 'gallery';
+    this.editCamStream = '';
+  }
 
-    const frontCam = this.shadowRoot?.getElementById(
-      'frontCam',
-    ) as CameraPlayer;
+  private onEditStream(e: CustomEvent) {
+    const camStream = e.detail?.camStream;
+    if (camStream) {
+      window.location.hash = `#edit/${encodeURIComponent(camStream)}`;
+    }
+  }
 
-    const leftCam = this.shadowRoot?.getElementById('leftCam') as CameraPlayer;
-    const backCam = this.shadowRoot?.getElementById('backCam') as CameraPlayer;
-    const rightCam = this.shadowRoot?.getElementById(
-      'rightCam',
-    ) as CameraPlayer;
-
-    const videoPlayers = {
-      frontCam: frontCam?.videoElement,
-      leftCam: leftCam?.videoElement,
-      backCam: backCam?.videoElement,
-      rightCam: rightCam?.videoElement,
-    };
-    console.log('videoPlayers', frontCam, videoPlayers);
-
-    initJanus(videoPlayers);
+  private onCloseEditor() {
+    window.location.hash = '';
   }
 
   static styles = [
@@ -49,30 +75,23 @@ export class CameraShell extends LitElement {
         justify-content: flex-start;
         background-color: #fbfcff;
       }
-
-      .cam-container {
-        display: flex;
-        width: 100%;
-        gap: 8px;
-        justify-content: space-around;
-      }
     `,
   ];
 
   render() {
+    if (this.view === 'editor' && this.editCamStream) {
+      return html`
+        <stream-editor
+          .camStream=${this.editCamStream}
+          @close-editor=${this.onCloseEditor}
+        ></stream-editor>
+      `;
+    }
+
     return html`
-      <div class="cam-container">
-        <camera-player
-          id="frontCam"
-          label="Front"
-          @video-ready=${this.startJanus}
-        ></camera-player>
-      </div>
-      <!-- <div class="cam-container">
-      <camera-player id="leftCam" label="Left"></camera-player>
-      <camera-player id="backCam" label="Back"></camera-player>
-      <camera-player id="rightCam" label="Right"></camera-player>
-    </div> -->
+      <stream-gallery
+        @edit-stream=${this.onEditStream}
+      ></stream-gallery>
     `;
   }
 }
