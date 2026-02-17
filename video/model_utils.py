@@ -507,6 +507,35 @@ def getModel(model_name: str) -> Dict[str, Any]:
         return get_mmdet_model(model_name)
     raise ValueError(f'Unsupported DETECT_BACKEND: {backend}. Supported: mmdet, tensorrt')
 
+
+def _inject_load_image(cfg):
+    """Ensure the test pipeline starts with ``LoadImageFromFile``.
+
+    MOT / ByteTrack configs wrap their pipeline inside
+    ``TransformsBroadcaster`` and omit ``LoadImageFromFile`` at the top level,
+    which causes ``DetInferencer._init_pipeline`` to raise.  We fix the config
+    in-place by prepending the missing transform so ``DetInferencer`` is happy.
+    """
+    for key in ('test_pipeline', 'val_pipeline'):
+        pipeline = cfg.get(key)
+        if not pipeline:
+            continue
+        names = [t.get('type', '') if isinstance(t, dict) else '' for t in pipeline]
+        if 'LoadImageFromFile' not in names:
+            pipeline.insert(0, dict(type='LoadImageFromFile'))
+            logger.info('Injected LoadImageFromFile into cfg.%s', key)
+
+    # Also patch nested test_dataloader → dataset → pipeline
+    try:
+        ds_pipeline = cfg.test_dataloader.dataset.pipeline
+        names = [t.get('type', '') if isinstance(t, dict) else '' for t in ds_pipeline]
+        if 'LoadImageFromFile' not in names:
+            ds_pipeline.insert(0, dict(type='LoadImageFromFile'))
+            logger.info('Injected LoadImageFromFile into cfg.test_dataloader.dataset.pipeline')
+    except (AttributeError, KeyError):
+        pass
+
+
 def get_mmdet_model(model_name: str) -> Dict[str, Any]:
     """Load any MMDetection model by name.
 
@@ -529,29 +558,56 @@ def get_mmdet_model(model_name: str) -> Dict[str, Any]:
 
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
+    def _try_load(model_or_cfg, weights=None):
+        """Attempt to create a DetInferencer.
+
+        If the config's test pipeline is missing ``LoadImageFromFile`` (common
+        in MOT / ByteTrack configs), patch the config in-place and retry.
+        """
+        kwargs = dict(model=model_or_cfg, device=device, show_progress=False)
+        if weights:
+            kwargs['weights'] = weights
+        try:
+            return DetInferencer(**kwargs)
+        except ValueError as exc:
+            if 'LoadImageFromFile is not found' not in str(exc):
+                raise
+            # Resolve a Config object so we can patch its test pipeline
+            logger.info('Patching missing LoadImageFromFile for %s', model_or_cfg)
+            from mmengine.config import Config
+            cfg_path = model_or_cfg
+            if not os.path.isfile(cfg_path):
+                cfg_path = _resolve_config_path(model_name)
+            if not cfg_path:
+                raise
+            cfg = Config.fromfile(cfg_path)
+            _inject_load_image(cfg)
+            kwargs['model'] = cfg
+            return DetInferencer(**kwargs)
+
     # Try loading by name first (works for models in DetInferencer's registry)
     # If that fails, resolve the config path from openmim metafiles
     inferencer = None
     if checkpoint_path.is_file():
         try:
-            inferencer = DetInferencer(model=model_name, weights=str(checkpoint_path), device=device, show_progress=False)
+            inferencer = _try_load(model_name, weights=str(checkpoint_path))
         except ValueError:
             # Model name not in DetInferencer registry — resolve config from openmim
             config_path = _resolve_config_path(model_name)
             if config_path:
                 logger.info('Loading %s via config path: %s', model_name, config_path)
-                inferencer = DetInferencer(model=config_path, weights=str(checkpoint_path), device=device, show_progress=False)
+                inferencer = _try_load(config_path, weights=str(checkpoint_path))
             else:
                 raise
     else:
         try:
             logger.info('No cached checkpoint for "%s", DetInferencer will auto-download...', model_name)
-            inferencer = DetInferencer(model=model_name, device=device, show_progress=False)
+            inferencer = _try_load(model_name)
         except ValueError:
             config_path = _resolve_config_path(model_name)
             if config_path:
                 logger.info('Loading %s via config path (auto-download): %s', model_name, config_path)
-                inferencer = DetInferencer(model=config_path, device=device, show_progress=False)
+                inferencer = _try_load(config_path)
             else:
                 raise
 
@@ -684,11 +740,17 @@ def get_youtube_video(url, height=None):
 
     cookie_file = '/data/cookies.txt'
 
-    # Prefer muxed format so OpenCV can open it with a plain HTTP GET.
+    # Prefer the highest-resolution video-only stream.  YouTube serves
+    # high-quality formats (720p+) only as separate video/audio DASH tracks;
+    # the muxed "best" format is often just 360p.  OpenCV only needs the
+    # video track, so video-only is fine.
     if height and height > 0:
-        format_str = f'best[height<={height}]/best'
+        format_str = (f'bestvideo[height<={height}][ext=mp4]'
+                      f'/bestvideo[height<={height}]'
+                      f'/best[height<={height}]'
+                      f'/bestvideo[ext=mp4]/bestvideo/best')
     else:
-        format_str = 'best'
+        format_str = 'bestvideo[ext=mp4]/bestvideo/best'
 
     logger.info('[yt-dlp] Resolving: %s (format=%s)', url, format_str)
 
@@ -765,10 +827,14 @@ def _get_youtube_video_lib(url, height=None):
     """Fallback: use the yt_dlp Python library (may have stale nsig extraction)."""
     import yt_dlp
 
+    # Prefer video-only DASH streams for higher resolution (see get_youtube_video).
     if height and height > 0:
-        format_str = f'best[height<={height}]/best'
+        format_str = (f'bestvideo[height<={height}][ext=mp4]'
+                      f'/bestvideo[height<={height}]'
+                      f'/best[height<={height}]'
+                      f'/bestvideo[ext=mp4]/bestvideo/best')
     else:
-        format_str = 'best'
+        format_str = 'bestvideo[ext=mp4]/bestvideo/best'
 
     cookie_file = '/data/cookies.txt'
 

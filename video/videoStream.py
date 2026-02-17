@@ -108,9 +108,13 @@ def setVideoSource(device):
     if device.startswith('http'):
         if device.startswith('https://youtu') or device.startswith('https://www.youtube.com'):
             # yt_dlp resolves the YouTube page URL into a direct CDN stream URL.
-            # Using format='best' picks a muxed format that works with plain HTTP GET.
+            # We request video-only DASH streams (bestvideo) for the highest
+            # resolution; muxed "best" is often only 360p on Shorts / newer videos.
+            # Only cap resolution if the user explicitly set --height; otherwise
+            # fetch the best available quality from YouTube.
+            yt_height = args.height  # None when no explicit override was given
             try:
-                video = get_youtube_video(device, RESOLUTION_Y)
+                video = get_youtube_video(device, yt_height)
                 stream_url = video.get('url', device)
                 if video.get('width'):
                     RESOLUTION_X = video['width']
@@ -285,26 +289,38 @@ async def main(_saved_masks):
             # NOTE: videoconvert (CPU) is required because nvvidconv cannot accept
             # BGR directly from OpenCV's appsrc — it only handles I420/NV12/RGBA.
             # videoconvert converts BGR→I420, then nvvidconv uploads to NVMM for HW encode.
+            # Bitrate scales with pixel count (base: 8 Mbps @ 1280x720).
+            base_bps = 8_000_000
+            base_pixels = 1280 * 720
+            actual_pixels = RESOLUTION_X * RESOLUTION_Y
+            hw_bitrate = max(4_000_000, int(base_bps * actual_pixels / base_pixels))
+            logger.info('HW encoder bitrate: %d bps (%dx%d)', hw_bitrate, RESOLUTION_X, RESOLUTION_Y)
             outputFormat = ("queue ! videoconvert ! video/x-raw, format=I420"
                 " ! nvvidconv"
                 " ! video/x-raw(memory:NVMM), format=I420"
                 " ! nvv4l2h264enc maxperf-enable=true preset-level=1 profile=0"
                 "   insert-sps-pps=true insert-vui=true iframeinterval=10 idrinterval=1"
-                "   control-rate=1 bitrate=8000000"
+                f"   control-rate=1 bitrate={hw_bitrate}"
                 " ! h264parse"
                 " ! rtph264pay pt=96 ssrc=11111111 config-interval=-1")
         else:
             # CPU software encoding (x264)
-            # bitrate=8000: default is 2048 kbps which is far too low for
-            # 1280x720 — produces heavy macro-blocking.  8 Mbps gives ~4x
-            # more bits per frame for much better visual quality.
+            # Bitrate scales with pixel count to maintain quality across
+            # different resolutions (USB 640x480 vs YouTube 1080x1920).
+            # Base: 8 Mbps for 1280x720 (~921k pixels), scaled linearly.
+            base_bitrate = 8000  # kbps at 1280x720
+            base_pixels = 1280 * 720
+            actual_pixels = RESOLUTION_X * RESOLUTION_Y
+            scaled_bitrate = max(4000, int(base_bitrate * actual_pixels / base_pixels))
+            logger.info('x264 bitrate: %d kbps (%dx%d = %d pixels)',
+                        scaled_bitrate, RESOLUTION_X, RESOLUTION_Y, actual_pixels)
             # key-int-max=1: every frame is an IDR keyframe — at low actual
             # fps the overhead is negligible and the browser can start
             # decoding instantly on the very first frame after (re)connecting.
             # h264parse + config-interval=-1: same rationale as the HW path above.
             outputFormat = ("videoconvert ! video/x-raw, format=I420"
-                " ! x264enc tune=zerolatency bitrate=8000"
-                "   key-int-max=1 bframes=0 speed-preset=veryfast"
+                f" ! x264enc tune=zerolatency bitrate={scaled_bitrate}"
+                "   key-int-max=1 bframes=0 speed-preset=faster"
                 " ! h264parse"
                 " ! rtph264pay pt=96 ssrc=11111111 config-interval=-1")
 
