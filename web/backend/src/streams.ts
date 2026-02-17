@@ -29,11 +29,11 @@ export async function startVideoStream(cam: Camera, camStream: string) {
         camPath = cam.path ?? ''
     }
 
-    try {
-        const body: Record<string, any> = { camPath, camStream }
-        if (cam.width) body.width = cam.width
-        if (cam.height) body.height = cam.height
+    const body: Record<string, any> = { camPath, camStream }
+    if (cam.width) body.width = cam.width
+    if (cam.height) body.height = cam.height
 
+    try {
         const res = await fetch(`${VIDEO_API}/streams`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
