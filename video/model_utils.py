@@ -1151,11 +1151,19 @@ def prepMasks(in_masks):
     logger.info('[masks] Refreshed %d mask(s)', len(out_masks))
     return out_masks
 
-def get_extreme_points(masks, frame_buffer=FRAME_BUFFER):
+def get_extreme_points(masks, frame_buffer=FRAME_BUFFER, frame_wh=None):
+    """Return (low_x, low_y, high_x, high_y) bounding all mask points + buffer.
+
+    *frame_wh*: optional ``(width, height)`` of the actual video frame.
+    Falls back to the module-level ``RESOLUTION_X/Y`` when not provided.
+    """
+    res_x = frame_wh[0] if frame_wh else RESOLUTION_X
+    res_y = frame_wh[1] if frame_wh else RESOLUTION_Y
+
     if len(masks) == 0:
-        return 0, 0, RESOLUTION_X, RESOLUTION_Y
-    low_x = RESOLUTION_X - 1
-    low_y = RESOLUTION_Y - 1
+        return 0, 0, res_x, res_y
+    low_x = res_x - 1
+    low_y = res_y - 1
     high_x = -1
     high_y = -1
     for mask in masks:
@@ -1168,12 +1176,12 @@ def get_extreme_points(masks, frame_buffer=FRAME_BUFFER):
 
     low_x  = max(0, low_x - frame_buffer)
     low_y  = max(0, low_y - frame_buffer)
-    high_x = min(RESOLUTION_X - 1, high_x + frame_buffer)
-    high_y = min(RESOLUTION_Y - 1, high_y + frame_buffer)
+    high_x = min(res_x - 1, high_x + frame_buffer)
+    high_y = min(res_y - 1, high_y + frame_buffer)
 
     # Ensure valid bounds (low < high) — avoids zero-size crops
     if low_x >= high_x or low_y >= high_y:
-        return 0, 0, RESOLUTION_X, RESOLUTION_Y
+        return 0, 0, res_x, res_y
 
     return low_x, low_y, high_x, high_y
 

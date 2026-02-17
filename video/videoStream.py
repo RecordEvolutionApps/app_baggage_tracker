@@ -256,6 +256,11 @@ logger.info('Resolution: %dx%d, source: %s', RESOLUTION_X, RESOLUTION_Y, device)
 cap.set(3, RESOLUTION_X)
 cap.set(4, RESOLUTION_Y)
 
+# Sync actual resolution back to model_utils so SAHI / polygon helpers use it
+model_utils.RESOLUTION_X = RESOLUTION_X
+model_utils.RESOLUTION_Y = RESOLUTION_Y
+logger.info('Synced resolution to model_utils: %dx%d', RESOLUTION_X, RESOLUTION_Y)
+
 # Write the actual resolved resolution so the web backend / frontend can read it
 _status_dir = os.path.join('/data', 'status')
 os.makedirs(_status_dir, exist_ok=True)
@@ -470,7 +475,7 @@ async def main(_saved_masks):
 
                     if use_sahi and slicer is not None:
                         frame_buf = int(stream_settings.get('frameBuffer', FRAME_BUFFER))
-                        low_x, low_y, high_x, high_y = get_extreme_points(_saved_masks, frame_buf)
+                        low_x, low_y, high_x, high_y = get_extreme_points(_saved_masks, frame_buf, frame_wh=(RESOLUTION_X, RESOLUTION_Y))
                         sahi_rect = (low_x, low_y, high_x, high_y)
                         if hasattr(slicer, '_sahi_slice_wh'):
                             sahi_slice_wh = slicer._sahi_slice_wh
