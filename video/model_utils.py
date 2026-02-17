@@ -5,9 +5,12 @@ import numpy as np
 import urllib.request
 from pathlib import Path
 import shutil
+import hashlib
 import json
 import os
+import pickle
 import subprocess
+import zipfile
 from asyncio import get_event_loop, sleep
 import sys
 import cv2
@@ -155,37 +158,140 @@ def empty_detections() -> sv.Detections:
         class_id=np.empty((0,), dtype=np.int64),
     )
 
+# Exceptions raised by torch.load() for corrupted checkpoint files
+_CORRUPT_CHECKPOINT_ERRORS = (RuntimeError, pickle.UnpicklingError, zipfile.BadZipFile, EOFError, OSError)
+
 MMDET_MODEL_ZOO = {
     "rtmdet_tiny_8xb32-300e_coco": {
         "config": "https://raw.githubusercontent.com/open-mmlab/mmdetection/v3.3.0/configs/rtmdet/rtmdet_tiny_8xb32-300e_coco.py",
         "checkpoint": "https://download.openmmlab.com/mmdetection/v3.0/rtmdet/rtmdet_tiny_8xb32-300e_coco/rtmdet_tiny_8xb32-300e_coco_20220902_112414-78e30dcc.pth",
         "native_input_wh": (640, 640),
+        "expected_size": 57532893,
+        "sha256": "78e30dcce0c6f594eaff0d6977b84b4103688b4aff0ad1aa16008a8cc854a7fb",
     },
     "rtmdet_s_8xb32-300e_coco": {
         "config": "https://raw.githubusercontent.com/open-mmlab/mmdetection/v3.3.0/configs/rtmdet/rtmdet_s_8xb32-300e_coco.py",
         "checkpoint": "https://download.openmmlab.com/mmdetection/v3.0/rtmdet/rtmdet_s_8xb32-300e_coco/rtmdet_s_8xb32-300e_coco_20220905_161602-387a891e.pth",
         "native_input_wh": (640, 640),
+        "expected_size": 91450098,
+        "sha256": "387a891e157cf0ab57d76b3ffc17bf77247089d672532427930b3140f9e789d6",
     },
     "rtmdet_m_8xb32-300e_coco": {
         "config": "https://raw.githubusercontent.com/open-mmlab/mmdetection/v3.3.0/configs/rtmdet/rtmdet_m_8xb32-300e_coco.py",
         "checkpoint": "https://download.openmmlab.com/mmdetection/v3.0/rtmdet/rtmdet_m_8xb32-300e_coco/rtmdet_m_8xb32-300e_coco_20220719_112220-229f527c.pth",
         "native_input_wh": (640, 640),
+        "expected_size": 224299609,
+        "sha256": "229f527ca88498e8894a778a62a878a322b4a3ea2cae09ea537d34b7e907792b",
     },
 }
 
 def download_file(url: str, destination: str) -> None:
+    """Download a file to *destination* atomically via a .part temp file.
+
+    Verifies that the number of bytes written matches the server's
+    Content-Length header.  On mismatch the partial file is removed and
+    a RuntimeError is raised.
+    """
     logger.info('Downloading %s...', url)
-    Path(destination).parent.mkdir(parents=True, exist_ok=True)
-    urllib.request.urlretrieve(url, destination)
-    logger.info('Download complete')
+    dest = Path(destination)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    part = dest.with_suffix(dest.suffix + '.part')
+
+    try:
+        response = urllib.request.urlopen(url)
+        total = int(response.headers.get('Content-Length', 0))
+        downloaded = 0
+        block_size = 1024 * 256  # 256 KB
+        with open(part, 'wb') as f:
+            while True:
+                chunk = response.read(block_size)
+                if not chunk:
+                    break
+                f.write(chunk)
+                downloaded += len(chunk)
+
+        if total > 0 and downloaded != total:
+            part.unlink(missing_ok=True)
+            raise RuntimeError(
+                f'Download size mismatch for {url}: expected {total} bytes, got {downloaded}'
+            )
+
+        # Atomic rename: only a fully-downloaded file lands at the final path
+        shutil.move(str(part), str(dest))
+        logger.info('Download complete (%d bytes)', downloaded)
+    except Exception:
+        part.unlink(missing_ok=True)
+        raise
+
+def _validate_checkpoint(path: Path, expected_size: int | None = None,
+                         sha256_hex: str | None = None) -> bool:
+    """Return True if the checkpoint file at *path* passes integrity checks.
+
+    Checks (in order, short-circuiting):
+      1. File size matches *expected_size* (if provided).
+      2. SHA-256 digest matches *sha256_hex* (if provided).
+      3. If neither 1 nor 2 are available: file is at least 4 KB
+         (a valid .pth is always larger).
+    """
+    if not path.is_file():
+        return False
+
+    actual_size = path.stat().st_size
+
+    if expected_size is not None:
+        if actual_size != expected_size:
+            logger.warning('Checkpoint %s: size mismatch — expected %d, got %d',
+                           path.name, expected_size, actual_size)
+            return False
+
+    if sha256_hex is not None:
+        h = hashlib.sha256()
+        with open(path, 'rb') as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b''):
+                h.update(chunk)
+        if h.hexdigest() != sha256_hex:
+            logger.warning('Checkpoint %s: SHA-256 mismatch — expected %s, got %s',
+                           path.name, sha256_hex, h.hexdigest())
+            return False
+
+    # If no expected_size / sha256 were supplied, at least sanity-check size
+    if expected_size is None and sha256_hex is None:
+        if actual_size < 4096:
+            logger.warning('Checkpoint %s: suspiciously small (%d bytes)', path.name, actual_size)
+            return False
+
+    return True
+
+
+def _delete_corrupt_checkpoint(path: Path) -> None:
+    """Remove a corrupt checkpoint file and log the action."""
+    try:
+        path.unlink(missing_ok=True)
+        logger.warning('Deleted corrupt checkpoint: %s', path)
+    except OSError as e:
+        logger.error('Failed to delete corrupt checkpoint %s: %s', path, e)
+
 
 def is_model_cached(model_name: str) -> bool:
-    """Check whether a model's checkpoint is already available locally."""
+    """Check whether a model's checkpoint is already available locally.
+
+    For curated (MMDET_MODEL_ZOO) models the cached file is validated
+    against the known size and SHA-256.  A corrupt file is deleted so
+    that callers will re-download on the next attempt.
+    """
     if model_name in ('none', ''):
         return True
     cache_root = Path('/data/mmdet')
     checkpoint_path = cache_root / 'checkpoints' / f'{model_name}.pth'
     if checkpoint_path.is_file():
+        zoo_entry = MMDET_MODEL_ZOO.get(model_name, {})
+        if not _validate_checkpoint(
+            checkpoint_path,
+            expected_size=zoo_entry.get('expected_size'),
+            sha256_hex=zoo_entry.get('sha256'),
+        ):
+            _delete_corrupt_checkpoint(checkpoint_path)
+            return False
         return True
     # Check mmengine / torch hub default cache locations
     for cache_dir in [
@@ -363,9 +469,18 @@ def prepare_model(model_name: str, progress_callback=None):
 
     # For curated models, download with progress tracking
     if model_name in MMDET_MODEL_ZOO:
-        url = MMDET_MODEL_ZOO[model_name]['checkpoint']
+        zoo = MMDET_MODEL_ZOO[model_name]
+        url = zoo['checkpoint']
         checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
         _download_with_progress(url, str(checkpoint_path), _report)
+        if not _validate_checkpoint(
+            checkpoint_path,
+            expected_size=zoo.get('expected_size'),
+            sha256_hex=zoo.get('sha256'),
+        ):
+            _delete_corrupt_checkpoint(checkpoint_path)
+            _report('error', 0, f'{model_name}: download failed integrity check')
+            raise RuntimeError(f'Downloaded checkpoint for {model_name} failed integrity validation')
         _report('ready', 100, f'{model_name} downloaded')
         return
 
@@ -376,6 +491,10 @@ def prepare_model(model_name: str, progress_callback=None):
         checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
         _report('downloading', 5, f'Downloading {model_name} from {weight_url[:80]}...')
         _download_with_progress(weight_url, str(checkpoint_path), _report)
+        if not _validate_checkpoint(checkpoint_path):
+            _delete_corrupt_checkpoint(checkpoint_path)
+            _report('error', 0, f'{model_name}: download failed integrity check')
+            raise RuntimeError(f'Downloaded checkpoint for {model_name} failed integrity validation')
         _report('ready', 100, f'{model_name} downloaded')
         return
 
@@ -392,30 +511,47 @@ def prepare_model(model_name: str, progress_callback=None):
 
 
 def _download_with_progress(url: str, dest: str, report_fn):
-    """Download a file with progress reporting."""
+    """Download a file with progress reporting.
+
+    Writes to a .part temp file and renames only after the full payload
+    has been received and the size matches Content-Length.
+    """
     import urllib.request
-    Path(dest).parent.mkdir(parents=True, exist_ok=True)
+    dest_path = Path(dest)
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    part = dest_path.with_suffix(dest_path.suffix + '.part')
 
-    response = urllib.request.urlopen(url)
-    total = int(response.headers.get('Content-Length', 0))
-    downloaded = 0
-    block_size = 1024 * 256  # 256 KB
-    last_pct = -1
+    try:
+        response = urllib.request.urlopen(url)
+        total = int(response.headers.get('Content-Length', 0))
+        downloaded = 0
+        block_size = 1024 * 256  # 256 KB
+        last_pct = -1
 
-    with open(dest, 'wb') as f:
-        while True:
-            chunk = response.read(block_size)
-            if not chunk:
-                break
-            f.write(chunk)
-            downloaded += len(chunk)
-            if total > 0:
-                pct = int(downloaded * 100 / total)
-                if pct != last_pct:
-                    last_pct = pct
-                    report_fn('downloading', pct, f'{downloaded}/{total} bytes')
+        with open(part, 'wb') as f:
+            while True:
+                chunk = response.read(block_size)
+                if not chunk:
+                    break
+                f.write(chunk)
+                downloaded += len(chunk)
+                if total > 0:
+                    pct = int(downloaded * 100 / total)
+                    if pct != last_pct:
+                        last_pct = pct
+                        report_fn('downloading', pct, f'{downloaded}/{total} bytes')
 
-    report_fn('downloading', 100, 'Download complete')
+        if total > 0 and downloaded != total:
+            part.unlink(missing_ok=True)
+            raise RuntimeError(
+                f'Download size mismatch for {url}: expected {total} bytes, got {downloaded}'
+            )
+
+        shutil.move(str(part), str(dest_path))
+        report_fn('downloading', 100, 'Download complete')
+    except Exception:
+        part.unlink(missing_ok=True)
+        raise
 
 
 def _resolve_weight_url(model_name: str) -> str | None:
@@ -536,6 +672,37 @@ def _inject_load_image(cfg):
         pass
 
 
+def _download_checkpoint(model_name: str, checkpoint_path: Path) -> None:
+    """Download the checkpoint for *model_name* to *checkpoint_path*.
+
+    Tries (in order): MMDET_MODEL_ZOO → openmim weight URL → DetInferencer
+    auto-download.  After a successful download the file is validated;
+    a corrupt download is deleted and a RuntimeError is raised.
+    """
+    zoo = MMDET_MODEL_ZOO.get(model_name)
+    if zoo:
+        download_file(zoo['checkpoint'], str(checkpoint_path))
+        if not _validate_checkpoint(
+            checkpoint_path,
+            expected_size=zoo.get('expected_size'),
+            sha256_hex=zoo.get('sha256'),
+        ):
+            _delete_corrupt_checkpoint(checkpoint_path)
+            raise RuntimeError(f'Downloaded checkpoint for {model_name} failed integrity validation')
+        return
+
+    weight_url = _resolve_weight_url(model_name)
+    if weight_url:
+        download_file(weight_url, str(checkpoint_path))
+        if not _validate_checkpoint(checkpoint_path):
+            _delete_corrupt_checkpoint(checkpoint_path)
+            raise RuntimeError(f'Downloaded checkpoint for {model_name} failed integrity validation')
+        return
+
+    # Last resort: let DetInferencer handle the download internally
+    logger.info('No download URL found for %s — relying on DetInferencer auto-download', model_name)
+
+
 def get_mmdet_model(model_name: str) -> Dict[str, Any]:
     """Load any MMDetection model by name.
 
@@ -543,13 +710,29 @@ def get_mmdet_model(model_name: str) -> Dict[str, Any]:
     offline/cached use.  For *any other* model name we resolve the config via
     openmim metafiles (which covers more models than DetInferencer's internal
     registry).
+
+    If loading fails due to a corrupt checkpoint (truncated download, etc.),
+    the damaged file is deleted and download + load is retried once.
     """
     cache_root = Path('/data/mmdet')
     checkpoint_path = cache_root / 'checkpoints' / f'{model_name}.pth'
+    zoo = MMDET_MODEL_ZOO.get(model_name, {})
 
-    # If we have a curated entry, pre-download the checkpoint for offline use
-    if model_name in MMDET_MODEL_ZOO and not checkpoint_path.is_file():
-        download_file(MMDET_MODEL_ZOO[model_name]['checkpoint'], str(checkpoint_path))
+    def _ensure_checkpoint():
+        """Download the checkpoint if missing or if the cached copy is corrupt."""
+        if checkpoint_path.is_file():
+            if _validate_checkpoint(
+                checkpoint_path,
+                expected_size=zoo.get('expected_size'),
+                sha256_hex=zoo.get('sha256'),
+            ):
+                return  # valid cache hit
+            logger.warning('Corrupt checkpoint detected for %s — deleting and re-downloading', model_name)
+            _delete_corrupt_checkpoint(checkpoint_path)
+
+        _download_checkpoint(model_name, checkpoint_path)
+
+    _ensure_checkpoint()
 
     try:
         from mmdet.apis import DetInferencer
@@ -585,31 +768,41 @@ def get_mmdet_model(model_name: str) -> Dict[str, Any]:
             kwargs['model'] = cfg
             return DetInferencer(**kwargs)
 
-    # Try loading by name first (works for models in DetInferencer's registry)
-    # If that fails, resolve the config path from openmim metafiles
-    inferencer = None
-    if checkpoint_path.is_file():
-        try:
-            inferencer = _try_load(model_name, weights=str(checkpoint_path))
-        except ValueError:
-            # Model name not in DetInferencer registry — resolve config from openmim
-            config_path = _resolve_config_path(model_name)
-            if config_path:
-                logger.info('Loading %s via config path: %s', model_name, config_path)
-                inferencer = _try_load(config_path, weights=str(checkpoint_path))
-            else:
+    def _load_inferencer():
+        """Try loading by name first; fall back to openmim config resolution."""
+        if checkpoint_path.is_file():
+            try:
+                return _try_load(model_name, weights=str(checkpoint_path))
+            except ValueError:
+                # Model name not in DetInferencer registry — resolve config from openmim
+                config_path = _resolve_config_path(model_name)
+                if config_path:
+                    logger.info('Loading %s via config path: %s', model_name, config_path)
+                    return _try_load(config_path, weights=str(checkpoint_path))
                 raise
-    else:
-        try:
-            logger.info('No cached checkpoint for "%s", DetInferencer will auto-download...', model_name)
-            inferencer = _try_load(model_name)
-        except ValueError:
-            config_path = _resolve_config_path(model_name)
-            if config_path:
-                logger.info('Loading %s via config path (auto-download): %s', model_name, config_path)
-                inferencer = _try_load(config_path)
-            else:
+        else:
+            try:
+                logger.info('No cached checkpoint for "%s", DetInferencer will auto-download...', model_name)
+                return _try_load(model_name)
+            except ValueError:
+                config_path = _resolve_config_path(model_name)
+                if config_path:
+                    logger.info('Loading %s via config path (auto-download): %s', model_name, config_path)
+                    return _try_load(config_path)
                 raise
+
+    # ── Load with retry-on-corrupt ──────────────────────────────────────
+    try:
+        inferencer = _load_inferencer()
+    except _CORRUPT_CHECKPOINT_ERRORS as exc:
+        logger.warning(
+            'Checkpoint for %s appears corrupt (%s: %s) — deleting and retrying once',
+            model_name, type(exc).__name__, exc,
+        )
+        _delete_corrupt_checkpoint(checkpoint_path)
+        _ensure_checkpoint()
+        # Second attempt: let any exception propagate
+        inferencer = _load_inferencer()
 
     _maybe_set_class_names_from_inferencer(inferencer, model_name)
     native_wh = MMDET_MODEL_ZOO.get(model_name, {}).get('native_input_wh', (640, 640))
