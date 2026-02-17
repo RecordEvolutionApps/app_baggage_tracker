@@ -2,6 +2,7 @@
 services:
   mediasoup:
     build: ./mediasoup
+    restart: unless-stopped
     init: true
     stop_grace_period: 2s
     ports:
@@ -21,6 +22,7 @@ services:
     build:
       context: ./video
       dockerfile: Dockerfile.cpu
+    restart: unless-stopped
     network_mode: service:mediasoup   # Share network namespace so video streams reach mediasoup on localhost
     volumes:
       - data:/data
@@ -52,6 +54,7 @@ services:
     # No nvidia runtime for local dev
   web:
     build: ./web
+    restart: unless-stopped
     volumes:
       - ./web/backend:/app/backend
       - ./web/frontend:/app/frontend

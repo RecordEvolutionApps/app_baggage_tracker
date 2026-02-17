@@ -1,6 +1,7 @@
 services:
     mediasoup:
         build: ./mediasoup
+        restart: unless-stopped
         init: true
         stop_grace_period: 2s
         ports:
@@ -19,6 +20,7 @@ services:
         build:
             context: ./video
             dockerfile: Dockerfile
+        restart: unless-stopped
         volumes:
             - data:/data
         depends_on:
@@ -36,6 +38,7 @@ services:
         # entrypoint: "sleep infinity"
     web:
         build: ./web
+        restart: unless-stopped
         ports:
             - 1100:1100
         volumes:
