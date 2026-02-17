@@ -62,7 +62,7 @@ ENV FORCE_CUDA="1"
 RUN uv pip install --system openmim==0.3.9 && \
 	mim install mmcv==2.1.0
 
-RUN uv pip install --system mmengine==0.10.4 mmdet==3.3.0
+RUN uv pip install --system mmengine==0.10.4 mmdet==3.3.0 mmpretrain==1.2.0
 
 # Install remaining dependencies (changes more frequently)
 RUN uv pip install --system ironflock==1.0.6 matplotlib==3.7.5 pyyaml==6.0.1 defusedxml==0.7.1 \

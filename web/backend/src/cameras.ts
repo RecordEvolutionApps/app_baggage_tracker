@@ -7,6 +7,6 @@
  *   streams.ts  – stream lifecycle, CRUD, camera discovery
  *   settings.ts – per-stream settings updates
  */
-export { getModels, getModelStatus, prepareModel, getModelClasses } from './models.js'
+export { getModels, getModelTags, getModelStatus, prepareModel, getModelClasses } from './models.js'
 export { getStreamSetup, listStreams, createStream, deleteStream, selectCamera, getUSBCameras, getDeviceCameras, getStreamBackendStatus } from './streams.js'
 export { updateStreamModel, updateStreamSahi, updateStreamSmoothing, updateStreamConfidence, updateStreamFrameBuffer, updateStreamNmsIou, updateStreamSahiIou, updateStreamOverlapRatio, updateStreamClassList, updateStreamClassNames } from './settings.js'

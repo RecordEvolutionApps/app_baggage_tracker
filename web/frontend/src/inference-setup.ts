@@ -58,6 +58,12 @@ export class InferenceSetup extends LitElement {
   declare pendingModelId: string;
 
   @state()
+  declare activeTags: Set<string>;
+
+  @state()
+  declare availableTags: Record<string, string[]>;
+
+  @state()
   declare availableClasses: ClassOption[];
 
   @state()
@@ -104,6 +110,7 @@ export class InferenceSetup extends LitElement {
   } | null;
 
   private backendPollTimer: ReturnType<typeof setInterval> | null = null;
+  private fastPollTimer: ReturnType<typeof setInterval> | null = null;
   private modelSizeTimer: ReturnType<typeof setTimeout> | null = null;
   private modelSizeAttempts = 0;
 
@@ -127,6 +134,8 @@ export class InferenceSetup extends LitElement {
     this.selectedDataset = '';
     this.selectedArch = '';
     this.pendingModelId = this.selectedModel;
+    this.activeTags = new Set();
+    this.availableTags = {};
     this.availableClasses = [];
     this.selectedClassIds = new Set();
     this.classFilter = '';
@@ -213,13 +222,27 @@ export class InferenceSetup extends LitElement {
         cursor: pointer;
       }
 
-      .model-drilldown {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+      .model-browser {
+        display: flex;
         gap: 8px;
         flex: 1;
         min-height: 0;
         overflow: hidden;
+      }
+
+      .model-browser .tag-filter-sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        min-width: 180px;
+        max-width: 240px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding-right: 4px;
+      }
+
+      .model-browser .tag-filter-sidebar .tag-dim-label {
+        padding: 6px 2px 2px;
       }
 
       .model-panel {
@@ -565,6 +588,12 @@ export class InferenceSetup extends LitElement {
         max-height: 90vh !important;
       }
 
+      .dialog form[slot="content"] {
+        display: flex;
+        flex-direction: column;
+        min-height: 60vh;
+      }
+
       .model-status-bar {
         display: flex;
         flex-direction: column;
@@ -628,10 +657,142 @@ export class InferenceSetup extends LitElement {
         line-height: 1.2;
       }
 
+      /* ── Tag filter chips ── */
+      .tag-filter-bar {
+        display: flex;
+        gap: 4px;
+        padding: 0 0 6px;
+      }
+
+      .tag-dim-label {
+        font-family: sans-serif;
+        font-size: 0.65rem;
+        font-weight: 600;
+        color: #788894;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding: 4px 2px 2px;
+        width: 100%;
+      }
+
+      .tag-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        border: 1px solid #c0cad4;
+        border-radius: 12px;
+        padding: 2px 8px;
+        font-family: sans-serif;
+        font-size: 0.72rem;
+        color: #455a64;
+        background: #f5f7fa;
+        cursor: pointer;
+        user-select: none;
+        transition: all 0.15s ease;
+        line-height: 1.4;
+        max-width: 100%;
+        min-height: 24px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .tag-chip:hover {
+        border-color: #002e6a;
+        background: #eef2f6;
+      }
+
+      .tag-chip.active {
+        background: #e7f0fb;
+        border-color: #002e6a;
+        color: #002e6a;
+        font-weight: 600;
+      }
+
+      .tag-chip .tag-count {
+        font-size: 0.62rem;
+        color: #999;
+        font-weight: 400;
+      }
+
+      .tag-chip.active .tag-count {
+        color: #002e6a;
+      }
+
+      /* ── Output type badges on model items ── */
+      .output-badge {
+        display: inline-block;
+        font-size: 0.55rem;
+        font-weight: 600;
+        border-radius: 3px;
+        padding: 1px 4px;
+        margin-left: 3px;
+        vertical-align: middle;
+        line-height: 1.2;
+      }
+
+      .output-badge.bbox {
+        color: #1565c0;
+        background: #e3f2fd;
+        border: 1px solid #90caf9;
+      }
+
+      .output-badge.mask {
+        color: #6a1b9a;
+        background: #f3e5f5;
+        border: 1px solid #ce93d8;
+      }
+
+      .output-badge.keypoints {
+        color: #e65100;
+        background: #fff3e0;
+        border: 1px solid #ffcc80;
+      }
+
+      .speed-indicator {
+        display: inline-flex;
+        gap: 1px;
+        margin-left: 4px;
+        vertical-align: middle;
+      }
+
+      .speed-indicator .speed-bar {
+        width: 3px;
+        background: #c0cad4;
+        border-radius: 1px;
+      }
+
+      .speed-indicator .speed-bar.filled {
+        background: #002e6a;
+      }
+
+      .speed-indicator .speed-bar:nth-child(1) { height: 5px; }
+      .speed-indicator .speed-bar:nth-child(2) { height: 8px; }
+      .speed-indicator .speed-bar:nth-child(3) { height: 11px; }
+
+      .tag-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 3px;
+        margin-top: 4px;
+      }
+
+      .tag-badge-sm {
+        display: inline-block;
+        font-size: 0.6rem;
+        border-radius: 3px;
+        padding: 1px 4px;
+        line-height: 1.3;
+        border: 1px solid #d0d7de;
+        color: #57606a;
+        background: #f6f8fa;
+      }
+
       .backend-badge {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
-        gap: 6px;
+        gap: 4px 6px;
         padding: 6px 10px;
         border-radius: 4px;
         font-family: sans-serif;
@@ -693,6 +854,39 @@ export class InferenceSetup extends LitElement {
         color: inherit;
         opacity: 0.75;
       }
+
+      .backend-badge .running-model {
+        flex-basis: 100%;
+        font-size: 0.75rem;
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        padding-left: 14px;
+      }
+
+      .backend-badge.model-mismatch {
+        border-color: #f0ad4e;
+        background: #fff9ed;
+      }
+
+      .backend-badge.model-mismatch .badge-dot {
+        background: #f0ad4e;
+        animation: pulse-dot 1.2s ease-in-out infinite;
+      }
+
+      @keyframes pulse-dot {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.3; }
+      }
+
+      .backend-badge .model-switching {
+        flex-basis: 100%;
+        font-size: 0.7rem;
+        color: #b37a00;
+        font-style: italic;
+        padding-left: 14px;
+      }
     `,
   ];
 
@@ -712,6 +906,10 @@ export class InferenceSetup extends LitElement {
       clearInterval(this.backendPollTimer);
       this.backendPollTimer = null;
     }
+    if (this.fastPollTimer) {
+      clearInterval(this.fastPollTimer);
+      this.fastPollTimer = null;
+    }
     if (this.modelSizeTimer) {
       clearTimeout(this.modelSizeTimer);
       this.modelSizeTimer = null;
@@ -727,19 +925,44 @@ export class InferenceSetup extends LitElement {
       );
       if (res.ok) {
         this.backendInfo = await res.json();
+        // Stop fast polling once the running model matches the selected model
+        if (this.fastPollTimer && !this._isModelMismatch) {
+          clearInterval(this.fastPollTimer);
+          this.fastPollTimer = null;
+        }
       }
     } catch {
       // Silently ignore — badge stays as-is
     }
   }
 
+  /** Poll backend status every 3s until the running model catches up to the selected one. */
+  private _startFastBackendPoll() {
+    if (this.fastPollTimer) clearInterval(this.fastPollTimer);
+    this.fastPollTimer = setInterval(() => this.fetchBackendStatus(), 3000);
+    // Safety: stop after 2 minutes regardless
+    setTimeout(() => {
+      if (this.fastPollTimer) {
+        clearInterval(this.fastPollTimer);
+        this.fastPollTimer = null;
+      }
+    }, 120_000);
+  }
+
+  private get _isModelMismatch(): boolean {
+    if (!this.backendInfo?.model || !this.selectedModel) return false;
+    return this.backendInfo.model !== this.selectedModel && this.selectedModel !== 'none';
+  }
+
   private get _backendBadgeClass(): string {
     if (!this.backendInfo) return 'unknown';
     const { backend, requested_backend } = this.backendInfo;
-    if (backend === 'tensorrt') return 'tensorrt';
-    if (backend === 'mmdet' && requested_backend === 'tensorrt') return 'fallback';
-    if (backend === 'mmdet') return 'mmdet';
-    return 'unknown';
+    let cls = 'unknown';
+    if (backend === 'tensorrt') cls = 'tensorrt';
+    else if (backend === 'mmdet' && requested_backend === 'tensorrt') cls = 'fallback';
+    else if (backend === 'mmdet') cls = 'mmdet';
+    if (this._isModelMismatch) cls += ' model-mismatch';
+    return cls;
   }
 
   private get _backendLabel(): string {
@@ -754,6 +977,11 @@ export class InferenceSetup extends LitElement {
     }
     if (backend === 'mmdet') return `PyTorch FP32`;
     return this.backendInfo.message || 'Unknown';
+  }
+
+  private get _runningModelName(): string {
+    if (!this.backendInfo?.model) return '';
+    return this.backendInfo.model;
   }
 
   private get _backendDetail(): string {
@@ -801,6 +1029,7 @@ export class InferenceSetup extends LitElement {
     }
     this.modelSizeAttempts = 0;
     this.scheduleModelSizeRefresh();
+    this.fetchTags();
     // Set current model from camSetup if available
     if (this.camSetup?.camera?.model) {
       this.selectedModel = this.camSetup.camera.model;
@@ -808,6 +1037,15 @@ export class InferenceSetup extends LitElement {
     if (this.selectedModel) {
       this.fetchModelClasses(this.selectedModel);
       this.syncModelSelection();
+    }
+  }
+
+  private async fetchTags() {
+    try {
+      const res = await fetch(`${this.basepath}/cameras/models/tags`);
+      if (res.ok) this.availableTags = await res.json();
+    } catch (err) {
+      console.error('Failed to fetch model tags', err);
     }
   }
 
@@ -856,15 +1094,7 @@ export class InferenceSetup extends LitElement {
     arch: string;
     models: ModelOption[];
   }[] {
-    const q = this.modelFilter.toLowerCase();
-    const filtered = this.models.filter(
-      (m) =>
-        !q ||
-        m.id.toLowerCase().includes(q) ||
-        m.label.toLowerCase().includes(q) ||
-        (m.description || '').toLowerCase().includes(q) ||
-        (m.openVocab && 'open vocab'.includes(q)),
-    );
+    const filtered = this.filteredModels;
 
     // Group by arch (falling back to first segment of the id)
     const groups = new Map<string, ModelOption[]>();
@@ -881,14 +1111,89 @@ export class InferenceSetup extends LitElement {
 
   private get filteredModels(): ModelOption[] {
     const q = this.modelFilter.toLowerCase();
-    return this.models.filter(
-      (m) =>
-        !q ||
+    const activeTags = this.activeTags;
+    return this.models.filter((m) => {
+      // Text search
+      if (q && !(
         m.id.toLowerCase().includes(q) ||
         m.label.toLowerCase().includes(q) ||
         (m.description || '').toLowerCase().includes(q) ||
-        (m.openVocab && 'open vocab'.includes(q)),
+        (m.openVocab && 'open vocab'.includes(q)) ||
+        (m.tags || []).some(t => t.toLowerCase().includes(q))
+      )) return false;
+      // Tag filter: model must have ALL active tags
+      if (activeTags.size > 0) {
+        const modelTags = new Set(m.tags || []);
+        for (const tag of activeTags) {
+          if (!modelTags.has(tag)) return false;
+        }
+      }
+      return true;
+    });
+  }
+
+  /** Toggle a tag in the active filter set */
+  private toggleTag(tag: string) {
+    const next = new Set(this.activeTags);
+    if (next.has(tag)) {
+      next.delete(tag);
+    } else {
+      next.add(tag);
+    }
+    this.activeTags = next;
+    // Reset drilldown selection when tags change
+    this.selectedDataset = '';
+    this.selectedArch = '';
+  }
+
+  /** Clear all active tag filters */
+  private clearTags() {
+    this.activeTags = new Set();
+  }
+
+  /** Get tag counts for currently filtered models (by dimension) */
+  private getTagCounts(): Map<string, number> {
+    const counts = new Map<string, number>();
+    // Count against text-filtered models only (not tag-filtered) to show what's available
+    const q = this.modelFilter.toLowerCase();
+    const textFiltered = this.models.filter((m) =>
+      !q ||
+      m.id.toLowerCase().includes(q) ||
+      m.label.toLowerCase().includes(q) ||
+      (m.description || '').toLowerCase().includes(q) ||
+      (m.openVocab && 'open vocab'.includes(q))
     );
+    for (const m of textFiltered) {
+      for (const tag of (m.tags || [])) {
+        counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }
+
+  /** Get display label for a tag (strip dimension prefix, format nicely) */
+  private tagLabel(tag: string): string {
+    const value = tag.includes(':') ? tag.split(':')[1] : tag;
+    return value.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  /** Get the speed level (1-3) from a model's tags */
+  private getSpeedLevel(model: ModelOption): number {
+    const tags = model.tags || [];
+    if (tags.includes('speed:fast')) return 3;
+    if (tags.includes('speed:balanced')) return 2;
+    if (tags.includes('speed:accurate')) return 1;
+    return 0;
+  }
+
+  /** Get output type badges for a model */
+  private getOutputBadges(model: ModelOption): { label: string; cls: string }[] {
+    const tags = model.tags || [];
+    const badges: { label: string; cls: string }[] = [];
+    if (tags.includes('output:bounding-box')) badges.push({ label: 'BBox', cls: 'bbox' });
+    if (tags.includes('output:mask')) badges.push({ label: 'Mask', cls: 'mask' });
+    if (tags.includes('output:keypoints')) badges.push({ label: 'KPts', cls: 'keypoints' });
+    return badges;
   }
 
   private normalizeDataset(model: ModelOption): string {
@@ -1105,6 +1410,8 @@ export class InferenceSetup extends LitElement {
       this.modelStatusMessage = 'Model applied successfully';
       // Refresh backend status after stream restart (with delay for process startup)
       setTimeout(() => this.fetchBackendStatus(), 5000);
+      // Poll faster until the running model catches up
+      this._startFastBackendPoll();
       // Auto-clear the status bar after a short delay
       setTimeout(() => {
         if (this.modelStatus === 'ready') {
@@ -1401,6 +1708,12 @@ export class InferenceSetup extends LitElement {
           ${this._backendDetail ? html`
             <span class="badge-detail">${this._backendDetail}</span>
           ` : ''}
+          ${this._runningModelName ? html`
+            <span class="running-model" title="${this._runningModelName}">${this._runningModelName}</span>
+          ` : ''}
+          ${this._isModelMismatch ? html`
+            <span class="model-switching">⟶ Switching model…</span>
+          ` : ''}
         </div>
         ` : ''}
 
@@ -1613,50 +1926,52 @@ export class InferenceSetup extends LitElement {
             @input=${this.onModelFilterInput}
             ?disabled=${this.modelStatus !== 'idle' && this.modelStatus !== 'ready' && this.modelStatus !== 'error'}
           />
-          <div class="model-drilldown">
-            <div class="model-panel">
-              <div class="model-panel-header">Training Data</div>
-              <div class="scroller">
-                ${repeat(this.datasetOptions, d => d.id, d => html`
-                    <button
-                    class="model-item ${d.id === this.selectedDataset ? 'active' : ''}"
-                    type="button"
-                    @click=${() => { this.selectedDataset = d.id; this.selectedArch = ''; }}
-                    >
-                    ${d.label}
-                    <span class="model-item-count">${d.count}</span>
-                    </button>
-                `)}
+          <div class="model-browser">
+            ${Object.keys(this.availableTags).length > 0 ? html`
+              <div class="tag-filter-sidebar">
+                ${this.activeTags.size > 0 ? html`
+                  <button class="tag-chip active" type="button" @click=${this.clearTags}
+                    style="border-color: #b33; color: #b33; background: #fff0f0;">✕ Clear filters</button>
+                ` : ''}
+                ${Object.entries(this.availableTags).map(([dim, tags]) => {
+                  const counts = this.getTagCounts();
+                  const dimLabels: Record<string, string> = {
+                    task: 'Task', output: 'Output', speed: 'Speed',
+                    capability: 'Capability', domain: 'Domain',
+                  };
+                  return html`
+                    <span class="tag-dim-label">${dimLabels[dim] || dim}</span>
+                    ${tags.map(tag => {
+                      const count = counts.get(tag) ?? 0;
+                      const isActive = this.activeTags.has(tag);
+                      return html`
+                        <button
+                          class="tag-chip ${isActive ? 'active' : ''}"
+                          type="button"
+                          @click=${() => this.toggleTag(tag)}
+                        >${this.tagLabel(tag)} <span class="tag-count">${count}</span></button>
+                      `;
+                    })}
+                  `;
+                })}
               </div>
-            </div>
+            ` : ''}
             <div class="model-panel">
-              <div class="model-panel-header">Architecture</div>
+              <div class="model-panel-header">Models <span class="model-item-count">${this.filteredModels.length}</span></div>
               <div class="scroller">
-                ${repeat(this.archOptions, a => a.id, a => html`
-                    <button
-                    class="model-item ${a.id === this.selectedArch ? 'active' : ''}"
-                    type="button"
-                    @click=${() => { this.selectedArch = a.id; }}
-                    >
-                    ${a.id.toUpperCase()}
-                    <span class="model-item-count">${a.count}</span>
-                    </button>
-                `)}
-              </div>
-            </div>
-            <div class="model-panel">
-              <div class="model-panel-header">Models</div>
-              <div class="scroller">
-                ${repeat(this.modelOptions, m => m.id, m => html`
+                ${repeat(this.filteredModels, m => m.id, m => {
+                    const outputBadges = this.getOutputBadges(m);
+                    const speedLevel = this.getSpeedLevel(m);
+                    return html`
                     <button
                     class="model-item ${m.id === this.pendingModelId ? 'active' : ''}"
                     type="button"
                     ?disabled=${this.modelStatus !== 'idle' && this.modelStatus !== 'ready' && this.modelStatus !== 'error'}
                     @click=${() => this.onPendingModelSelect(m.id)}
                     >
-                    ${m.label}${m.openVocab ? html`<span class="ov-badge">Open Vocab</span>` : ''}${m.fileSize ? html`<span class="model-item-count">${m.fileSize} MB</span>` : ''}
+                    <span>${m.label}${m.openVocab ? html`<span class="ov-badge">Open Vocab</span>` : ''}${outputBadges.map(b => html`<span class="output-badge ${b.cls}">${b.label}</span>`)}${speedLevel > 0 ? html`<span class="speed-indicator" title="${speedLevel === 3 ? 'Fast' : speedLevel === 2 ? 'Balanced' : 'Accurate'}">${[1,2,3].map(i => html`<span class="speed-bar ${i <= speedLevel ? 'filled' : ''}"></span>`)}</span>` : ''}</span>${m.fileSize ? html`<span class="model-item-count">${m.fileSize} MB</span>` : ''}
                     </button>
-                `)}
+                `;})}
               </div>
             </div>
           </div>
@@ -1668,6 +1983,11 @@ export class InferenceSetup extends LitElement {
               ` : (this.pendingModelInfo.summary ? html`
                 <div>${this.pendingModelInfo.summary}</div>
               ` : html`<div>No description available.</div>`)}
+              ${(this.pendingModelInfo.tags || []).length > 0 ? html`
+                <div class="tag-badges">
+                  ${(this.pendingModelInfo.tags || []).map(tag => html`<span class="tag-badge-sm">${this.tagLabel(tag)}</span>`)}
+                </div>
+              ` : ''}
               ${this.pendingModelInfo.task ? html`
                 <div style="margin-top: 6px;">Task: ${this.pendingModelInfo.task}</div>
               ` : ''}

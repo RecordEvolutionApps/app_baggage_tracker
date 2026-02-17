@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from model_catalog import discover_mmdet_models, get_model_classes
+from model_catalog import discover_mmdet_models, get_model_classes, get_all_tags
 
 logger = logging.getLogger('routes.models')
 
@@ -32,6 +32,13 @@ class PrepareRequest(BaseModel):
 def list_models():
     """Return available MMDetection models discovered from the installed package."""
     return discover_mmdet_models()
+
+
+@router.get("/models/tags")
+def list_tags():
+    """Return all available tags grouped by dimension, for building filter UI."""
+    models = discover_mmdet_models()
+    return get_all_tags(models)
 
 
 @router.get("/models/{model_id}/classes")

@@ -972,49 +972,28 @@ def infer_frame(frame: np.ndarray, model_bundle: Dict[str, Any], confidence=None
 
 def infer_mmdet(frame: np.ndarray, inferencer, confidence=None) -> Optional[sv.Detections]:
     try:
-        results = inferencer(frame, return_vis=False, no_save_pred=True, print_result=False)
+        # return_datasamples=True gives us the raw DetDataSample which
+        # sv.Detections.from_mmdetection() can convert directly — including
+        # instance masks (RLE or tensor) without manual decoding.
+        results = inferencer(frame, return_vis=False, no_save_pred=True,
+                             print_result=False, return_datasamples=True)
         predictions = results.get('predictions', [])
         if not predictions:
             return False
-        pred = predictions[0]
-        bboxes = np.array(pred.get('bboxes', []), dtype=np.float32)
-        scores = np.array(pred.get('scores', []), dtype=np.float32)
-        labels = np.array(pred.get('labels', []), dtype=np.int64)
-        if bboxes.size == 0:
+
+        detections = sv.Detections.from_mmdetection(predictions[0])
+        if len(detections) == 0:
             return False
 
-        # Extract instance masks if the model provides them (e.g. Mask R-CNN)
-        raw_masks = pred.get('masks', None)
-
+        # Apply confidence + class filtering
         conf_threshold = confidence if confidence is not None else CONF
-        keep = scores >= conf_threshold
+        keep = detections.confidence >= conf_threshold
         if CLASS_LIST:
-            class_mask = np.isin(labels, CLASS_LIST)
-            keep = np.logical_and(keep, class_mask)
+            keep = np.logical_and(keep, np.isin(detections.class_id, CLASS_LIST))
 
-        bboxes = bboxes[keep]
-        scores = scores[keep]
-        labels = labels[keep]
+        detections = detections[keep]
+        return detections if len(detections) > 0 else False
 
-        if bboxes.size == 0:
-            return False
-
-        # Build mask array: (N, H, W) boolean if masks were returned
-        masks_np = None
-        if raw_masks is not None and len(raw_masks) > 0:
-            try:
-                masks_arr = np.array(raw_masks, dtype=np.uint8)
-                if masks_arr.ndim == 3:
-                    masks_np = masks_arr[keep].astype(bool)
-            except Exception as mask_err:
-                logger.debug('Could not parse instance masks: %s', mask_err)
-
-        return sv.Detections(
-            xyxy=bboxes,
-            confidence=scores,
-            class_id=labels,
-            mask=masks_np,
-        )
     except Exception as e:
         logger.error('Failed to extract detections from MMDetection result: %s', e, exc_info=True)
         return False
@@ -1055,9 +1034,12 @@ def processFrame(frame, detections, saved_masks, settings_dict=None):
 def _processFrameInner(frame, detections, saved_masks, settings_dict=None):
 
     try:
+        has_masks = detections.mask is not None
         detections = tracker.update_with_detections(detections)
         use_smoothing = settings_dict.get('useSmoothing', SMOOTHING) if settings_dict else SMOOTHING
-        if use_smoothing:
+        # DetectionsSmoother is incompatible with segmentation masks —
+        # it can drop or corrupt them.  Skip smoothing when masks are present.
+        if use_smoothing and not has_masks:
             detections = smoother.update_with_detections(detections)
     except Exception as e:
         logger.warning('Error when smoothing detections or updating tracker: %s', e, exc_info=True)

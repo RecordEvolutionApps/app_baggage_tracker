@@ -166,6 +166,7 @@ export type ModelOption = {
   description?: string
   openVocab?: boolean
   fileSize?: number
+  tags?: string[]
 }
 
 export type ClassOption = {

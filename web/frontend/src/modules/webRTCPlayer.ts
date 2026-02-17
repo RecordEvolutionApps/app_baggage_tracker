@@ -118,8 +118,23 @@ function sendRequest(msg: Record<string, any>): Promise<any> {
   });
 }
 
+// Keep a reference to the video players so unsolicited messages can trigger resubscribe
+let activeVideoPlayers: VideoPlayers = {};
+
 function onWsMessage(event: MessageEvent): void {
   const msg = JSON.parse(event.data);
+
+  // Handle unsolicited server notifications (no matching request id)
+  if (msg.type === 'producerClosed' && msg.camId) {
+    console.warn(`[mediasoup] Producer closed for ${msg.camId} — resubscribing…`);
+    const videoEl = activeVideoPlayers[msg.camId];
+    if (videoEl) {
+      cleanupCamera(msg.camId);
+      void subscribeUntilReady(msg.camId, videoEl, sessionId);
+    }
+    return;
+  }
+
   const cb = pending.get(msg.id);
   if (cb) {
     pending.delete(msg.id);
@@ -138,6 +153,8 @@ async function initMediasoup(videoPlayers: VideoPlayers): Promise<void> {
   initializing = true;
   const currentSessionId = ++sessionId;
 
+  // Store reference for unsolicited message handling (e.g. producerClosed)
+  activeVideoPlayers = videoPlayers;
 
   // Clean up any previous session
   cleanup();
@@ -341,7 +358,7 @@ async function subscribeToCamera(
     if (videoEl.videoWidth > 0 || videoEl.videoHeight > 0) return;
 
     scheduleResubscribe(camId, videoEl, forSessionId);
-  }, 60000);
+  }, 10000);
   noFramesTimers.set(camId, noFramesId);
 
   // resumeConsumer already sent above

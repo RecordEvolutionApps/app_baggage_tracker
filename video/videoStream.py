@@ -139,7 +139,8 @@ def setVideoSource(device):
                 gst_pipe = (
                     f"souphttpsrc location={device} ! queue"
                     " ! h264parse ! nvv4l2decoder"
-                    " ! nvvidconv ! video/x-raw, format=BGR ! appsink drop=1"
+                    " ! nvvidconv ! video/x-raw, format=BGRx"
+                    " ! videoconvert ! video/x-raw, format=BGR ! appsink drop=1"
                 )
                 logger.info('Trying GStreamer HW decode for HTTP: %s', gst_pipe)
                 cap = cv2.VideoCapture(gst_pipe, cv2.CAP_GSTREAMER)
@@ -148,10 +149,12 @@ def setVideoSource(device):
                     cap = None
 
             if cap is None:
-                cap = cv2.VideoCapture(device)
+                # Explicitly request FFmpeg so OpenCV doesn't fall back to
+                # CAP_IMAGES (which misinterprets URLs as image-sequence paths).
+                cap = cv2.VideoCapture(device, cv2.CAP_FFMPEG)
                 if not cap.isOpened():
-                    logger.warning('FFmpeg backend failed, trying without explicit backend: %s', device)
-                    cap = cv2.VideoCapture(device)
+                    logger.warning('FFmpeg backend failed, trying auto backend: %s', device)
+                    cap = cv2.VideoCapture(device, cv2.CAP_ANY)
 
             if cap.isOpened():
                 actual_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -165,20 +168,32 @@ def setVideoSource(device):
 
     elif device.startswith('rtsp:'):
         # Use GStreamer pipeline with HW decoder on Jetson for zero-copy GPU decode.
-        # Falls back to default OpenCV backend if GStreamer is unavailable.
+        # Falls back to FFmpeg backend if GStreamer is unavailable.
+        cap = None
         if torch.cuda.is_available():
             gst_pipe = (
                 f"rtspsrc location={device} latency=200 ! queue"
                 " ! rtph264depay ! h264parse ! nvv4l2decoder"
-                " ! nvvidconv ! video/x-raw, format=BGR ! appsink drop=1"
+                " ! nvvidconv ! video/x-raw, format=BGRx"
+                " ! videoconvert ! video/x-raw, format=BGR ! appsink drop=1"
             )
             logger.info('RTSP via GStreamer HW decode: %s', gst_pipe)
             cap = cv2.VideoCapture(gst_pipe, cv2.CAP_GSTREAMER)
             if not cap.isOpened():
-                logger.warning('GStreamer RTSP pipeline failed, falling back to default')
-                cap = cv2.VideoCapture(device)
-        else:
-            cap = cv2.VideoCapture(device)
+                logger.warning('GStreamer RTSP pipeline failed, falling back to FFmpeg')
+                cap = None
+
+        if cap is None:
+            # Set RTSP connection timeout (10s) via FFmpeg options to avoid
+            # blocking indefinitely on unreachable / slow RTSP servers.
+            # stimeout is in microseconds for FFmpeg's RTSP demuxer.
+            os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;tcp|stimeout;10000000'
+            logger.info('Opening RTSP via FFmpeg: %s', device)
+            cap = cv2.VideoCapture(device, cv2.CAP_FFMPEG)
+            if not cap.isOpened():
+                logger.warning('FFmpeg RTSP failed, trying auto backend: %s', device)
+                cap = cv2.VideoCapture(device, cv2.CAP_ANY)
+
         # Read actual resolution from RTSP stream
         if cap.isOpened():
             actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -187,6 +202,8 @@ def setVideoSource(device):
                 RESOLUTION_X = actual_w
                 RESOLUTION_Y = actual_h
                 logger.info('RTSP stream opened: %dx%d', RESOLUTION_X, RESOLUTION_Y)
+        else:
+            logger.error('Failed to open RTSP stream: %s', device)
     elif device.startswith('demoVideo'):
         # Use FFmpeg backend — GStreamer can't reliably re-open m4v files
         # (fails with "unable to query duration of stream" on subsequent opens)
@@ -220,6 +237,17 @@ def setVideoSource(device):
 
 cap = setVideoSource(device)
 
+# If the source failed to open, retry in a loop before giving up
+_open_retries = 0
+while not cap.isOpened() and _open_retries < 12:
+    _open_retries += 1
+    logger.warning('Source not open, retrying in 5s (%d/12)...', _open_retries)
+    time.sleep(5)
+    cap = setVideoSource(device)
+
+if not cap.isOpened():
+    logger.error('Failed to open video source after retries: %s', device)
+
 logger.info('Resolution: %dx%d, source: %s', RESOLUTION_X, RESOLUTION_Y, device)
 cap.set(3, RESOLUTION_X)
 cap.set(4, RESOLUTION_Y)
@@ -241,7 +269,7 @@ write_backend_status(args.camStream, model)
 # print("CUDA available:", torch.cuda.is_available(), 'GPUs', torch.cuda.device_count())
 
 async def main(_saved_masks):
-    global cap
+    global cap, model, current_model_name
     try:
         fps_monitor = sv.FPSMonitor()
         start_time = time.time()
@@ -322,6 +350,20 @@ async def main(_saved_masks):
             overlap_ratio = 0.2
 
             skip_inference = stream_settings.get('model', '') == 'none'
+
+            # ── Hot-reload model when the user picks a different one ──
+            new_model_name = stream_settings.get('model', current_model_name)
+            if new_model_name and new_model_name != 'none' and new_model_name != current_model_name:
+                logger.info('Model changed: %s -> %s — reloading...', current_model_name, new_model_name)
+                try:
+                    model = getModel(new_model_name)
+                    current_model_name = new_model_name
+                    slicer = None  # force SAHI re-init with new model
+                    logger.info('Model reloaded: %s, native input: %s',
+                                current_model_name, model.get('native_input_wh', 'unknown'))
+                    write_backend_status(args.camStream, model)
+                except Exception as e:
+                    logger.error('Failed to reload model %s: %s', new_model_name, e, exc_info=True)
 
             # Dynamically update class filter from stream settings
             settings_class_list = stream_settings.get('classList', None)

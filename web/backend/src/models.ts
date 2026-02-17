@@ -22,6 +22,7 @@ let cachedModels: {
     description?: string;
     openVocab?: boolean;
     fileSize?: number;
+    tags?: string[];
 }[] | null = null
 
 let cachedAt = 0
@@ -40,6 +41,7 @@ async function fetchAvailableModels(): Promise<{
     description?: string;
     openVocab?: boolean;
     fileSize?: number;
+    tags?: string[];
 }[]> {
     if (cachedModels) {
         const now = Date.now()
@@ -78,6 +80,16 @@ async function fetchAvailableModels(): Promise<{
 
 export async function getModels(): Promise<any> {
     return fetchAvailableModels()
+}
+
+export async function getModelTags(): Promise<any> {
+    try {
+        const res = await fetch(`${VIDEO_API}/models/tags`, { signal: AbortSignal.timeout(30000) })
+        if (res.ok) return await res.json()
+    } catch (err) {
+        console.error('Failed to fetch model tags from video API:', err)
+    }
+    return {}
 }
 
 export async function getModelStatus(ctx: Context): Promise<any> {

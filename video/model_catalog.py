@@ -439,6 +439,189 @@ ARCH_INFO: dict[str, dict[str, str]] = {
 }
 
 
+# ── Tag system ───────────────────────────────────────────────────────────────
+# Tags are organized by dimension so users can filter models without knowing
+# architecture internals.  Each model gets tags auto-assigned based on its
+# architecture family, config name, and dataset.
+
+TAG_DIMENSIONS = {
+    'task':        'What the model does',
+    'output':      'What kind of results it produces',
+    'speed':       'Performance profile (speed vs quality)',
+    'capability':  'Special abilities',
+    'domain':      'What it was trained on',
+}
+
+# Architecture → tags mapping.  Keys are the arch family (first segment of
+# config name).  Values list the tags that apply.
+ARCH_TAGS: dict[str, list[str]] = {
+    # ── Single-stage detectors (fast) ──
+    'rtmdet':      ['task:object-detection', 'output:bounding-box', 'speed:fast', 'capability:real-time'],
+    'yolox':       ['task:object-detection', 'output:bounding-box', 'speed:fast', 'capability:real-time'],
+    'yolov3':      ['task:object-detection', 'output:bounding-box', 'speed:fast', 'capability:real-time'],
+    'yolov5':      ['task:object-detection', 'output:bounding-box', 'speed:fast', 'capability:real-time'],
+    'yolov6':      ['task:object-detection', 'output:bounding-box', 'speed:fast', 'capability:real-time'],
+    'yolov7':      ['task:object-detection', 'output:bounding-box', 'speed:fast', 'capability:real-time'],
+    'yolov8':      ['task:object-detection', 'output:bounding-box', 'speed:fast', 'capability:real-time'],
+    'ssd':         ['task:object-detection', 'output:bounding-box', 'speed:fast', 'capability:real-time'],
+    'retinanet':   ['task:object-detection', 'output:bounding-box', 'speed:balanced'],
+    'fcos':        ['task:object-detection', 'output:bounding-box', 'speed:balanced'],
+    'centernet':   ['task:object-detection', 'output:bounding-box', 'speed:balanced'],
+    'atss':        ['task:object-detection', 'output:bounding-box', 'speed:balanced'],
+    'gfl':         ['task:object-detection', 'output:bounding-box', 'speed:balanced'],
+    'tood':        ['task:object-detection', 'output:bounding-box', 'speed:balanced'],
+    'vfnet':       ['task:object-detection', 'output:bounding-box', 'speed:balanced'],
+    'paa':         ['task:object-detection', 'output:bounding-box', 'speed:balanced'],
+    'efficientdet': ['task:object-detection', 'output:bounding-box', 'speed:balanced'],
+
+    # ── Two-stage / high-accuracy detectors ──
+    'faster':      ['task:object-detection', 'output:bounding-box', 'speed:accurate'],
+    'cascade':     ['task:object-detection', 'output:bounding-box', 'speed:accurate'],
+    'libra':       ['task:object-detection', 'output:bounding-box', 'speed:accurate'],
+    'sparse':      ['task:object-detection', 'output:bounding-box', 'speed:accurate'],
+    'sabl':        ['task:object-detection', 'output:bounding-box', 'speed:accurate'],
+
+    # ── Transformer-based detectors ──
+    'detr':        ['task:object-detection', 'output:bounding-box', 'speed:accurate'],
+    'dino':        ['task:object-detection', 'output:bounding-box', 'speed:accurate'],
+    'deformable':  ['task:object-detection', 'output:bounding-box', 'speed:balanced'],
+    'conditional': ['task:object-detection', 'output:bounding-box', 'speed:balanced'],
+    'dab':         ['task:object-detection', 'output:bounding-box', 'speed:balanced'],
+    'co-detr':     ['task:object-detection', 'output:bounding-box', 'speed:accurate'],
+    'ddq':         ['task:object-detection', 'output:bounding-box', 'speed:accurate'],
+
+    # ── Instance segmentation ──
+    'mask':        ['task:instance-segmentation', 'task:object-detection', 'output:mask', 'output:bounding-box', 'speed:accurate'],
+    'mask2former': ['task:instance-segmentation', 'task:object-detection', 'output:mask', 'output:bounding-box', 'speed:accurate'],
+    'maskformer':  ['task:instance-segmentation', 'task:object-detection', 'output:mask', 'output:bounding-box', 'speed:accurate'],
+    'queryinst':   ['task:instance-segmentation', 'task:object-detection', 'output:mask', 'output:bounding-box', 'speed:accurate'],
+    'condinst':    ['task:instance-segmentation', 'task:object-detection', 'output:mask', 'output:bounding-box', 'speed:balanced'],
+    'solov2':      ['task:instance-segmentation', 'output:mask', 'speed:balanced'],
+    'solo':        ['task:instance-segmentation', 'output:mask', 'speed:balanced'],
+    'pointrend':   ['task:instance-segmentation', 'task:object-detection', 'output:mask', 'output:bounding-box', 'speed:accurate'],
+    'htc':         ['task:instance-segmentation', 'task:object-detection', 'output:mask', 'output:bounding-box', 'speed:accurate'],
+    'scnet':       ['task:instance-segmentation', 'task:object-detection', 'output:mask', 'output:bounding-box', 'speed:accurate'],
+    'panoptic':    ['task:instance-segmentation', 'task:object-detection', 'output:mask', 'output:bounding-box', 'speed:accurate'],
+    'rtmdet-ins':  ['task:instance-segmentation', 'task:object-detection', 'output:mask', 'output:bounding-box', 'speed:fast', 'capability:real-time'],
+
+    # ── Open-vocabulary / grounding ──
+    'grounding':   ['task:object-detection', 'output:bounding-box', 'speed:accurate', 'capability:open-vocabulary'],
+    'glip':        ['task:object-detection', 'output:bounding-box', 'speed:accurate', 'capability:open-vocabulary'],
+    'detic':       ['task:object-detection', 'output:bounding-box', 'speed:balanced', 'capability:open-vocabulary'],
+    'yolo-world':  ['task:object-detection', 'output:bounding-box', 'speed:fast', 'capability:open-vocabulary', 'capability:real-time'],
+
+    # ── Keypoint / anchor-free research ──
+    'cornernet':   ['task:object-detection', 'output:bounding-box', 'output:keypoints', 'speed:accurate'],
+    'foveabox':    ['task:object-detection', 'output:bounding-box', 'speed:balanced'],
+    'ghm':         ['task:object-detection', 'output:bounding-box', 'speed:balanced'],
+
+    # ── Backbones (these are typically paired with a detection head) ──
+    'convnext':    ['task:object-detection', 'output:bounding-box', 'speed:accurate'],
+    'swin':        ['task:object-detection', 'output:bounding-box', 'speed:accurate'],
+}
+
+# Dataset → domain tags
+DATASET_TAGS: dict[str, str] = {
+    'coco':        'domain:general-purpose',
+    'voc':         'domain:general-purpose',
+    'lvis':        'domain:general-purpose',
+    'objects365':  'domain:general-purpose',
+    'crowdhuman':  'domain:people',
+    'wider':       'domain:faces',
+    'cityscapes':  'domain:traffic',
+    'openimages':  'domain:general-purpose',
+}
+
+# Size-variant → speed override (smaller variants are faster)
+SIZE_SPEED_OVERRIDE: dict[str, str] = {
+    'nano': 'speed:fast',
+    'tiny': 'speed:fast',
+    'small': 'speed:fast',
+    's': 'speed:fast',
+    'medium': 'speed:balanced',
+    'm': 'speed:balanced',
+    'large': 'speed:accurate',
+    'l': 'speed:accurate',
+    'xlarge': 'speed:accurate',
+    'x': 'speed:accurate',
+}
+
+
+def compute_model_tags(arch: str, config_name: str, dataset: str, is_open_vocab: bool) -> list[str]:
+    """Compute the full tag list for a model based on its metadata."""
+    tags: list[str] = []
+
+    # 1. Architecture-based tags
+    arch_lower = arch.lower()
+    base_tags = ARCH_TAGS.get(arch_lower, ['task:object-detection', 'output:bounding-box'])
+    tags.extend(base_tags)
+
+    # 2. Override speed tag based on model size variant
+    parts = re.split(r'[_\-]', config_name.lower())
+    for p in parts:
+        if p in SIZE_SPEED_OVERRIDE:
+            # Remove any existing speed tag and replace
+            override = SIZE_SPEED_OVERRIDE[p]
+            tags = [t for t in tags if not t.startswith('speed:')]
+            tags.append(override)
+            break
+
+    # 3. Dataset / domain tags
+    dataset_lower = dataset.lower() if dataset else ''
+    for kw, tag in DATASET_TAGS.items():
+        if kw in dataset_lower:
+            tags.append(tag)
+            break
+    else:
+        if dataset_lower:
+            tags.append('domain:general-purpose')
+
+    # 4. Instance segmentation detection from config name and architecture
+    config_lower = config_name.lower()
+    seg_keywords = ('mask', 'seg', 'segm', 'panoptic', 'ins_', '-ins-', '-ins_', '_ins-', '_ins_')
+    seg_arch_keywords = ('mask', 'solo', 'htc', 'scnet', 'pointrend', 'queryinst', 'condinst', 'panoptic')
+    has_seg = (
+        any(kw in config_lower for kw in seg_keywords)
+        or any(kw in arch_lower for kw in seg_arch_keywords)
+        # RTMDet instance segmentation variants: rtmdet-ins*
+        or (arch_lower.startswith('rtmdet') and 'ins' in config_lower)
+    )
+    if has_seg:
+        if 'task:instance-segmentation' not in tags:
+            tags.append('task:instance-segmentation')
+        if 'output:mask' not in tags:
+            tags.append('output:mask')
+
+    # 5. Open vocabulary
+    if is_open_vocab and 'capability:open-vocabulary' not in tags:
+        tags.append('capability:open-vocabulary')
+
+    # 6. Multi-class capability (COCO and larger datasets)
+    if any(kw in dataset_lower for kw in ('coco', 'lvis', 'objects365', 'openimages')):
+        tags.append('capability:multi-class')
+
+    # Deduplicate preserving order
+    seen: set[str] = set()
+    unique: list[str] = []
+    for t in tags:
+        if t not in seen:
+            seen.add(t)
+            unique.append(t)
+
+    return unique
+
+
+def get_all_tags(models: list[dict]) -> dict[str, list[str]]:
+    """Extract all unique tags from a model list, grouped by dimension."""
+    by_dim: dict[str, set[str]] = {dim: set() for dim in TAG_DIMENSIONS}
+    for m in models:
+        for tag in m.get('tags', []):
+            dim, _, value = tag.partition(':')
+            if dim in by_dim:
+                by_dim[dim].add(tag)
+    return {dim: sorted(tags) for dim, tags in by_dim.items() if tags}
+
+
 # ── Config notation decoder ─────────────────────────────────────────────────
 
 def decode_config_notation(config_name: str) -> str:
@@ -734,6 +917,8 @@ def discover_mmdet_models() -> list[dict]:
 
             description = build_model_description(arch, name, architecture)
 
+            tags = compute_model_tags(arch, name, training_data, is_open_vocab)
+
             models.append({
                 'id': name,
                 'label': label,
@@ -745,6 +930,7 @@ def discover_mmdet_models() -> list[dict]:
                 'summary': summary,
                 'description': description,
                 'openVocab': is_open_vocab,
+                'tags': tags,
                 '_weight_url': weight if pd.notna(weight) else '',
             })
 
@@ -789,6 +975,7 @@ def discover_mmdet_models() -> list[dict]:
                     'paper': '',
                     'summary': f"{k.replace('_', ' ').title()} trained on COCO dataset",
                     'description': build_model_description(k.split('_')[0], k, 'object detection'),
+                    'tags': compute_model_tags(k.split('_')[0], k, 'coco', False),
                 }
                 for k in MMDET_MODEL_ZOO
             ]
@@ -804,6 +991,7 @@ def discover_mmdet_models() -> list[dict]:
                     'paper': '',
                     'summary': 'RTMDet Tiny is a real-time detection model trained on COCO.',
                     'description': build_model_description('rtmdet', 'rtmdet_tiny_8xb32-300e_coco', 'real-time detection'),
+                    'tags': compute_model_tags('rtmdet', 'rtmdet_tiny_8xb32-300e_coco', 'coco', False),
                 },
                 {
                     'id': 'rtmdet_s_8xb32-300e_coco',
@@ -815,6 +1003,7 @@ def discover_mmdet_models() -> list[dict]:
                     'paper': '',
                     'summary': 'RTMDet Small is a real-time detection model trained on COCO.',
                     'description': build_model_description('rtmdet', 'rtmdet_s_8xb32-300e_coco', 'real-time detection'),
+                    'tags': compute_model_tags('rtmdet', 'rtmdet_s_8xb32-300e_coco', 'coco', False),
                 },
                 {
                     'id': 'rtmdet_m_8xb32-300e_coco',
@@ -826,6 +1015,7 @@ def discover_mmdet_models() -> list[dict]:
                     'paper': '',
                     'summary': 'RTMDet Medium is a real-time detection model trained on COCO.',
                     'description': build_model_description('rtmdet', 'rtmdet_m_8xb32-300e_coco', 'real-time detection'),
+                    'tags': compute_model_tags('rtmdet', 'rtmdet_m_8xb32-300e_coco', 'coco', False),
                 },
             ]
 

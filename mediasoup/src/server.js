@@ -36,6 +36,10 @@ let router;
 // Per-camera: { producer, plainTransport }
 const cameras = new Map();
 
+// Track all connected WebSocket clients so we can broadcast notifications
+/** @type {Set<import('ws').WebSocket>} */
+const wsClients = new Set();
+
 // ── mediasoup setup ────────────────────────────────────────────────────────
 async function startMediasoup() {
   worker = await createWorker({
@@ -197,6 +201,7 @@ function startSignaling() {
 
   wss.on('connection', (ws) => {
     console.log('[signaling] New browser connection');
+    wsClients.add(ws);
 
     // Per-connection state
     const consumerTransports = new Map(); // camId → WebRtcTransport
@@ -219,6 +224,7 @@ function startSignaling() {
 
     ws.on('close', () => {
       console.log('[signaling] Browser disconnected, cleaning up');
+      wsClients.delete(ws);
       for (const consumer of consumers.values()) consumer.close();
       for (const transport of consumerTransports.values()) transport.close();
     });
@@ -320,6 +326,13 @@ async function handleMessage(msg, ws, consumerTransports, consumers) {
       });
       consumer.on('producerresume', () => {
         console.log(`[mediasoup] Consumer ${camId}: producer resumed`);
+      });
+      consumer.on('producerclose', () => {
+        console.log(`[mediasoup] Consumer ${camId}: producer closed — notifying client`);
+        consumers.delete(camId);
+        try {
+          ws.send(JSON.stringify({ type: 'producerClosed', camId }));
+        } catch {}
       });
 
       consumers.set(camId, consumer);
