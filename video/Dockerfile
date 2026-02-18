@@ -91,10 +91,8 @@ pkgs = [\
 	fi
 
 # ── AMD64: install PyTorch CPU from pip (ARM64 has it pre-installed in L4T)
-# Note: pip is used here instead of uv because uv's strict implementation-tag
-# resolver rejects the PyTorch CPU-only index wheels on newer Python patch versions.
 RUN if [ "$TARGETARCH" = "amd64" ]; then \
-		pip install torch==2.1.2 torchvision==0.16.2 \
+		uv pip install --system torch==2.1.2 torchvision==0.16.2 \
 			--index-url https://download.pytorch.org/whl/cpu; \
 	fi
 
@@ -105,8 +103,8 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
 		export TORCH_CUDA_ARCH_LIST="7.2;8.7" FORCE_CUDA=1; \
 	fi && \
 	uv pip install --system openmim==0.3.9 && \
-	mim install mmcv==2.1.0
-RUN uv pip install --system mmengine==0.10.4 mmdet==3.3.0 mmpretrain==1.2.0
+	mim install mmcv==2.1.0 && \
+	uv pip install --system mmengine==0.10.4 mmdet==3.3.0 mmpretrain==1.2.0
 
 # ── Remaining Python dependencies ───────────────────────────────────────────
 RUN if [ "$TARGETARCH" = "arm64" ]; then \

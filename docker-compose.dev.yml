@@ -21,6 +21,8 @@ services:
   video:
     build:
       context: ./video
+      dockerfile: Dockerfile
+    platform: linux/amd64
     restart: unless-stopped
     network_mode: service:mediasoup   # Share network namespace so video streams reach mediasoup on localhost
     volumes:
