@@ -91,8 +91,10 @@ pkgs = [\
 	fi
 
 # ── AMD64: install PyTorch CPU from pip (ARM64 has it pre-installed in L4T)
+# Use pip (not uv) here because uv cannot resolve the +cpu wheel variants
+# from PyTorch's custom index.
 RUN if [ "$TARGETARCH" = "amd64" ]; then \
-		uv pip install --system torch==2.1.2 torchvision==0.16.2 \
+		pip install torch==2.1.2 torchvision==0.16.2 \
 			--index-url https://download.pytorch.org/whl/cpu; \
 	fi
 
