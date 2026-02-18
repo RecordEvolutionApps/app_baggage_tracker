@@ -25,6 +25,9 @@ export async function startVideoStream(cam: Camera, camStream: string) {
             const userpw = cam.username ? (cam.username + (cam.password ? `:${cam.password}@`: '@')) : ''
             camPath = `${protocol}://${userpw}${path}`
         }
+    } else if (cam.type === 'Image') {
+        // Image URL passed directly — videoStream.py detects it as an image
+        camPath = cam.path ?? ''
     } else {
         camPath = cam.path ?? ''
     }
@@ -287,7 +290,7 @@ export const selectCamera = async (ctx: Context) => {
         cam.type = 'Demo'
     }
 
-    if (cam.type === 'IP' || cam.type === 'YouTube' || cam.type === 'Demo') {
+    if (cam.type === 'IP' || cam.type === 'YouTube' || cam.type === 'Demo' || cam.type === 'Image') {
         streamSetup[cam.camStream] = cam
     }
     else {

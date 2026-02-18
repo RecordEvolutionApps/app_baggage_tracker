@@ -28,9 +28,13 @@ del _lib, _tls_libs
 # ────────────────────────────────────────────────────────────────────────────
 
 import json
+import hashlib
+import urllib.request
+from pathlib import Path
 from asyncio import get_event_loop, sleep
 import supervision as sv
 import cv2
+import numpy as np
 import argparse
 import time
 import logging
@@ -102,10 +106,113 @@ logger.info('OpenCV backends — FFmpeg: %s, GStreamer: %s',
     'YES' if cv2.getBuildInformation().find('FFMPEG') > 0 else 'NO',
     'YES' if cv2.getBuildInformation().find('GStreamer') > 0 else 'NO')
 
+# ── Image-file / image-URL source (static frame served as video) ───────────
+
+_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif', '.webp'}
+
+
+def _is_image_url(url: str) -> bool:
+    """Return True if *url* is an HTTP(S) URL pointing to an image file."""
+    if not url.startswith(('http://', 'https://')):
+        return False
+    # Strip query string / fragment before checking extension
+    path_part = url.split('?')[0].split('#')[0]
+    ext = os.path.splitext(path_part)[1].lower()
+    return ext in _IMAGE_EXTENSIONS
+
+
+def _is_image_file(path: str) -> bool:
+    """Return True if *path* is a local image file."""
+    if path.startswith(('http://', 'https://', 'rtsp://')):
+        return False
+    ext = os.path.splitext(path)[1].lower()
+    return ext in _IMAGE_EXTENSIONS and os.path.isfile(path)
+
+
+def _download_image(url: str) -> str:
+    """Download an image URL to /data/images/ and return the local path.
+
+    Uses a hash-based filename so the same URL is only downloaded once.
+    """
+    cache_dir = Path('/data/images')
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    url_hash = hashlib.sha256(url.encode()).hexdigest()[:16]
+    ext = os.path.splitext(url.split('?')[0].split('#')[0])[1].lower() or '.jpg'
+    dest = cache_dir / f'{url_hash}{ext}'
+    if dest.is_file():
+        logger.info('Image already cached: %s', dest)
+        return str(dest)
+    logger.info('Downloading image: %s → %s', url, dest)
+    urllib.request.urlretrieve(url, str(dest))
+    return str(dest)
+
+
+class _ImageCapture:
+    """cv2.VideoCapture-compatible wrapper that yields the same image forever.
+
+    The existing main loop works unchanged: cap.read() returns (True, frame),
+    cap.isOpened() returns True, etc.  The frame is read once from disk.
+
+    Designed for future extension: call set_frame(new_frame) to swap in a new
+    image (e.g. from a triggered camera snapshot) without restarting the stream.
+    """
+
+    def __init__(self, image_path: str, width: int, height: int):
+        img = cv2.imread(image_path)
+        if img is None:
+            raise ValueError(f'Cannot read image: {image_path}')
+        if img.shape[1] != width or img.shape[0] != height:
+            img = cv2.resize(img, (width, height))
+        self._frame = img
+        self._width = width
+        self._height = height
+        self._opened = True
+        logger.info('ImageCapture opened: %s (%dx%d)', image_path, width, height)
+
+    def set_frame(self, frame: np.ndarray):
+        """Replace the current frame (for future triggered-snapshot use)."""
+        self._frame = frame
+        self._height, self._width = frame.shape[:2]
+
+    def isOpened(self):
+        return self._opened
+
+    def read(self):
+        if not self._opened:
+            return False, None
+        return True, self._frame.copy()
+
+    def get(self, prop_id):
+        if prop_id == cv2.CAP_PROP_FRAME_WIDTH:
+            return float(self._width)
+        if prop_id == cv2.CAP_PROP_FRAME_HEIGHT:
+            return float(self._height)
+        if prop_id == cv2.CAP_PROP_POS_MSEC:
+            return 0.0
+        return 0.0
+
+    def set(self, prop_id, value):
+        pass
+
+    def release(self):
+        self._opened = False
+
 def setVideoSource(device):
     global RESOLUTION_X
     global RESOLUTION_Y
     if device.startswith('http'):
+        # ── Image URL — download once, serve as static frame ──────────
+        if _is_image_url(device):
+            logger.info('Image URL detected: %s', device)
+            local_path = _download_image(device)
+            img = cv2.imread(local_path)
+            if img is not None:
+                RESOLUTION_X = img.shape[1]
+                RESOLUTION_Y = img.shape[0]
+            cap = _ImageCapture(local_path, RESOLUTION_X, RESOLUTION_Y)
+            logger.info('Image source ready: %dx%d', RESOLUTION_X, RESOLUTION_Y)
+            return cap
+
         if device.startswith('https://youtu') or device.startswith('https://www.youtube.com'):
             # yt_dlp resolves the YouTube page URL into a direct CDN stream URL.
             # We request video-only DASH streams (bestvideo) for the highest
@@ -218,6 +325,14 @@ def setVideoSource(device):
         logger.info('Demo video opened: %dx%d (FFmpeg backend)', RESOLUTION_X, RESOLUTION_Y)
         # RESOLUTION_X = 1280
         # RESOLUTION_Y = 720
+    elif _is_image_file(device):
+        # Local image file — read once, serve as continuous static frame
+        img = cv2.imread(device)
+        if img is not None:
+            RESOLUTION_X = img.shape[1]
+            RESOLUTION_Y = img.shape[0]
+        cap = _ImageCapture(device, RESOLUTION_X, RESOLUTION_Y)
+        logger.info('Image file source: %s (%dx%d)', device, RESOLUTION_X, RESOLUTION_Y)
     else:
         # USB camera: expect /dev/videoN path
         if device.startswith('/dev/video'):
@@ -323,9 +438,14 @@ async def main(_saved_masks):
             # fps the overhead is negligible and the browser can start
             # decoding instantly on the very first frame after (re)connecting.
             # h264parse + config-interval=-1: same rationale as the HW path above.
+            # profile=constrained-baseline: must match mediasoup's declared
+            # profile-level-id 42e01f (Constrained Baseline).  Without this
+            # x264enc defaults to High profile and browsers silently fail to
+            # decode the stream.
             outputFormat = ("videoconvert ! video/x-raw, format=I420"
                 f" ! x264enc tune=zerolatency bitrate={scaled_bitrate}"
                 "   key-int-max=1 bframes=0 speed-preset=faster"
+                " ! video/x-h264, profile=constrained-baseline"
                 " ! h264parse"
                 " ! rtph264pay pt=96 ssrc=11111111 config-interval=-1")
 
@@ -347,7 +467,39 @@ async def main(_saved_masks):
         # SAHI slicer (created lazily)
         slicer = initSliceInferer(model, stream_settings) if USE_SAHI else None
 
-        logger.info('Starting main video loop...')
+        # ── Image source: cached-inference state ────────────────────────
+        # When source is a static image, we run inference only once and
+        # cache the annotated frame.  Re-run only when settings change.
+        _is_image_source = isinstance(cap, _ImageCapture)
+        _img_cached_frame = None      # The annotated frame to keep writing
+        _img_inference_fps = 0.0      # FPS derived from inference time (1 / dt)
+        _img_inference_ts = ''        # Frozen timestamp of when inference ran
+        _img_mask_path = f'/data/masks/{args.camStream}.json'
+
+        def _settings_fingerprint():
+            """Build a hashable fingerprint of all settings that affect inference."""
+            mask_mtime = 0.0
+            try:
+                mask_mtime = os.path.getmtime(_img_mask_path)
+            except OSError:
+                pass
+            parts = (
+                str(current_model_name or ''),
+                str(stream_settings.get('model', '') or ''),
+                str(stream_settings.get('confidence', '') or ''),
+                str(stream_settings.get('useSahi', '') or ''),
+                str(stream_settings.get('nmsIou', '') or ''),
+                str(stream_settings.get('sahiIou', '') or ''),
+                str(stream_settings.get('overlapRatio', '') or ''),
+                str(stream_settings.get('frameBuffer', '') or ''),
+                str(stream_settings.get('classList', []) or []),
+                str(stream_settings.get('classNames', []) or []),
+                str(mask_mtime),
+                str(len(_saved_masks)),
+            )
+            return '|'.join(parts)
+
+        logger.info('Starting main video loop... (image_source=%s)', _is_image_source)
         success = True
         frame = None
         loop_start = time.monotonic()
@@ -411,6 +563,39 @@ async def main(_saved_masks):
                         model_utils.CLASS_NAMES = settings_class_names
                         logger.info('Set CLASS_NAMES from settings: %s', settings_class_names)
 
+            # ── Image source: fast path — use cached annotated frame ────
+            if _is_image_source and _img_cached_frame is not None:
+                fp = _settings_fingerprint()
+                if fp == _img_fingerprint:
+                    # Settings unchanged — reuse the cached annotated frame as-is
+                    out_frame = _img_cached_frame.copy()
+                    overlay_text(out_frame, f'Timestamp: {_img_inference_ts}', position=(10, 30))
+                    overlay_text(out_frame, f'FPS: {_img_inference_fps:.2f}', position=(10, 60))
+
+                    # --- Fixed-timestep pacing ---
+                    wait_time = next_frame_time - time.monotonic()
+                    if wait_time > 0:
+                        await sleep(wait_time)
+                    next_frame_time += frame_interval
+                    if next_frame_time < time.monotonic() - 0.5:
+                        next_frame_time = time.monotonic() + frame_interval
+
+                    # Publish periodically even for cached frames
+                    if elapsed_time1 >= 2.0:
+                        publishImage(out_frame)
+                        start_time1 = time.time()
+                    if elapsed_time > 10.0:
+                        publishCameras()
+                        start_time = time.time()
+
+                    out.write(out_frame)
+                    continue
+                else:
+                    # Settings changed — invalidate cache, fall through to full inference
+                    logger.info('[image] Settings changed, re-running inference')
+                    _img_cached_frame = None
+                    _img_fingerprint = None
+
             # --- Fixed-timestep pacing ---
             wait_time = next_frame_time - time.monotonic()
             if wait_time > 0:
@@ -466,6 +651,7 @@ async def main(_saved_masks):
                 nms_iou = float(stream_settings.get('nmsIou', model_utils.NMS_IOU))
                 sahi_iou = float(stream_settings.get('sahiIou', model_utils.SAHI_IOU))
                 overlap_ratio = float(stream_settings.get('overlapRatio', 0.2))
+                _t_inference_start = time.monotonic()
                 try:
                     # Lazily create or clear slicer when the setting changes
                     if use_sahi and (slicer is None or getattr(slicer, '_sahi_iou', None) != sahi_iou or getattr(slicer, '_sahi_overlap_ratio', None) != overlap_ratio):
@@ -505,6 +691,11 @@ async def main(_saved_masks):
                     logger.error('Inference error: %s', e, exc_info=True)
                     detections = empty_detections()
 
+                if _is_image_source:
+                    _dt_inference = time.monotonic() - _t_inference_start
+                    _img_inference_fps = 1.0 / _dt_inference if _dt_inference > 0 else 0.0
+                    _img_inference_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+
             # ── Overlay detections & annotate ───────────────────────────
 
             frame, zoneCounts, lineCounts = processFrame(frame, detections, _saved_masks, stream_settings)
@@ -512,10 +703,14 @@ async def main(_saved_masks):
             if use_sahi and sahi_rect and sahi_slice_wh and sahi_overlap_wh:
                 frame = draw_sahi_grid(frame, sahi_rect, sahi_slice_wh, sahi_overlap_wh)
 
-            # Draw FPS and Timestamp
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-            overlay_text(frame, f'Timestamp: {current_time}', position=(10, 30))
-            overlay_text(frame, f'FPS: {fps_monitor.fps:.2f}', position=(10, 60))
+            # Draw overlays
+            if _is_image_source:
+                overlay_text(frame, f'Timestamp: {_img_inference_ts}', position=(10, 30))
+                overlay_text(frame, f'FPS: {_img_inference_fps:.2f}', position=(10, 60))
+            else:
+                current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+                overlay_text(frame, f'Timestamp: {current_time}', position=(10, 30))
+                overlay_text(frame, f'FPS: {fps_monitor.fps:.2f}', position=(10, 60))
 
             # aggregate line counts for later publish
             for item in lineCounts:
@@ -540,6 +735,13 @@ async def main(_saved_masks):
             if elapsed_time > 10.0:
                 publishCameras()
                 start_time = time.time()
+
+            # ── Image source: cache the annotated frame for reuse ───────
+            if _is_image_source:
+                _img_cached_frame = frame.copy()
+                _img_fingerprint = _settings_fingerprint()
+                logger.info('[image] Inference complete, frame cached (fingerprint=%s…)',
+                            _img_fingerprint[:40])
 
             out.write(frame)
 

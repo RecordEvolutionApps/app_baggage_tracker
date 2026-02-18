@@ -16,7 +16,7 @@ import { MdOutlinedTextField } from '@material/web/textfield/outlined-text-field
 import '@material/web/tabs/tabs.js';
 import '@material/web/tabs/primary-tab.js';
 
-type SourceTab = 'Local' | 'Demo' | 'YouTube' | 'IP';
+type SourceTab = 'Local' | 'Demo' | 'YouTube' | 'IP' | 'Image';
 
 @customElement('camera-dialog')
 export class CameraDialog extends LitElement {
@@ -34,6 +34,7 @@ export class CameraDialog extends LitElement {
   @state() declare ipUsername: string;
   @state() declare ipPassword: string;
   @state() declare youtubeUrl: string;
+  @state() declare imageUrl: string;
   @state() declare loading: boolean;
 
   private dialog?: MdDialog;
@@ -50,6 +51,7 @@ export class CameraDialog extends LitElement {
     this.ipUsername = '';
     this.ipPassword = '';
     this.youtubeUrl = '';
+    this.imageUrl = '';
     this.loading = false;
   }
 
@@ -223,6 +225,10 @@ export class CameraDialog extends LitElement {
         this.activeTab = 'YouTube';
         this.youtubeUrl = cam.path ?? '';
         break;
+      case 'Image':
+        this.activeTab = 'Image';
+        this.imageUrl = cam.path ?? '';
+        break;
       case 'IP':
       default:
         // Legacy: YouTube URLs stored as IP type
@@ -266,7 +272,7 @@ export class CameraDialog extends LitElement {
   private onTabChange(ev: Event) {
     const tabs = ev.target as any;
     const index = tabs.activeTabIndex;
-    const tabMap: SourceTab[] = ['Local', 'Demo', 'YouTube', 'IP'];
+    const tabMap: SourceTab[] = ['Local', 'Demo', 'YouTube', 'IP', 'Image'];
     this.activeTab = tabMap[index] ?? 'Local';
   }
 
@@ -357,6 +363,18 @@ export class CameraDialog extends LitElement {
         };
         break;
       }
+      case 'Image': {
+        const url = this.imageUrl.trim();
+        if (!url) return;
+        camera = {
+          type: 'Image',
+          name: 'Image',
+          id: 'image',
+          path: url,
+          camStream: this.camStream,
+        };
+        break;
+      }
       default:
         return;
     }
@@ -390,7 +408,7 @@ export class CameraDialog extends LitElement {
   }
 
   private get tabIndex(): number {
-    const map: Record<SourceTab, number> = { Local: 0, Demo: 1, YouTube: 2, IP: 3 };
+    const map: Record<SourceTab, number> = { Local: 0, Demo: 1, YouTube: 2, IP: 3, Image: 4 };
     return map[this.activeTab] ?? 0;
   }
 
@@ -515,6 +533,24 @@ export class CameraDialog extends LitElement {
     `;
   }
 
+  private renderImageTab() {
+    return html`
+      <div class="field-row">
+        <p class="source-label">Enter a URL to an image file (jpg, png, bmp, webp):</p>
+        <md-outlined-text-field
+          label="Image URL"
+          .value=${this.imageUrl}
+          @input=${(ev: Event) => {
+            this.imageUrl = (ev.target as MdOutlinedTextField).value;
+          }}
+          type="url"
+          placeholder="https://example.com/photo.jpg"
+        ></md-outlined-text-field>
+        <p class="hint">The image will be used as a static frame for detection. Inference runs once and re-runs automatically when you change settings (model, confidence, zones, etc.).</p>
+      </div>
+    `;
+  }
+
   private get currentSourceLabel(): string {
     const cam = this.camSetup?.camera;
     if (!cam) return 'No camera configured';
@@ -528,6 +564,8 @@ export class CameraDialog extends LitElement {
       case 'IP':
         if (cam.path === 'demoVideo') return 'Demo Video';
         return `IP: ${cam.path?.substring(0, 40) ?? ''}`;
+      case 'Image':
+        return `Image: ${cam.path?.substring(0, 40) ?? ''}`;
       default:
         return cam.path ?? 'Unknown';
     }
@@ -548,6 +586,7 @@ export class CameraDialog extends LitElement {
             <md-primary-tab>Demo Video</md-primary-tab>
             <md-primary-tab>YouTube</md-primary-tab>
             <md-primary-tab>IP / RTSP</md-primary-tab>
+            <md-primary-tab>Image</md-primary-tab>
           </md-tabs>
 
           <div class="tab-content">
@@ -555,6 +594,7 @@ export class CameraDialog extends LitElement {
             ${this.activeTab === 'Demo' ? this.renderDemoTab() : nothing}
             ${this.activeTab === 'YouTube' ? this.renderYouTubeTab() : nothing}
             ${this.activeTab === 'IP' ? this.renderIPTab() : nothing}
+            ${this.activeTab === 'Image' ? this.renderImageTab() : nothing}
           </div>
         </form>
         <div slot="actions">

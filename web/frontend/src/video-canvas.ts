@@ -194,7 +194,8 @@ export class VideoCanvas extends LitElement {
         overflow: hidden;
       }
       #canvas {
-        width: 100%;
+        max-width: 100%;
+        max-height: 100%;
         background: #fff;
       }
       .container {
@@ -202,7 +203,7 @@ export class VideoCanvas extends LitElement {
         flex: 1;
         display: flex;
         flex-direction: row;
-        align-items: start;
+        align-items: stretch;
         justify-content: space-between;
       }
 
@@ -227,8 +228,13 @@ export class VideoCanvas extends LitElement {
         display: flex;
         position: relative;
         --md-elevation-level: 1;
-        width: 100%;
+        flex: 1;
+        min-width: 0;
+        min-height: 0;
         border-radius: 4px;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
       }
 
       .loading-overlay {

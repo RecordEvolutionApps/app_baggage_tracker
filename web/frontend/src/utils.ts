@@ -124,7 +124,7 @@ export type PolygonState = {
 }
 
 export type Camera = {
-  type: 'USB' | 'IP' | 'Demo' | 'YouTube'
+  type: 'USB' | 'IP' | 'Demo' | 'YouTube' | 'Image'
   name?: string
   id?: string
   camStream: string

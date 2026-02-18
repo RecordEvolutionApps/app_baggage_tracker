@@ -6,15 +6,15 @@ services:
         stop_grace_period: 2s
         ports:
             - 1200:1200
-            - 2000-2100:2000-2100/udp   # WebRTC media (ICE/DTLS/SRTP)
-            - 2000-2100:2000-2100/tcp   # WebRTC TCP fallback
+            - 10000-10100:10000-10100/udp   # WebRTC media (ICE/DTLS/SRTP)
+            - 10000-10100:10000-10100/tcp   # WebRTC TCP fallback
         environment:
             # ANNOUNCED_IP must be the public/reachable IP of the Jetson so that
             # ICE candidates sent to browsers (via TURN) point to this host.
             # Override at deploy time:  ANNOUNCED_IP=<public-ip> docker compose up
             - ANNOUNCED_IP=${ANNOUNCED_IP:-192.168.0.19}
-            - RTP_PORT_MIN=2000
-            - RTP_PORT_MAX=2100
+            - RTP_PORT_MIN=10000
+            - RTP_PORT_MAX=10100
         # entrypoint: "sleep infinity"
     video:
         build:
@@ -29,10 +29,10 @@ services:
         privileged: true  # **WARNING: Security Risk**
         devices:
             - /dev/bus/usb:/dev/bus/usb    # USB cameras (UVC)
-            - /dev/nvidia*:/dev/nvidia*
             # MIPI CSI / GMSL cameras are available via privileged mode
             # (they appear as /dev/video* through the Jetson ISP / deserializer drivers)
-        runtime: nvidia
+        # Note: no "runtime: nvidia" here — on Jetson the Docker daemon is
+        # configured with nvidia as the default runtime via daemon.json.
         environment:
             - MEDIASOUP_URL=http://127.0.0.1:1200
         # entrypoint: "sleep infinity"

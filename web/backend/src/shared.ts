@@ -11,7 +11,7 @@ export const settingsDir = '/data/settings'
 
 export type Camera = {
     id: string
-    type: 'USB' | 'IP' | 'Demo' | 'YouTube'
+    type: 'USB' | 'IP' | 'Demo' | 'YouTube' | 'Image'
     name: string
     path?: string
     username?: string
