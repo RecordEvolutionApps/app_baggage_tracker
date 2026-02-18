@@ -960,7 +960,7 @@ def discover_mmdet_models() -> list[dict]:
 
         # Fetch checkpoint file sizes in background (don't block the response)
         try:
-            from model_utils import MMDET_MODEL_ZOO
+            from model_zoo import MMDET_MODEL_ZOO
         except Exception:
             MMDET_MODEL_ZOO = {}
 
@@ -985,9 +985,9 @@ def discover_mmdet_models() -> list[dict]:
 
     except Exception as e:
         logger.error('mim-based model discovery failed: %s, falling back to curated list', e, exc_info=True)
-        # Fallback: return the curated list from model_utils
+        # Fallback: return the curated list from model_zoo
         try:
-            from model_utils import MMDET_MODEL_ZOO
+            from model_zoo import MMDET_MODEL_ZOO
             models = [
                 {
                     'id': k,
@@ -1081,7 +1081,7 @@ def get_model_classes(model_id: str, model_classes_cache: dict[str, list[dict]])
                 break
 
     # Slow path: actually load the model (non-standard dataset)
-    from model_utils import get_mmdet_model
+    from model_loader import get_mmdet_model
     bundle = get_mmdet_model(model_id)
     inferencer = bundle.get('inferencer')
     if inferencer is None:

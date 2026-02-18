@@ -50,21 +50,21 @@ def list_tags():
 @router.get("/models/cache")
 def list_cached_models():
     """Return all locally cached models with their on-disk sizes."""
-    from model_utils import get_cached_models
+    from model_zoo import get_cached_models
     return get_cached_models()
 
 
 @router.delete("/models/cache")
 def clear_cache():
     """Delete ALL cached model files (checkpoints + TensorRT engines)."""
-    from model_utils import clear_all_cache
+    from model_zoo import clear_all_cache
     return clear_all_cache()
 
 
 @router.delete("/models/{model_id}/cache")
 def delete_model_cache(model_id: str):
     """Delete cached files for a specific model."""
-    from model_utils import delete_cached_model
+    from model_zoo import delete_cached_model
     return delete_cached_model(model_id)
 
 
@@ -81,7 +81,7 @@ def model_classes(model_id: str):
 @router.get("/models/{model_id}/status")
 def model_status(model_id: str):
     """Check whether a model's checkpoint is already cached locally."""
-    from model_utils import is_model_cached
+    from model_zoo import is_model_cached
     cached = is_model_cached(model_id)
     return {"model": model_id, "cached": cached}
 
@@ -110,7 +110,7 @@ async def prepare_model_endpoint(req: PrepareRequest):
 
         def run_prepare():
             try:
-                from model_utils import prepare_model
+                from model_zoo import prepare_model
                 prepare_model(model_name, progress_callback=progress_callback)
             except Exception as e:
                 loop.call_soon_threadsafe(
@@ -155,7 +155,7 @@ async def build_trt_endpoint(req: BuildTrtRequest):
 
         def run_build():
             try:
-                from model_utils import build_trt_for_model
+                from model_zoo import build_trt_for_model
                 build_trt_for_model(model_name, progress_callback=progress_callback)
             except Exception as e:
                 loop.call_soon_threadsafe(

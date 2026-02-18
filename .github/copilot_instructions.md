@@ -15,8 +15,20 @@ This repository is a **generic, broadly applicable Vision AI streaming platform*
 - `mediasoup/`: Node.js WebRTC SFU built on the mediasoup library. Exposes HTTP + WebSocket on port 1200. Creates plain RTP transports on demand (`POST /ingest`) and relays video to browser WebRTC consumers.
 - `video/`: Python (FastAPI + OpenCV + GStreamer) inference and stream pipeline.
   - `api.py` — FastAPI app entrypoint; includes route modules, lifespan cleanup.
-  - `videoStream.py` — Per-stream process: camera capture → inference → annotation → H.264 encode → RTP to mediasoup.
-  - `model_utils.py` — Model loading (MMDetection, TensorRT), inference helpers, SAHI slicing, detection processing, ByteTrack tracking, annotation.
+  - `videoStream.py` — Per-stream inference loop only: bootstrap, frame read, inference dispatch, annotation, publish, GStreamer write. All domain logic is delegated to the modules below.
+  - `config.py` — `StreamConfig` dataclass centralising all mutable pipeline state (resolution, model, thresholds, class filtering, IronFlock identity). Also `parse_args()` and `create_config()` bootstrap helpers.
+  - `video_source.py` — Video source management: opening USB, RTSP, HTTP, image, YouTube, and demo sources; `reopen_source()` handles looping awareness internally.
+  - `model_loader.py` — `getModel()` dispatcher, `get_mmdet_model()`, `get_tensorrt_model()`, and monkey-patches for MMDet/MMCV compatibility.
+  - `model_zoo.py` — `MMDET_MODEL_ZOO` dict, model download/cache CRUD, `prepare_model()`, `build_trt_for_model()`, `write_backend_status()`.
+  - `inference.py` — `infer()`, `infer_mmdet()`, `infer_tensorrt()`, `empty_detections()`, `move_detections()`.
+  - `sahi.py` — SAHI (Slicing Aided Hyper Inference): `initSliceInferer()`, `run_sahi_inference()`, `get_extreme_points()`, `SahiGridInfo` dataclass.
+  - `frame_processing.py` — `processFrame()`: ByteTrack tracker, smoother, supervision annotators, per-zone/line counting.
+  - `gstreamer.py` — `build_rtp_pipeline()` (HW nvv4l2h264enc on Jetson, x264enc fallback), `open_video_writer()`.
+  - `publisher.py` — `Publisher` class wrapping IronFlock WAMP client for image/count publishing; `StubIronFlock` for dev mode.
+  - `masks.py` — `prepMasks()`, `count_polygon_zone()`, `count_detections()`, `get_contrast_color()`.
+  - `watchers.py` — Poll-based async file watchers for mask and settings files.
+  - `overlay.py` — `overlay_text()`, `draw_sahi_grid()`.
+  - `youtube.py` — `get_youtube_video()` via yt-dlp binary + Python library fallback.
   - `model_catalog.py` — Architecture knowledge base, MMDetection model discovery, dataset class lists, config notation decoder. Supports 30+ architectures (RTMDet, YOLO family, DETR, Grounding DINO, GLIP, Detic, Mask R-CNN, etc.).
   - `trt_backend.py` — TensorRT FP16 backend: ONNX export → engine build → cached inference on NVIDIA GPUs.
   - `routes/streams.py` — Start/stop/list stream processes; mediasoup ingest lifecycle.
@@ -52,9 +64,21 @@ This repository is a **generic, broadly applicable Vision AI streaming platform*
 - `justfile` — Dev commands (`just dev`, `just dev-down`).
 - `mediasoup/src/server.js` — WebRTC SFU server.
 - `video/api.py` — FastAPI entrypoint.
-- `video/videoStream.py` — Core capture → infer → encode → stream loop.
+- `video/videoStream.py` — Inference loop (lean orchestrator — delegates to modules below).
+- `video/config.py` — `StreamConfig` dataclass + bootstrap helpers.
+- `video/video_source.py` — Camera/source open, retry, loop/reopen logic.
+- `video/model_loader.py` — Model loading dispatcher (MMDet, TensorRT).
+- `video/model_zoo.py` — Model zoo dict, download/cache, TRT build, status.
+- `video/inference.py` — Inference dispatch (`infer`, `infer_mmdet`, `infer_tensorrt`).
+- `video/sahi.py` — SAHI slicer creation and tiled inference runner.
+- `video/frame_processing.py` — Tracker, smoother, annotators, zone/line counting.
+- `video/gstreamer.py` — GStreamer RTP pipeline builder.
+- `video/publisher.py` — IronFlock publish wrapper.
+- `video/masks.py` — Mask preparation and polygon zone counting.
+- `video/watchers.py` — Async file watchers for masks/settings.
+- `video/overlay.py` — Text overlay and SAHI grid drawing.
+- `video/youtube.py` — YouTube URL resolution via yt-dlp.
 - `video/model_catalog.py` — Model discovery and architecture knowledge base.
-- `video/model_utils.py` — Inference, annotation, tracking, SAHI.
 - `video/trt_backend.py` — TensorRT engine builder and runner.
 - `video/requirements.txt` — Python dependencies.
 - `web/backend/src/index.ts` — Elysia HTTP API.
@@ -68,6 +92,8 @@ This repository is a **generic, broadly applicable Vision AI streaming platform*
 - Prefer small, scoped changes within a single service at a time.
 - Keep cross-service contracts stable: data formats written to `/data`, REST API endpoints between web↔video, RTP port allocation between video↔mediasoup, WebSocket protocol between mediasoup↔browser.
 - The video service spawns one `videoStream.py` subprocess per camera stream. Each process is independent.
+- `videoStream.py` is a thin inference loop — all domain logic lives in dedicated modules (`config.py`, `video_source.py`, `inference.py`, `sahi.py`, `frame_processing.py`, etc.). Keep it that way: push source-specific, model-specific, or SAHI-specific knowledge into the appropriate module, not into the loop.
+- `StreamConfig` is the single source of mutable pipeline state. Functions accept it as a parameter — avoid cross-module global mutation.
 - When modifying detection logic, ensure per-zone counting, per-line crossing, class filtering (by ID or open-vocab names), and ByteTrack tracking remain consistent.
 - When editing frontend components, maintain Lit patterns, ESM module imports, and Material Web component usage.
 - The model catalog (`model_catalog.py`) is a pure data/logic module with no FastAPI dependency — keep it that way.
