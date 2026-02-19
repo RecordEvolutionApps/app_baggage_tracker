@@ -167,6 +167,27 @@ with open(_resolution_file, 'w') as _rf:
     json.dump({'width': cfg.resolution_x, 'height': cfg.resolution_y}, _rf)
 logger.info('Wrote resolution status: %dx%d → %s', cfg.resolution_x, cfg.resolution_y, _resolution_file)
 
+# ── Load persisted settings (written by web backend) ───────────────────────
+# Read the settings file *before* loading the model so that the user's
+# last-applied model choice takes precedence over the OBJECT_MODEL env var.
+_settings_path = f'/data/settings/{cfg.cam_stream}.json'
+if os.path.exists(_settings_path):
+    try:
+        with open(_settings_path, 'r') as _sf:
+            _saved = json.load(_sf)
+        cfg.stream_settings.update(_saved)
+        _saved_model = _saved.get('model')
+        if _saved_model and _saved_model != 'none':
+            cfg.object_model = _saved_model
+            cfg.current_model_name = _saved_model
+            logger.info('Loaded model from settings file: %s', cfg.object_model)
+        else:
+            logger.info('Settings file has no model or model=none')
+    except Exception as _e:
+        logger.warning('Could not read settings file %s: %s', _settings_path, _e)
+else:
+    logger.info('No settings file found at %s, using env/defaults', _settings_path)
+
 # ── Load initial model ─────────────────────────────────────────────────────
 
 model = getModel(cfg.object_model, cfg)

@@ -290,8 +290,25 @@ export const selectCamera = async (ctx: Context) => {
         cam.type = 'Demo'
     }
 
+    // Preserve inference settings (model, useSahi, confidence, etc.) from the
+    // existing entry so that switching camera source doesn't wipe the user's
+    // previously applied model and tuning.
+    const existing = streamSetup[cam.camStream]
+    const preserved: Partial<Camera> = existing ? {
+        model: existing.model,
+        useSahi: existing.useSahi,
+        useSmoothing: existing.useSmoothing,
+        confidence: existing.confidence,
+        frameBuffer: existing.frameBuffer,
+        nmsIou: existing.nmsIou,
+        sahiIou: existing.sahiIou,
+        overlapRatio: existing.overlapRatio,
+        classList: existing.classList,
+        classNames: existing.classNames,
+    } : {}
+
     if (cam.type === 'IP' || cam.type === 'YouTube' || cam.type === 'Demo' || cam.type === 'Image') {
-        streamSetup[cam.camStream] = cam
+        streamSetup[cam.camStream] = { ...preserved, ...cam }
     }
     else {
         const camList = await getUSBCameras()
@@ -300,8 +317,9 @@ export const selectCamera = async (ctx: Context) => {
             ctx.set.status = 404
             return { error: `Camera "${cam.id}" not found` }
         }
-        // Merge USB device info with user-chosen resolution
+        // Merge USB device info with user-chosen resolution, preserving inference settings
         streamSetup[cam.camStream] = {
+            ...preserved,
             ...cameraDev,
             camStream: cam.camStream,
             type: 'USB',

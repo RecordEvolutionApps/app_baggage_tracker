@@ -75,9 +75,17 @@ export async function waitForService(url: string, name: string, maxRetries = 30,
 
 export async function writeStreamSettings(camStream: string, cam: Camera) {
     await mkdir(settingsDir, { recursive: true })
+    // Read the existing settings file so we never clobber a field the caller
+    // didn't explicitly set (e.g. model when only the camera source changed).
+    let existing: Record<string, any> = {}
+    try {
+        const prev = Bun.file(`${settingsDir}/${camStream}.json`)
+        if (await prev.exists()) existing = await prev.json()
+    } catch { /* first write — no previous file */ }
+
     const settings: Record<string, any> = {
-        model: cam.model,
-        useSahi: cam.useSahi ?? true,
+        model: cam.model ?? existing.model ?? null,
+        useSahi: cam.useSahi ?? existing.useSahi ?? true,
         useSmoothing: cam.useSmoothing ?? true,
         confidence: cam.confidence ?? 0.1,
         frameBuffer: cam.frameBuffer ?? 64,

@@ -9,12 +9,11 @@ services:
             - 10000-10100:10000-10100/udp   # WebRTC media (ICE/DTLS/SRTP)
             - 10000-10100:10000-10100/tcp   # WebRTC TCP fallback
         environment:
-            # ANNOUNCED_IP must be the public/reachable IP of the Jetson so that
-            # ICE candidates sent to browsers (via TURN) point to this host.
-            # Override at deploy time:  ANNOUNCED_IP=<public-ip> docker compose up
+            # ANNOUNCED_IP is built automatically inside the container from DEVICE_KEY
+            # (injected by the ironflock runtime). Override at deploy time with an
+            # explicit value:  ANNOUNCED_IP=<public-ip> docker compose up
             # ANNOUNCED_IP_FALLBACK adds a second ICE candidate as a fallback
             # (e.g. LAN IP when the primary is a reverse-proxy URL).
-            - ANNOUNCED_IP=${DEVICE_KEY}-baggagetracker-1100.app.ironflock.com
             - ANNOUNCED_IP_FALLBACK=192.168.0.19
             - RTP_PORT_MIN=10000
             - RTP_PORT_MAX=10100

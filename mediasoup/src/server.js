@@ -22,7 +22,16 @@ function getHostIp() {
   return '127.0.0.1';
 }
 
-const ANNOUNCED_IP = process.env.ANNOUNCED_IP || getHostIp();
+// ANNOUNCED_IP resolution order:
+//   1. Explicit ANNOUNCED_IP env var
+//   2. DEVICE_KEY env var (injected by the ironflock runtime inside the container)
+//      → builds the ironflock app hostname automatically
+//   3. Auto-detected first non-internal IPv4 address
+const DEVICE_KEY = process.env.DEVICE_KEY || null;
+const ANNOUNCED_IP =
+  process.env.ANNOUNCED_IP ||
+  (DEVICE_KEY ? `${DEVICE_KEY}-visionai-1100.app.ironflock.com` : null) ||
+  getHostIp();
 const ANNOUNCED_IP_FALLBACK = process.env.ANNOUNCED_IP_FALLBACK || null;
 console.log(`[mediasoup] ANNOUNCED_IP=${ANNOUNCED_IP}`);
 if (ANNOUNCED_IP_FALLBACK) {
