@@ -9,9 +9,9 @@
 OBJECT_MODEL:
     label: Model
     type: text
-    defaultValue: rtmdet_tiny_8xb32-300e_coco
-    description: MMDetection model name (RTMDet recommended for speed)
-    valueList: ["rtmdet_tiny_8xb32-300e_coco", "rtmdet_s_8xb32-300e_coco", "rtmdet_m_8xb32-300e_coco"]  # Renders a dropdown field allowing the selection from a list of values.  (number[] | string[])
+    defaultValue: detr-resnet-50
+    description: Vision model name
+    valueList: ["detr-resnet-50", "detr-resnet-101", "detr-resnet-152"]  # Renders a dropdown field allowing the selection from a list of values.  (number[] | string[])
 CLASS_LIST:
     label: Detection Classes
     type: text

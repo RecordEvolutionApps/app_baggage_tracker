@@ -1,4 +1,4 @@
-"""Model loading — dispatches to TensorRT or MMDet backend."""
+"""Model loading — dispatches to HuggingFace, TensorRT, or MMDet backend."""
 from __future__ import annotations
 
 import logging
@@ -20,15 +20,30 @@ from model_zoo import (
 
 logger = logging.getLogger('model_loader')
 
+# ── Detect available ML frameworks ──────────────────────────────────────────
+try:
+    import mmdet  # noqa: F401
+    HAS_MMDET = True
+except ImportError:
+    HAS_MMDET = False
+
+try:
+    import transformers  # noqa: F401
+    HAS_TRANSFORMERS = True
+except ImportError:
+    HAS_TRANSFORMERS = False
+
 # ── Jetson L4T PyTorch lacks full distributed support ───────────────────────
 # Stub out ReduceOp so that mmengine doesn't crash on import.
-if not hasattr(torch.distributed, 'ReduceOp'):
+if HAS_MMDET and not hasattr(torch.distributed, 'ReduceOp'):
     class _ReduceOpStub:
         SUM = 0; PRODUCT = 1; MIN = 2; MAX = 3; BAND = 4; BOR = 5; BXOR = 6
     torch.distributed.ReduceOp = _ReduceOpStub
 
 # ── Monkey-patch mmcv NMS ───────────────────────────────────────────────────
 def _patch_mmcv_nms():
+    if not HAS_MMDET:
+        return
     try:
         from mmcv.ops import nms as _nms_mod
         _orig_apply = _nms_mod.NMSop.apply
@@ -105,9 +120,19 @@ def getModel(model_name: str, config: StreamConfig | None = None) -> Dict[str, A
     backend = detect_backend.lower()
     if backend == 'tensorrt':
         return get_tensorrt_model(model_name, config)
+    if backend == 'huggingface':
+        return get_huggingface_model(model_name, config)
     if backend == 'mmdet':
+        if not HAS_MMDET:
+            if HAS_TRANSFORMERS:
+                logger.warning('MMDetection not installed, falling back to huggingface backend')
+                return get_huggingface_model(model_name, config)
+            raise RuntimeError(
+                'Neither MMDetection nor HF Transformers is installed. '
+                'Install at least one ML framework.'
+            )
         return get_mmdet_model(model_name, config)
-    raise ValueError(f'Unsupported DETECT_BACKEND: {backend}. Supported: mmdet, tensorrt')
+    raise ValueError(f'Unsupported DETECT_BACKEND: {backend}. Supported: mmdet, huggingface, tensorrt')
 
 
 # ── Config injection helper ────────────────────────────────────────────────
@@ -164,10 +189,61 @@ def _resolve_config_path(model_name: str) -> str | None:
     return None
 
 
+# ── HuggingFace Transformers backend ───────────────────────────────────────
+
+def get_huggingface_model(model_name: str, config: StreamConfig | None = None) -> Dict[str, Any]:
+    """Load a HuggingFace Transformers detection model by name or repo ID."""
+    if not HAS_TRANSFORMERS:
+        raise RuntimeError(
+            'HF Transformers is not installed. Install transformers for DETECT_BACKEND=huggingface.'
+        )
+
+    from model_zoo import HF_MODEL_ZOO
+    from transformers import AutoModelForObjectDetection, AutoImageProcessor
+
+    zoo_entry = HF_MODEL_ZOO.get(model_name, {})
+    repo_id = zoo_entry.get('repo_id', model_name)
+    native_wh = zoo_entry.get('native_input_wh', (640, 640))
+
+    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    cache_dir = '/data/huggingface'
+
+    logger.info('Loading HuggingFace model %s (repo: %s) on %s...', model_name, repo_id, device)
+
+    try:
+        processor = AutoImageProcessor.from_pretrained(repo_id, cache_dir=cache_dir)
+        model = AutoModelForObjectDetection.from_pretrained(repo_id, cache_dir=cache_dir)
+        model = model.to(device)
+        model.eval()
+    except Exception as exc:
+        raise RuntimeError(
+            f'Failed to load HuggingFace model "{repo_id}": {exc}'
+        ) from exc
+
+    # Extract class names from model config
+    id2label = getattr(model.config, 'id2label', {})
+    if id2label and config is not None and not config.class_names:
+        config.class_names = [id2label.get(i, f'class_{i}') for i in sorted(id2label.keys())]
+
+    logger.info('HuggingFace model %s loaded (%d classes)', model_name, len(id2label))
+
+    return {
+        'backend': 'huggingface',
+        'model': model,
+        'processor': processor,
+        'model_name': model_name,
+        'native_input_wh': native_wh,
+    }
+
+
 # ── MMDet backend ──────────────────────────────────────────────────────────
 
 def get_mmdet_model(model_name: str, config: StreamConfig | None = None) -> Dict[str, Any]:
     """Load any MMDetection model by name."""
+    if not HAS_MMDET:
+        raise RuntimeError(
+            'MMDetection is not installed. Install mmdet, mmengine, and mmcv for DETECT_BACKEND=mmdet.'
+        )
     cache_root = Path('/data/mmdet')
     checkpoint_path = cache_root / 'checkpoints' / f'{model_name}.pth'
     zoo = MMDET_MODEL_ZOO.get(model_name, {})
@@ -265,12 +341,20 @@ def get_tensorrt_model(model_name: str, config: StreamConfig | None = None) -> D
     try:
         import trt_backend
     except ImportError:
-        logger.warning('trt_backend module not found; falling back to mmdet')
-        return get_mmdet_model(model_name, config)
+        logger.warning('trt_backend module not found; falling back to available backend')
+        if HAS_MMDET:
+            return get_mmdet_model(model_name, config)
+        if HAS_TRANSFORMERS:
+            return get_huggingface_model(model_name, config)
+        raise RuntimeError('No inference backend available')
 
     if not trt_backend.is_available():
-        logger.warning('TensorRT or CUDA not available; falling back to mmdet backend')
-        return get_mmdet_model(model_name, config)
+        logger.warning('TensorRT or CUDA not available; falling back to available backend')
+        if HAS_MMDET:
+            return get_mmdet_model(model_name, config)
+        if HAS_TRANSFORMERS:
+            return get_huggingface_model(model_name, config)
+        raise RuntimeError('No inference backend available')
 
     input_wh = MMDET_MODEL_ZOO.get(model_name, {}).get('native_input_wh', (640, 640))
 
@@ -291,5 +375,9 @@ def get_tensorrt_model(model_name: str, config: StreamConfig | None = None) -> D
         except Exception as e:
             logger.warning('Cached TRT engine failed to load: %s — rebuilding', e)
 
-    logger.info('No cached TRT engine for %s — using mmdet (TRT build is manual)', model_name)
-    return get_mmdet_model(model_name, config)
+    logger.info('No cached TRT engine for %s — falling back to available backend', model_name)
+    if HAS_MMDET:
+        return get_mmdet_model(model_name, config)
+    if HAS_TRANSFORMERS:
+        return get_huggingface_model(model_name, config)
+    raise RuntimeError('No inference backend available for fallback')

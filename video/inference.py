@@ -1,4 +1,4 @@
-"""Inference dispatch — routes frames to the appropriate backend (MMDet or TensorRT)."""
+"""Inference dispatch — routes frames to the appropriate backend (HuggingFace, MMDet, or TensorRT)."""
 from __future__ import annotations
 
 import logging
@@ -7,6 +7,8 @@ from typing import Any, Dict, Optional
 
 import numpy as np
 import supervision as sv
+import torch
+from PIL import Image
 
 from config import StreamConfig
 
@@ -36,6 +38,8 @@ def infer_frame(frame: np.ndarray, model_bundle: Dict[str, Any],
     backend = model_bundle.get('backend')
     if backend == 'tensorrt':
         return infer_tensorrt(frame, model_bundle, confidence=confidence, iou=iou, config=config)
+    if backend == 'huggingface':
+        return infer_huggingface(frame, model_bundle, confidence=confidence, iou=iou, config=config)
     if backend == 'mmdet':
         return infer_mmdet(frame, model_bundle['inferencer'], confidence=confidence, config=config)
     raise ValueError(f'Unsupported backend in model bundle: {backend}')
@@ -92,6 +96,71 @@ def infer_tensorrt(frame: np.ndarray, model_bundle: Dict[str, Any],
         return result if result is not None else False
     except Exception as e:
         logger.error('TensorRT inference failed: %s', e, exc_info=True)
+        return False
+
+
+def infer_huggingface(frame: np.ndarray, model_bundle: Dict[str, Any],
+                      confidence: float | None = None, iou: float | None = None,
+                      config: StreamConfig | None = None) -> Optional[sv.Detections]:
+    """Run inference through the HuggingFace Transformers backend."""
+    model = model_bundle['model']
+    processor = model_bundle['processor']
+    conf_threshold = confidence if confidence is not None else (config.conf if config else 0.1)
+    class_list = (config.class_list if config else []) or []
+
+    try:
+        _t0 = _time_mod.monotonic()
+
+        # Convert BGR (OpenCV) to RGB PIL image
+        pil_image = Image.fromarray(frame[:, :, ::-1]) if frame.shape[2] == 3 else Image.fromarray(frame)
+
+        # Preprocess
+        inputs = processor(images=pil_image, return_tensors='pt')
+        device = next(model.parameters()).device
+        inputs = {k: v.to(device) for k, v in inputs.items() if isinstance(v, torch.Tensor)}
+
+        # Forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        _t_forward = _time_mod.monotonic()
+
+        # Post-process: convert to target image size
+        target_sizes = torch.tensor([frame.shape[:2]], device=device)  # (H, W)
+        results = processor.post_process_object_detection(
+            outputs, target_sizes=target_sizes, threshold=conf_threshold
+        )
+
+        if not results:
+            return False
+
+        result = results[0]  # batch size 1
+        if len(result.get('scores', [])) == 0:
+            return False
+
+        # Use supervision's built-in converter — handles both detection
+        # and segmentation (masks populated automatically when present)
+        id2label = getattr(model_bundle.get('model'), 'config', None)
+        id2label = getattr(id2label, 'id2label', None) if id2label else None
+        detections = sv.Detections.from_transformers(
+            transformers_results=result,
+            id2label=id2label,
+        )
+
+        # Apply class filter
+        if class_list:
+            keep = np.isin(detections.class_id, class_list)
+            detections = detections[keep]
+
+        _t_post = _time_mod.monotonic()
+        logger.info('[PROFILE-HF] forward=%.0fms  post=%.0fms  total=%.0fms  frame=%dx%d',
+                    (_t_forward - _t0) * 1000, (_t_post - _t_forward) * 1000,
+                    (_t_post - _t0) * 1000, frame.shape[1], frame.shape[0])
+
+        return detections if len(detections) > 0 else False
+
+    except Exception as e:
+        logger.error('HuggingFace inference failed: %s', e, exc_info=True)
         return False
 
 

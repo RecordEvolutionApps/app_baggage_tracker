@@ -23,7 +23,28 @@ function getHostIp() {
 }
 
 const ANNOUNCED_IP = process.env.ANNOUNCED_IP || getHostIp();
+const ANNOUNCED_IP_FALLBACK = process.env.ANNOUNCED_IP_FALLBACK || null;
 console.log(`[mediasoup] ANNOUNCED_IP=${ANNOUNCED_IP}`);
+if (ANNOUNCED_IP_FALLBACK) {
+  console.log(`[mediasoup] ANNOUNCED_IP_FALLBACK=${ANNOUNCED_IP_FALLBACK}`);
+}
+
+// Build listenInfos array: primary IP first, optional fallback second.
+// Each entry produces an ICE candidate; the browser tries all and uses
+// whichever is reachable (e.g. reverse-proxy URL in prod, LAN IP as fallback).
+function buildListenInfos() {
+  const infos = [
+    { protocol: 'udp', ip: LISTEN_IP, announcedAddress: ANNOUNCED_IP },
+    { protocol: 'tcp', ip: LISTEN_IP, announcedAddress: ANNOUNCED_IP },
+  ];
+  if (ANNOUNCED_IP_FALLBACK) {
+    infos.push(
+      { protocol: 'udp', ip: LISTEN_IP, announcedAddress: ANNOUNCED_IP_FALLBACK },
+      { protocol: 'tcp', ip: LISTEN_IP, announcedAddress: ANNOUNCED_IP_FALLBACK },
+    );
+  }
+  return infos;
+}
 
 // No pre-defined camera list — ingests are created on demand via POST /ingest
 
@@ -260,10 +281,7 @@ async function handleMessage(msg, ws, consumerTransports, consumers) {
       }
 
       const transport = await router.createWebRtcTransport({
-        listenInfos: [
-          { protocol: 'udp', ip: LISTEN_IP, announcedAddress: ANNOUNCED_IP },
-          { protocol: 'tcp', ip: LISTEN_IP, announcedAddress: ANNOUNCED_IP },
-        ],
+        listenInfos: buildListenInfos(),
         enableUdp: true,
         enableTcp: true,
         preferUdp: true,

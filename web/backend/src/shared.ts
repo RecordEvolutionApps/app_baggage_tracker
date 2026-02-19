@@ -76,7 +76,7 @@ export async function waitForService(url: string, name: string, maxRetries = 30,
 export async function writeStreamSettings(camStream: string, cam: Camera) {
     await mkdir(settingsDir, { recursive: true })
     const settings: Record<string, any> = {
-        model: cam.model ?? 'rtmdet_tiny_8xb32-300e_coco',
+        model: cam.model,
         useSahi: cam.useSahi ?? true,
         useSmoothing: cam.useSmoothing ?? true,
         confidence: cam.confidence ?? 0.1,

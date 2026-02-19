@@ -320,7 +320,9 @@ export const selectCamera = async (ctx: Context) => {
     startVideoStream(startCam, cam.camStream)
 }
 
-export const getUSBCameras = getDeviceCameras   // backward compat alias
+export async function getUSBCameras(): Promise<Camera[]> {
+    return getDeviceCameras()
+}
 
 export async function getDeviceCameras(): Promise<Camera[]> {
     try {

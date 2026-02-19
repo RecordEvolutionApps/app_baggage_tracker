@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from model_catalog import discover_mmdet_models, get_model_classes, get_all_tags
+from model_catalog import discover_all_models, get_model_classes, get_all_tags
 
 logger = logging.getLogger('routes.models')
 
@@ -30,18 +30,89 @@ class BuildTrtRequest(BaseModel):
     model: str
 
 
+class ValidateRequest(BaseModel):
+    model: str
+
+
 # ── Endpoints ───────────────────────────────────────────────────────────────
+
+@router.post("/models/validate")
+def validate_model(req: ValidateRequest):
+    """Check whether a model is usable with the currently installed backends.
+
+    Returns:
+      {"valid": true,  "backend": "huggingface", "model": "..."}  on success
+      {"valid": false, "backend": "mmdet",       "model": "...", "reason": "..."}  on failure
+    """
+    import torch
+    from model_zoo import MMDET_MODEL_ZOO, HF_MODEL_ZOO
+
+    try:
+        import mmdet  # noqa: F401
+        has_mmdet = True
+    except ImportError:
+        has_mmdet = False
+
+    try:
+        import transformers  # noqa: F401
+        has_transformers = True
+    except ImportError:
+        has_transformers = False
+
+    has_cuda = torch.cuda.is_available()
+    model = req.model
+
+    # Determine the model's native backend
+    if model in MMDET_MODEL_ZOO:
+        required_backend = 'mmdet'
+        if not has_mmdet:
+            return {
+                "valid": False,
+                "model": model,
+                "backend": required_backend,
+                "reason": (
+                    f"Model '{model}' requires MMDetection which is not installed "
+                    "on this device. Choose a HuggingFace model instead."
+                ),
+            }
+    elif model in HF_MODEL_ZOO or '/' in model:
+        required_backend = 'huggingface'
+        if not has_transformers:
+            return {
+                "valid": False,
+                "model": model,
+                "backend": required_backend,
+                "reason": (
+                    f"Model '{model}' requires HuggingFace Transformers which is "
+                    "not installed on this device."
+                ),
+            }
+    else:
+        # Unknown model — reject immediately so it doesn't cause a runtime error
+        return {
+            "valid": False,
+            "model": model,
+            "backend": "unknown",
+            "reason": (
+                f"Model '{model}' was not found in any known model zoo "
+                "(MMDetection or HuggingFace). "
+                "Please select a model from the available list."
+            ),
+        }
+
+    return {"valid": True, "model": model, "backend": required_backend}
+
 
 @router.get("/models")
 def list_models():
-    """Return available MMDetection models discovered from the installed package."""
-    return discover_mmdet_models()
+    """Return available detection models (MMDetection + HuggingFace)."""
+    return discover_all_models()
 
 
 @router.get("/models/tags")
 def list_tags():
     """Return all available tags grouped by dimension, for building filter UI."""
-    models = discover_mmdet_models()
+    models = discover_all_models()
     return get_all_tags(models)
 
 

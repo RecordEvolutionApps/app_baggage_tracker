@@ -13,6 +13,19 @@ import threading
 
 logger = logging.getLogger('model_catalog')
 
+# ── Detect available ML frameworks ──────────────────────────────────────────
+try:
+    import mmdet as _mmdet  # noqa: F401
+    HAS_MMDET = True
+except ImportError:
+    HAS_MMDET = False
+
+try:
+    import transformers as _transformers  # noqa: F401
+    HAS_TRANSFORMERS = True
+except ImportError:
+    HAS_TRANSFORMERS = False
+
 
 # ── Fix packaging.version on Python 3.8 ─────────────────────────────────────
 # openmim 0.3.x → pkg_resources → packaging.version.Version can receive a
@@ -850,9 +863,14 @@ def discover_mmdet_models() -> list[dict]:
     """
     Discover COCO-pretrained detection models from MMDetection's metafile
     registry via openmim. Results are cached after first call.
+    Returns an empty list if MMDetection is not installed.
     """
     if hasattr(discover_mmdet_models, '_cache'):
         return discover_mmdet_models._cache
+
+    if not HAS_MMDET:
+        discover_mmdet_models._cache = []
+        return []
 
     models: list[dict] = []
 
@@ -1051,6 +1069,66 @@ def discover_mmdet_models() -> list[dict]:
     return models
 
 
+def discover_hf_models() -> list[dict]:
+    """Return the curated HuggingFace model list for the UI/API.
+
+    Each entry mirrors the shape of discover_mmdet_models entries so the
+    frontend can treat them uniformly.
+    """
+    if hasattr(discover_hf_models, '_cache'):
+        return discover_hf_models._cache
+
+    try:
+        from model_zoo import HF_MODEL_ZOO
+    except ImportError:
+        discover_hf_models._cache = []
+        return []
+
+    models: list[dict] = []
+    for model_id, entry in HF_MODEL_ZOO.items():
+        arch = entry.get('arch', model_id.split('-')[0])
+        dataset = entry.get('dataset', 'coco')
+        label = entry.get('label', model_id.replace('-', ' ').title())
+        description = entry.get('description', '')
+
+        # Build tags the same way MMDet models do
+        tags = compute_model_tags(arch, model_id, dataset, False)
+        # Add backend tag so the UI can distinguish
+        tags.append('backend:huggingface')
+
+        models.append({
+            'id': model_id,
+            'label': label,
+            'arch': arch,
+            'dataset': dataset,
+            'architecture': f'{arch} (HuggingFace)',
+            'task': 'object_detection',
+            'paper': f'https://huggingface.co/{entry.get("repo_id", model_id)}',
+            'summary': description,
+            'description': description,
+            'openVocab': False,
+            'tags': tags,
+            'backend': 'huggingface',
+            'license': entry.get('license', ''),
+        })
+
+    models.sort(key=lambda m: (m['arch'], m['id']))
+    logger.info('Discovered %d HuggingFace detection models', len(models))
+    discover_hf_models._cache = models
+    return models
+
+
+def discover_all_models() -> list[dict]:
+    """Return the union of MMDet + HuggingFace models for the API."""
+    mmdet = discover_mmdet_models()
+    hf = discover_hf_models()
+    # Add backend tag to mmdet entries if missing
+    for m in mmdet:
+        if 'backend' not in m:
+            m['backend'] = 'mmdet'
+    return mmdet + hf
+
+
 def get_model_classes(model_id: str, model_classes_cache: dict[str, list[dict]]) -> list[dict]:
     """Return detection class list for a model, using cache and dataset heuristics."""
     if model_id in ('none', ''):
@@ -1059,8 +1137,8 @@ def get_model_classes(model_id: str, model_classes_cache: dict[str, list[dict]])
         return model_classes_cache[model_id]
 
     # Fast path: if the model name contains a known dataset keyword, return
-    # the class list directly.  This covers the vast majority of mmdet models
-    # (e.g. "yolox_tiny_8xb8-300e_coco") and avoids loading the whole model.
+    # the class list directly.  This covers the vast majority of models
+    # and avoids loading the entire model.
     model_id_lower = model_id.lower()
     for keyword, class_list in DATASET_CLASSES.items():
         if keyword in model_id_lower:
@@ -1068,24 +1146,66 @@ def get_model_classes(model_id: str, model_classes_cache: dict[str, list[dict]])
             model_classes_cache[model_id] = result
             return result
 
-    # Secondary fast path: check discovered model metadata (if already cached)
-    if hasattr(discover_mmdet_models, '_cache'):
-        for m in discover_mmdet_models._cache:
-            if m['id'] == model_id:
-                dataset = m.get('dataset', '').lower()
-                for keyword, class_list in DATASET_CLASSES.items():
-                    if keyword in dataset:
-                        result = classes_to_dicts(class_list)
-                        model_classes_cache[model_id] = result
-                        return result
-                break
+    # Fast path #2: look up dataset directly from HF_MODEL_ZOO metadata.
+    # This avoids downloading the full model just to read id2label when the
+    # dataset is already known (e.g. detr-resnet-50 → dataset='coco').
+    try:
+        from model_zoo import HF_MODEL_ZOO
+        zoo_entry = HF_MODEL_ZOO.get(model_id, {})
+        dataset_str = zoo_entry.get('dataset', '').lower()
+        for keyword, class_list in DATASET_CLASSES.items():
+            if keyword in dataset_str:
+                result = classes_to_dicts(class_list)
+                model_classes_cache[model_id] = result
+                return result
+    except Exception:
+        pass
 
-    # Slow path: actually load the model (non-standard dataset)
-    from model_loader import get_mmdet_model
-    bundle = get_mmdet_model(model_id)
-    inferencer = bundle.get('inferencer')
-    if inferencer is None:
-        raise RuntimeError('MMDetection inferencer unavailable')
-    classes = extract_model_classes(inferencer)
-    model_classes_cache[model_id] = classes
-    return classes
+    # Secondary fast path: check discovered model metadata (if already cached)
+    all_models = []
+    if hasattr(discover_mmdet_models, '_cache'):
+        all_models.extend(discover_mmdet_models._cache)
+    if hasattr(discover_hf_models, '_cache'):
+        all_models.extend(discover_hf_models._cache)
+    for m in all_models:
+        if m['id'] == model_id:
+            dataset = m.get('dataset', '').lower()
+            for keyword, class_list in DATASET_CLASSES.items():
+                if keyword in dataset:
+                    result = classes_to_dicts(class_list)
+                    model_classes_cache[model_id] = result
+                    return result
+            break
+
+    # HuggingFace model: load and inspect id2label from config only (no weights)
+    try:
+        from model_zoo import HF_MODEL_ZOO
+        if model_id in HF_MODEL_ZOO or '/' in model_id:
+            if HAS_TRANSFORMERS:
+                from transformers import AutoConfig
+                zoo_entry = HF_MODEL_ZOO.get(model_id, {})
+                repo_id = zoo_entry.get('repo_id', model_id)
+                cfg = AutoConfig.from_pretrained(repo_id, cache_dir='/data/huggingface')
+                id2label = getattr(cfg, 'id2label', {})
+                if id2label:
+                    classes = [{'id': i, 'name': id2label[i]} for i in sorted(id2label.keys())]
+                    model_classes_cache[model_id] = classes
+                    return classes
+    except Exception as e:
+        logger.warning('Failed to get classes from HF config %s: %s', model_id, e)
+
+    # Slow path: actually load via MMDetection (non-standard dataset)
+    if HAS_MMDET:
+        from model_loader import get_mmdet_model
+        bundle = get_mmdet_model(model_id)
+        inferencer = bundle.get('inferencer')
+        if inferencer is None:
+            raise RuntimeError('MMDetection inferencer unavailable')
+        classes = extract_model_classes(inferencer)
+        model_classes_cache[model_id] = classes
+        return classes
+
+    # Default: return COCO classes
+    result = classes_to_dicts(COCO_CLASSES)
+    model_classes_cache[model_id] = result
+    return result

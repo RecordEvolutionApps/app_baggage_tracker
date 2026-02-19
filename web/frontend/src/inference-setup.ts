@@ -134,9 +134,9 @@ export class InferenceSetup extends LitElement {
     super();
     this.camStream = 'frontCam';
     this.models = [];
-    this.selectedModel = 'rtmdet_tiny_8xb32-300e_coco';
-    this.useSahi = true;
-    this.useSmoothing = true;
+    this.selectedModel = 'detr-resnet-50';
+    this.useSahi = false;
+    this.useSmoothing = false;
     this.frameBuffer = 64;
     this.confidence = 0.1;
     this.nmsIou = 0.5;

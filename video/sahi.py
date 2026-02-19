@@ -92,7 +92,6 @@ def initSliceInferer(model_bundle: Dict[str, Any],
     slicer = sv.InferenceSlicer(
         callback=inferSlice,
         slice_wh=(native_w, native_h),
-        overlap_ratio_wh=None,
         overlap_wh=(overlap_w, overlap_h),
         iou_threshold=sahi_iou,
         thread_workers=6

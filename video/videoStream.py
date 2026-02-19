@@ -1,30 +1,31 @@
 import sys
 import os
 
-# ── Jetson TLS diagnostics & fix ───────────────────────────────────────────
+# ── Jetson TLS diagnostics & fix (arm64 only) ──────────────────────────────
 # On Jetson (L4T), the static TLS block is limited. PyTorch + CUDA can exhaust
 # it, preventing GStreamer NVIDIA plugins from loading libGLdispatch.so.0.
 # We force-load these .so files before any heavy imports (torch, cv2).
-import ctypes
-_tls_libs = [
-    '/lib/aarch64-linux-gnu/libGLdispatch.so.0',
-    '/usr/lib/aarch64-linux-gnu/libGLESv2.so.2',
-    '/usr/lib/aarch64-linux-gnu/libEGL.so.1',
-    '/usr/lib/aarch64-linux-gnu/gstreamer-1.0/libgstnvvidconv.so',
-    '/usr/lib/aarch64-linux-gnu/gstreamer-1.0/libgstnvvideo4linux2.so',
-]
-for _lib in _tls_libs:
-    if os.path.exists(_lib):
-        try:
-            ctypes.CDLL(_lib, mode=ctypes.RTLD_GLOBAL)
-            print(f'[TLS] Pre-loaded: {_lib}', flush=True)
-        except OSError as e:
-            print(f'[TLS] FAILED to pre-load {_lib}: {e}', flush=True)
-    else:
-        print(f'[TLS] Not found (skipped): {_lib}', flush=True)
-
-print(f'[TLS] LD_PRELOAD={os.environ.get("LD_PRELOAD", "<not set>")}', flush=True)
-del _lib, _tls_libs
+import platform as _platform
+if _platform.machine() == 'aarch64':
+    import ctypes
+    _tls_libs = [
+        '/lib/aarch64-linux-gnu/libGLdispatch.so.0',
+        '/usr/lib/aarch64-linux-gnu/libGLESv2.so.2',
+        '/usr/lib/aarch64-linux-gnu/libEGL.so.1',
+        '/usr/lib/aarch64-linux-gnu/gstreamer-1.0/libgstnvvidconv.so',
+        '/usr/lib/aarch64-linux-gnu/gstreamer-1.0/libgstnvvideo4linux2.so',
+    ]
+    for _lib in _tls_libs:
+        if os.path.exists(_lib):
+            try:
+                ctypes.CDLL(_lib, mode=ctypes.RTLD_GLOBAL)
+                print(f'[TLS] Pre-loaded: {_lib}', flush=True)
+            except OSError as e:
+                print(f'[TLS] FAILED to pre-load {_lib}: {e}', flush=True)
+    LD_PRELOAD = os.environ.get('LD_PRELOAD', '<not set>')
+    print(f'[TLS] LD_PRELOAD={LD_PRELOAD}', flush=True)
+    del _lib, _tls_libs, LD_PRELOAD
+del _platform
 # ────────────────────────────────────────────────────────────────────────────
 
 import collections
@@ -131,9 +132,13 @@ device = cfg.device
 logger.info('Camera: %s', device)
 
 # Check OpenCV video backends
+_bi = cv2.getBuildInformation()
+import re as _re
+_gst = bool(_re.search(r'GStreamer:\s+YES', _bi))
+_ffmpeg = bool(_re.search(r'FFMPEG:\s+YES', _bi))
 logger.info('OpenCV backends — FFmpeg: %s, GStreamer: %s',
-    'YES' if cv2.getBuildInformation().find('FFMPEG') > 0 else 'NO',
-    'YES' if cv2.getBuildInformation().find('GStreamer') > 0 else 'NO')
+    'YES' if _ffmpeg else 'NO',
+    'YES' if _gst else 'NO')
 
 # ── Open video source ──────────────────────────────────────────────────────
 

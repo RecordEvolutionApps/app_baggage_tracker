@@ -13,7 +13,10 @@ services:
       # ANNOUNCED_IP = the IP browsers use to reach this host.
       # 127.0.0.1 works only when the browser runs on the same machine.
       # For LAN access (e.g. 192.168.0.19:1100), set to the host's LAN IP.
-      - ANNOUNCED_IP=${ANNOUNCED_IP:-127.0.0.1}
+      # ANNOUNCED_IP_FALLBACK adds a second ICE candidate as a fallback
+      # (e.g. set primary to reverse-proxy URL, fallback to LAN IP).
+      - ANNOUNCED_IP=127.0.0.1
+      - ANNOUNCED_IP_FALLBACK=127.0.0.1
       - RTP_PORT_MIN=10000
       - RTP_PORT_MAX=10100
     volumes:
@@ -36,7 +39,7 @@ services:
       - APP_KEY=26
       - DEVICE_SERIAL_NUMBER=aa4ef0de-9800-482b-8205-d7ca12388dd1
       - ENV=DEV
-      - OBJECT_MODEL=rtmdet_tiny_8xb32-300e_coco
+      - OBJECT_MODEL=detr-resnet-50
       - CLASS_LIST=24, 26, 28
       - USE_SAHI=false
       - FRAME_BUFFER=180

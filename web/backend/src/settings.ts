@@ -1,5 +1,5 @@
 import type { Context } from "elysia";
-import { streamSetup, streamSetupFile, writeStreamSettings } from './shared.js'
+import { VIDEO_API, streamSetup, streamSetupFile, writeStreamSettings } from './shared.js'
 import { killVideoStream, startVideoStream } from './streams.js'
 
 // ── Stream settings updates ────────────────────────────────────────────────
@@ -22,11 +22,33 @@ export async function updateStreamModel(ctx: Context) {
         ctx.set.status = 404
         return { error: `Stream "${camStream}" not found` }
     }
+
+    // Validate the model against the available backend before accepting it
+    try {
+        const validateRes = await fetch(`${VIDEO_API}/models/validate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model }),
+        })
+        const validation: any = await validateRes.json()
+        if (!validation.valid) {
+            ctx.set.status = 422
+            return {
+                error: validation.reason ?? `Model '${model}' is not supported on this device.`,
+                backend: validation.backend,
+                model,
+            }
+        }
+    } catch (err) {
+        console.warn(`Could not reach video API to validate model '${model}':`, err)
+        // Non-fatal: proceed if the video API is temporarily unreachable
+    }
+
     cam.model = model
     await Bun.write(streamSetupFile, JSON.stringify(streamSetup))
     await writeStreamSettings(camStream, cam)
 
-    // Restart the stream so it picks up the new model (skip if stopped)
+    // Restart the stream so it picks up the new model immediately upon selection
     if (cam.path && !cam.stopped) {
         console.log(`Restarting stream ${camStream} for model change to ${model}`)
         await killVideoStream(cam.path, camStream)
