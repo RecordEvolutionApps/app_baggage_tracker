@@ -44,10 +44,13 @@ async def watchMaskFile(config: StreamConfig, poll_interval: float = 1.0):
         await sleep(poll_interval)
 
 
-async def watchSettingsFile(config: StreamConfig, poll_interval: float = 1.0):
+async def watchSettingsFile(config: StreamConfig, poll_interval: float = 1.0,
+                           on_change=None):
     """Poll the per-stream settings file for changes and update ``config.stream_settings``.
 
     The backend writes ``/data/settings/<camStream>.json`` when settings change.
+    If *on_change* is provided it is called (no arguments) whenever a real
+    setting value changes.
     """
     settings_path = f'/data/settings/{config.cam_stream}.json'
     last_mtime = 0.0
@@ -73,6 +76,8 @@ async def watchSettingsFile(config: StreamConfig, poll_interval: float = 1.0):
                         for k, diff in changed.items():
                             logger.info('[settings] %s: %s: %s -> %s',
                                         config.cam_stream, k, diff['from'], diff['to'])
+                        if on_change is not None:
+                            on_change()
                     else:
                         logger.debug('[settings] %s: settings file touched (no changes)',
                                      config.cam_stream)

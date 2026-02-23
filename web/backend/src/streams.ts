@@ -87,21 +87,23 @@ export async function startVideoStream(cam: Camera, camStream: string) {
     }
 }
 
-export async function killVideoStream(camPath: string, camStream: string) {
-    console.log('Stopping video stream (if exists) for', camStream)
+export async function killVideoStream(camPath: string, camStream: string, method: 'stop' | 'delete' = 'delete') {
+    console.log(`${method === 'delete' ? 'Deleting' : 'Stopping'} video stream (if exists) for`, camStream)
 
     try {
-        const res = await fetch(`${VIDEO_API}/streams/${camStream}`, {
-            method: 'DELETE',
-        })
+        const url = method === 'stop'
+            ? `${VIDEO_API}/streams/${camStream}/stop`
+            : `${VIDEO_API}/streams/${camStream}`
+        const httpMethod = method === 'stop' ? 'POST' : 'DELETE'
+        const res = await fetch(url, { method: httpMethod })
         if (res.ok) {
             const data: any = await res.json()
-            console.log(`Stream ${camStream} stopped:`, data)
+            console.log(`Stream ${camStream} ${method === 'delete' ? 'deleted' : 'stopped'}:`, data)
         } else if (res.status !== 404) {
-            console.error(`Failed to stop stream ${camStream}:`, res.status, await res.text())
+            console.error(`Failed to ${method} stream ${camStream}:`, res.status, await res.text())
         }
     } catch (err) {
-        console.error(`Error stopping stream ${camStream}:`, err)
+        console.error(`Error ${method === 'delete' ? 'deleting' : 'stopping'} stream ${camStream}:`, err)
     }
 
     ports.delete(camStream)
@@ -275,7 +277,7 @@ export async function deleteStream(ctx: Context) {
         ctx.set.status = 404
         return { error: `Stream "${decoded}" not found` }
     }
-    await killVideoStream(cam.path ?? '', decoded)
+    await killVideoStream(cam.path ?? '', decoded, 'delete')
     delete streamSetup[decoded]
     await Bun.write(streamSetupFile, JSON.stringify(streamSetup))
     return { status: 'deleted', camStream: decoded }
@@ -333,7 +335,7 @@ export const selectCamera = async (ctx: Context) => {
     await Bun.write(streamSetupFile, JSON.stringify(streamSetup));
     await writeStreamSettings(cam.camStream, startCam)
 
-    await killVideoStream(startCam.path ?? '', cam.camStream)
+    await killVideoStream(startCam.path ?? '', cam.camStream, 'stop')
 
     startVideoStream(startCam, cam.camStream)
 }
@@ -372,7 +374,7 @@ export async function stopStream(ctx: Context) {
         ctx.set.status = 404
         return { error: `Stream "${camStream}" not found` }
     }
-    await killVideoStream(cam.path ?? '', camStream)
+    await killVideoStream(cam.path ?? '', camStream, 'stop')
     cam.stopped = true
     await Bun.write(streamSetupFile, JSON.stringify(streamSetup))
     return { status: 'stopped', camStream }

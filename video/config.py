@@ -133,10 +133,15 @@ def create_config(args: argparse.Namespace) -> StreamConfig:
     object_model = os.environ.get('OBJECT_MODEL')
 
     # Auto-select backend: TensorRT on CUDA, huggingface on CPU (AMD64 has no mmdet)
+    import platform as _platform
+    _is_amd64 = _platform.machine() in ('x86_64', 'AMD64')
+
     if torch.cuda.is_available():
         _default_backend = 'tensorrt'
+    elif _is_amd64:
+        # amd64 builds only support HuggingFace (no MMDetection).
+        _default_backend = 'huggingface'
     else:
-        # On AMD64 without CUDA, prefer huggingface (mmdet may not be installed)
         try:
             import mmdet  # noqa: F401
             _default_backend = 'mmdet'

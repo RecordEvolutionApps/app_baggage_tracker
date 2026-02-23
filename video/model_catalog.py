@@ -13,11 +13,19 @@ import threading
 
 logger = logging.getLogger('model_catalog')
 
+# ── Platform detection ──────────────────────────────────────────────────────
+import platform as _platform
+_IS_AMD64 = _platform.machine() in ('x86_64', 'AMD64')
+
 # ── Detect available ML frameworks ──────────────────────────────────────────
 try:
     import mmdet as _mmdet  # noqa: F401
     HAS_MMDET = True
 except ImportError:
+    HAS_MMDET = False
+
+# amd64 builds use a modern stack that only supports HuggingFace, not MMDetection.
+if _IS_AMD64:
     HAS_MMDET = False
 
 try:

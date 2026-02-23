@@ -1,7 +1,8 @@
-"""IronFlock publishing — images, cameras, detection counts, and line counts."""
+"""IronFlock publishing — images, camera hubs, streams, detection counts, and line counts."""
 from __future__ import annotations
 
 import base64
+import json
 import logging
 from asyncio import get_event_loop
 from concurrent.futures import ThreadPoolExecutor
@@ -47,24 +48,25 @@ class Publisher:
         get_event_loop().create_task(_publish())
 
     def publish_cameras(self):
-        """Publish camera metadata to the ``cameras`` table."""
+        """Publish camera hub heartbeat to the ``camera_hubs`` table."""
         now = datetime.now().astimezone().isoformat()
         payload = {"tsp": now}
         payload["videolink"] = f"https://{self._config.device_key}-baggagetracker-1100.app.ironflock.com"
         payload["devicelink"] = self._config.device_url
         get_event_loop().create_task(
-            self._ironflock.publish_to_table('cameras', payload),
+            self._ironflock.publish_to_table('camera_hubs', payload),
         )
 
     def publish_class_count(self, zone_name, result):
         """Publish per-zone class counts to the ``detections`` table."""
         now = datetime.now().astimezone().isoformat()
+        detections = {str(class_id): result.get(class_id, 0)
+                      for class_id in self._config.class_list}
         payload = {
             "tsp": now,
             "zone_name": zone_name,
+            "detections": detections,
         }
-        for class_id in self._config.class_list:
-            payload[str(class_id)] = result.get(class_id, 0)
 
         get_event_loop().create_task(
             self._ironflock.publish_to_table('detections', payload),
@@ -81,6 +83,21 @@ class Publisher:
         }
         get_event_loop().create_task(
             self._ironflock.publish_to_table('linecounts', payload),
+        )
+
+    def publish_stream(self, *, status: str, deleted: bool = False):
+        """Publish stream info to the ``streams`` table."""
+        now = datetime.now().astimezone().isoformat()
+        payload = {
+            "tsp": now,
+            "cam_stream": self._config.cam_stream,
+            "cam_path": self._config.device,
+            "stream_config": json.dumps(self._config.stream_settings),
+            "status": status,
+            "deleted": deleted,
+        }
+        get_event_loop().create_task(
+            self._ironflock.publish_to_table('streams', payload),
         )
 
 

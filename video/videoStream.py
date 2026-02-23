@@ -473,10 +473,37 @@ if __name__ == "__main__":
         ironflock = IronFlock()
 
     cfg._publisher = Publisher(ironflock, cfg)
+    publisher = cfg._publisher
+
+    # Publish initial stream state
+    publisher.publish_stream(status='started')
+
+    # On SIGTERM (container/process stop), publish the stream as deleted
+    import signal as _signal
+
+    def _on_sigterm(*_args):
+        try:
+            publisher.publish_stream(status='stopped')
+        except Exception:
+            pass
+        sys.exit(0)
+
+    def _on_sigusr1(*_args):
+        try:
+            publisher.publish_stream(status='stopped', deleted=True)
+        except Exception:
+            pass
+        sys.exit(0)
+
+    _signal.signal(_signal.SIGTERM, _on_sigterm)
+    _signal.signal(_signal.SIGUSR1, _on_sigusr1)
 
     loop = get_event_loop()
     loop.create_task(watchMaskFile(cfg))
-    loop.create_task(watchSettingsFile(cfg))
+    loop.create_task(watchSettingsFile(
+        cfg,
+        on_change=lambda: publisher.publish_stream(status='started'),
+    ))
     loop.create_task(main(cfg))
 
     if ENV == 'DEV':

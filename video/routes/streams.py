@@ -110,9 +110,9 @@ def start_stream(req: StreamRequest):
     }
 
 
-@router.delete("/streams/{cam_stream}")
+@router.post("/streams/{cam_stream}/stop")
 def stop_stream(cam_stream: str):
-    """Stop a running video stream and clean up mediasoup ingest."""
+    """Stop a running video stream (keeps it stoppable, not deleted)."""
     proc = processes.pop(cam_stream, None)
     if not proc:
         raise HTTPException(404, f"No running stream for {cam_stream}")
@@ -127,6 +127,26 @@ def stop_stream(cam_stream: str):
     delete_mediasoup_ingest(cam_stream)
 
     return {"status": "stopped", "camStream": cam_stream}
+
+
+@router.delete("/streams/{cam_stream}")
+def delete_stream(cam_stream: str):
+    """Delete a running video stream and clean up mediasoup ingest."""
+    proc = processes.pop(cam_stream, None)
+    if not proc:
+        raise HTTPException(404, f"No running stream for {cam_stream}")
+
+    try:
+        # Signal the stream process that this is an explicit deletion
+        proc.send_signal(signal.SIGUSR1)
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+
+    delete_mediasoup_ingest(cam_stream)
+
+    return {"status": "deleted", "camStream": cam_stream}
 
 
 @router.get("/streams")

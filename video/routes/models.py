@@ -45,12 +45,16 @@ def validate_model(req: ValidateRequest):
       {"valid": false, "backend": "mmdet",       "model": "...", "reason": "..."}  on failure
     """
     import torch
-    from model_zoo import MMDET_MODEL_ZOO, HF_MODEL_ZOO
+    from model_zoo import MMDET_MODEL_ZOO, HF_MODEL_ZOO, IS_AMD64
 
     try:
         import mmdet  # noqa: F401
         has_mmdet = True
     except ImportError:
+        has_mmdet = False
+
+    # amd64 builds use a modern stack that only supports HuggingFace.
+    if IS_AMD64:
         has_mmdet = False
 
     try:

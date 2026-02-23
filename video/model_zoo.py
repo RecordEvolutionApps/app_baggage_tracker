@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import pickle
+import platform
 import shutil
 import zipfile
 from pathlib import Path
@@ -15,11 +16,19 @@ import torch
 
 logger = logging.getLogger('model_zoo')
 
+# ── Platform detection ──────────────────────────────────────────────────────
+# amd64 (x86_64) builds use a modern software stack that only supports
+# HuggingFace Transformers — MMDetection is not available there.
+IS_AMD64 = platform.machine() in ('x86_64', 'AMD64')
+
 # ── Detect available ML frameworks ──────────────────────────────────────────
 try:
     import mmdet as _mmdet  # noqa: F401
     HAS_MMDET = True
 except ImportError:
+    HAS_MMDET = False
+
+if IS_AMD64:
     HAS_MMDET = False
 
 try:
@@ -31,7 +40,7 @@ except ImportError:
 # Exceptions raised by torch.load() for corrupted checkpoint files
 _CORRUPT_CHECKPOINT_ERRORS = (RuntimeError, pickle.UnpicklingError, zipfile.BadZipFile, EOFError, OSError)
 
-MMDET_MODEL_ZOO = {
+_MMDET_MODEL_ZOO_FULL = {
     "rtmdet_tiny_8xb32-300e_coco": {
         "config": "https://raw.githubusercontent.com/open-mmlab/mmdetection/v3.3.0/configs/rtmdet/rtmdet_tiny_8xb32-300e_coco.py",
         "checkpoint": "https://download.openmmlab.com/mmdetection/v3.0/rtmdet/rtmdet_tiny_8xb32-300e_coco/rtmdet_tiny_8xb32-300e_coco_20220902_112414-78e30dcc.pth",
@@ -54,6 +63,9 @@ MMDET_MODEL_ZOO = {
         "sha256": "229f527ca88498e8894a778a62a878a322b4a3ea2cae09ea537d34b7e907792b",
     },
 }
+
+# On amd64 the software stack is too modern for MMDetection; expose an empty zoo.
+MMDET_MODEL_ZOO = {} if IS_AMD64 else _MMDET_MODEL_ZOO_FULL
 
 
 # ── HuggingFace model zoo ───────────────────────────────────────────────────
