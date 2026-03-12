@@ -1,4 +1,4 @@
-"""Async file watchers for mask and settings JSON files."""
+"""Async file watcher for the unified stream config JSON file."""
 from __future__ import annotations
 
 import json
@@ -11,61 +11,38 @@ from masks import prepMasks
 
 logger = logging.getLogger('watchers')
 
+# Settings keys that the video process cares about
+_SETTINGS_KEYS = frozenset([
+    'model', 'useSahi', 'useSmoothing', 'confidence', 'frameBuffer',
+    'nmsIou', 'sahiIou', 'overlapRatio', 'classList', 'classNames',
+])
 
-async def watchMaskFile(config: StreamConfig, poll_interval: float = 1.0):
-    """Poll the per-stream mask file for changes and reload when modified.
 
-    Mutates ``config.saved_masks`` in-place.
+async def watchStreamConfig(config: StreamConfig, poll_interval: float = 1.0,
+                            on_change=None):
+    """Poll the unified stream config file for both settings and mask changes.
+
+    The backend writes ``/data/streams/<camStream>.json`` on every update.
+    This watcher replaces the old separate ``watchSettingsFile`` and
+    ``watchMaskFile`` coroutines.
     """
-    mask_path = f'/data/masks/{config.cam_stream}.json'
-    legacy_path = '/data/mask.json'
+    config_path = f'/data/streams/{config.cam_stream}.json'
     last_mtime = 0.0
+    last_masks_repr = ''
 
-    logger.info('Watching mask file: %s', mask_path)
+    logger.info('[watcher] Watching %s', config_path)
 
     while True:
         try:
-            path = mask_path if os.path.exists(mask_path) else legacy_path
-
-            if os.path.exists(path):
-                mtime = os.path.getmtime(path)
+            if os.path.exists(config_path):
+                mtime = os.path.getmtime(config_path)
                 if mtime != last_mtime:
                     last_mtime = mtime
-                    with open(path, 'r') as f:
-                        loaded_masks = json.load(f)
-                    config.saved_masks[:] = []
-                    config.saved_masks.extend(
-                        prepMasks(loaded_masks, config.resolution_x, config.resolution_y)
-                    )
-                    logger.info('Reloaded masks from %s', path)
-        except Exception as e:
-            logger.error('Error reading mask file: %s', e, exc_info=True)
+                    with open(config_path, 'r') as f:
+                        data = json.load(f)
 
-        await sleep(poll_interval)
-
-
-async def watchSettingsFile(config: StreamConfig, poll_interval: float = 1.0,
-                           on_change=None):
-    """Poll the per-stream settings file for changes and update ``config.stream_settings``.
-
-    The backend writes ``/data/settings/<camStream>.json`` when settings change.
-    If *on_change* is provided it is called (no arguments) whenever a real
-    setting value changes.
-    """
-    settings_path = f'/data/settings/{config.cam_stream}.json'
-    last_mtime = 0.0
-
-    logger.info('[settings] Watching %s', settings_path)
-
-    while True:
-        try:
-            if os.path.exists(settings_path):
-                mtime = os.path.getmtime(settings_path)
-                if mtime != last_mtime:
-                    last_mtime = mtime
-                    with open(settings_path, 'r') as f:
-                        new_settings = json.load(f)
-                    # Log which keys changed
+                    # ── Settings update ─────────────────────────────────
+                    new_settings = {k: data[k] for k in _SETTINGS_KEYS if k in data}
                     changed = {}
                     for k, v in new_settings.items():
                         old_v = config.stream_settings.get(k)
@@ -76,12 +53,26 @@ async def watchSettingsFile(config: StreamConfig, poll_interval: float = 1.0,
                         for k, diff in changed.items():
                             logger.info('[settings] %s: %s: %s -> %s',
                                         config.cam_stream, k, diff['from'], diff['to'])
+
+                    # ── Masks update ────────────────────────────────────
+                    masks_data = data.get('masks', {})
+                    masks_repr = json.dumps(masks_data.get('polygons', []), sort_keys=True)
+                    masks_changed = masks_repr != last_masks_repr
+                    if masks_changed:
+                        last_masks_repr = masks_repr
+                        config.saved_masks[:] = []
+                        config.saved_masks.extend(
+                            prepMasks(masks_data, config.resolution_x, config.resolution_y)
+                        )
+                        logger.info('[masks] Reloaded masks from %s', config_path)
+
+                    if changed or masks_changed:
                         if on_change is not None:
                             on_change()
                     else:
-                        logger.debug('[settings] %s: settings file touched (no changes)',
+                        logger.debug('[watcher] %s: file touched (no changes)',
                                      config.cam_stream)
         except Exception as e:
-            logger.error('[settings] Error reading settings file: %s', e, exc_info=True)
+            logger.error('[watcher] Error reading stream config: %s', e, exc_info=True)
 
         await sleep(poll_interval)

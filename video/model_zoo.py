@@ -150,6 +150,66 @@ HF_MODEL_ZOO = {
         "description": "YOLOS Small — balanced speed and accuracy.",
         "license": "Apache-2.0",
     },
+    "yolos-base": {
+        "repo_id": "hustvl/yolos-base",
+        "label": "YOLOS Base",
+        "arch": "yolos",
+        "dataset": "coco",
+        "native_input_wh": (800, 800),
+        "description": "YOLOS Base — higher accuracy than YOLOS Small, still ViT-based.",
+        "license": "Apache-2.0",
+    },
+    "detr-resnet-50-dc5": {
+        "repo_id": "facebook/detr-resnet-50-dc5",
+        "label": "DETR DC5 (ResNet-50)",
+        "arch": "detr",
+        "dataset": "coco",
+        "native_input_wh": (800, 800),
+        "description": "DETR with dilated C5 feature map — better small-object detection than vanilla DETR.",
+        "license": "Apache-2.0",
+    },
+    "detr-resnet-101-dc5": {
+        "repo_id": "facebook/detr-resnet-101-dc5",
+        "label": "DETR DC5 (ResNet-101)",
+        "arch": "detr",
+        "dataset": "coco",
+        "native_input_wh": (800, 800),
+        "description": "DETR DC5 with ResNet-101 backbone — highest accuracy pure-DETR variant.",
+        "license": "Apache-2.0",
+    },
+    "rt-detr-nano": {
+        "repo_id": "PekingU/rtdetr_r18vd",
+        "label": "RT-DETR Nano (ResNet-18)",
+        "arch": "rt-detr",
+        "dataset": "coco",
+        "native_input_wh": (640, 640),
+        "description": "Lightest RT-DETR variant with ResNet-18 backbone. "
+                       "Best choice for CPU / memory-constrained devices.",
+        "license": "Apache-2.0",
+    },
+    # ── Instance segmentation ─────────────────────────────────────────────────
+    "mask2former-swin-tiny-coco-instance": {
+        "repo_id": "facebook/mask2former-swin-tiny-coco-instance",
+        "label": "Mask2Former Swin-T (Instance)",
+        "arch": "mask2former",
+        "dataset": "coco",
+        "native_input_wh": (800, 800),
+        "hf_task": "instance_segmentation",
+        "description": "Mask2Former with Swin-Tiny backbone for COCO instance segmentation. "
+                       "Produces per-instance binary masks alongside bounding boxes.",
+        "license": "Apache-2.0",
+    },
+    "mask2former-swin-small-coco-instance": {
+        "repo_id": "facebook/mask2former-swin-small-coco-instance",
+        "label": "Mask2Former Swin-S (Instance)",
+        "arch": "mask2former",
+        "dataset": "coco",
+        "native_input_wh": (800, 800),
+        "hf_task": "instance_segmentation",
+        "description": "Mask2Former with Swin-Small backbone for COCO instance segmentation. "
+                       "Higher accuracy than Swin-Tiny, ~2× slower on CPU.",
+        "license": "Apache-2.0",
+    },
 }
 
 

@@ -40,7 +40,7 @@ export class StreamGallery extends LitElement {
 
   async loadStreams() {
     try {
-      const res = await fetch(`${this.basepath}/cameras/streams`);
+      const res = await fetch(`${this.basepath}/streams`);
       this.streams = await res.json();
     } catch (err) {
       console.error('Failed to load streams', err);
@@ -105,7 +105,7 @@ export class StreamGallery extends LitElement {
     const camStream = name.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/_{2,}/g, '_');
 
     try {
-      const res = await fetch(`${this.basepath}/cameras/streams`, {
+      const res = await fetch(`${this.basepath}/streams`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, camStream }),

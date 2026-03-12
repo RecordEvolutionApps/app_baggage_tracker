@@ -99,6 +99,89 @@ def infer_tensorrt(frame: np.ndarray, model_bundle: Dict[str, Any],
         return False
 
 
+def _infer_hf_segmentation(frame: np.ndarray, model_bundle: Dict[str, Any],
+                           conf_threshold: float,
+                           class_list: list) -> Optional[sv.Detections]:
+    """Run Mask2Former / universal-segmentation inference and return sv.Detections.
+
+    Uses the model's raw per-instance binary masks (which can overlap) instead of
+    the overlap-resolved segmentation map produced by post_process_instance_segmentation.
+    This avoids the mismatch where the tracker holds a large Kalman bbox from a previous
+    frame while the current-frame mask was clipped to a tiny fragment by overlap resolution.
+    """
+    import torch.nn.functional as _F
+
+    model = model_bundle['model']
+    processor = model_bundle['processor']
+
+    pil_image = Image.fromarray(frame[:, :, ::-1]) if frame.shape[2] == 3 else Image.fromarray(frame)
+    inputs = processor(images=pil_image, return_tensors='pt')
+    device = next(model.parameters()).device
+    inputs = {k: v.to(device) for k, v in inputs.items() if isinstance(v, torch.Tensor)}
+
+    with torch.no_grad():
+        outputs = model(**inputs)
+
+    h, w = frame.shape[:2]
+
+    # class_queries_logits: (1, num_queries, num_labels + 1)
+    # Last label slot is the no-object class — exclude it.
+    class_logits = outputs.class_queries_logits[0]          # (Q, C+1)
+    pred_probs = class_logits.softmax(-1)[:, :-1]           # (Q, C)  no-object excluded
+    pred_scores, pred_classes = pred_probs.max(-1)          # (Q,), (Q,)
+
+    # Filter by confidence
+    keep_idx = torch.where(pred_scores > conf_threshold)[0]
+    if len(keep_idx) == 0:
+        return False
+
+    # masks_queries_logits: (1, num_queries, H', W') — typically 1/4 of model input size
+    mask_logits = outputs.masks_queries_logits[0][keep_idx]  # (M, H', W')
+
+    # Resize to full frame resolution
+    mask_logits_full = _F.interpolate(
+        mask_logits.unsqueeze(0).float(),
+        size=(h, w),
+        mode='bilinear',
+        align_corners=False,
+    ).squeeze(0)  # (M, H, W)
+
+    # sigmoid > 0.5  ⟺  logit > 0  — standard DETR-family mask threshold
+    binary_masks = (mask_logits_full > 0).cpu().numpy()   # (M, H, W) bool
+
+    scores_np  = pred_scores[keep_idx].cpu().numpy().astype(np.float32)
+    classes_np = pred_classes[keep_idx].cpu().numpy().astype(np.int64)
+
+    # Optional class filter
+    if class_list:
+        keep_cls = np.isin(classes_np, class_list)
+        binary_masks = binary_masks[keep_cls]
+        scores_np    = scores_np[keep_cls]
+        classes_np   = classes_np[keep_cls]
+        if len(scores_np) == 0:
+            return False
+
+    # Derive bbox from each instance's own mask (always aligned — no overlap resolution)
+    boxes, valid = [], []
+    for i, mask in enumerate(binary_masks):
+        ys, xs = np.where(mask)
+        if len(xs) == 0:
+            continue
+        boxes.append([float(xs.min()), float(ys.min()), float(xs.max()), float(ys.max())])
+        valid.append(i)
+
+    if not boxes:
+        return False
+
+    valid = np.array(valid)
+    return sv.Detections(
+        xyxy=np.array(boxes, dtype=np.float32),
+        confidence=scores_np[valid],
+        class_id=classes_np[valid],
+        mask=binary_masks[valid],
+    )
+
+
 def infer_huggingface(frame: np.ndarray, model_bundle: Dict[str, Any],
                       confidence: float | None = None, iou: float | None = None,
                       config: StreamConfig | None = None) -> Optional[sv.Detections]:
@@ -110,6 +193,13 @@ def infer_huggingface(frame: np.ndarray, model_bundle: Dict[str, Any],
 
     try:
         _t0 = _time_mod.monotonic()
+
+        if model_bundle.get('is_segmentation'):
+            result = _infer_hf_segmentation(frame, model_bundle, conf_threshold, class_list)
+            _t1 = _time_mod.monotonic()
+            logger.info('[PROFILE-HF-SEG] total=%.0fms  frame=%dx%d',
+                        (_t1 - _t0) * 1000, frame.shape[1], frame.shape[0])
+            return result
 
         # Convert BGR (OpenCV) to RGB PIL image
         pil_image = Image.fromarray(frame[:, :, ::-1]) if frame.shape[2] == 3 else Image.fromarray(frame)

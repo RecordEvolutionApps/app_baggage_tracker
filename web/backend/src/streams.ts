@@ -1,18 +1,21 @@
 import type { Context } from "elysia";
 import {
+    type StreamConfig,
     type Camera,
     VIDEO_API,
     ports,
-    streamSetup,
-    streamSetupFile,
-    setStreamSetup,
+    readStreamConfig,
+    writeStreamConfig,
+    deleteStreamConfig,
+    listStreamConfigs,
+    sourceChanged,
     waitForService,
-    writeStreamSettings,
+    migrateFromLegacy,
 } from './shared.js'
 
 // ── Stream lifecycle ───────────────────────────────────────────────────────
 
-export async function startVideoStream(cam: Camera, camStream: string) {
+export async function startVideoStream(cam: StreamConfig, camStream: string) {
     console.log('starting video stream for', cam, camStream)
 
     let camPath: string
@@ -26,7 +29,6 @@ export async function startVideoStream(cam: Camera, camStream: string) {
             camPath = `${protocol}://${userpw}${path}`
         }
     } else if (cam.type === 'Image') {
-        // Image URL passed directly — videoStream.py detects it as an image
         camPath = cam.path ?? ''
     } else {
         camPath = cam.path ?? ''
@@ -113,7 +115,7 @@ export async function killVideoStream(camPath: string, camStream: string, method
 
 export async function getStreamBackendStatus(ctx: Context): Promise<any> {
     const url = new URL(ctx.request.url)
-    const camStream = url.pathname.split('/cameras/streams/')[1]?.split('/')[0]
+    const camStream = url.pathname.split('/streams/')[1]?.split('/')[0]
     if (!camStream) {
         ctx.set.status = 400
         return { error: 'camStream is required' }
@@ -136,51 +138,37 @@ export async function getStreamBackendStatus(ctx: Context): Promise<any> {
 // ── Initialization ─────────────────────────────────────────────────────────
 
 async function initStreams() {
-    let camList: Camera[] = []
-    try {
-        camList = await getUSBCameras()
-    } catch (error) {
-        console.error('Failed to load cameras', error)
-    }
-    console.log("CAMERA LIST", { camList })
+    // Migrate from legacy file layout if needed
+    await migrateFromLegacy()
 
-    const firstCam = camList?.[0]
+    let configs = await listStreamConfigs()
 
-    const exists: boolean = await streamSetupFile.exists();
-    if (!exists && firstCam) {
-        await Bun.write(streamSetupFile, JSON.stringify({ frontCam: firstCam }))
-    }
-
-    let loaded: Record<string, Camera> = {}
-    try {
-        loaded = await streamSetupFile.json()
-    } catch (err) {
-        console.error('error loading streamSetup file:', err)
-        await Bun.write(streamSetupFile, JSON.stringify({}))
-        loaded = {}
-    }
-
-    if (Object.keys(loaded).length === 0 && !firstCam) {
-        const demoCam: Camera = {
-            id: 'frontCam',
-            type: 'Demo',
-            name: 'Demo Video',
-            path: 'demoVideo',
-            camStream: 'frontCam',
+    // If no streams exist, create a default demo stream
+    if (configs.length === 0) {
+        let camList: StreamConfig[] = []
+        try {
+            camList = await getUSBCameras()
+        } catch (error) {
+            console.error('Failed to load cameras', error)
         }
-        loaded = { frontCam: demoCam }
-        await Bun.write(streamSetupFile, JSON.stringify(loaded))
+        console.log("CAMERA LIST", { camList })
+
+        const firstCam = camList?.[0]
+        const defaultConfig: StreamConfig = firstCam
+            ? { ...firstCam, camStream: 'frontCam', masks: { polygons: [] } }
+            : {
+                id: 'frontCam',
+                type: 'Demo',
+                name: 'Demo Video',
+                path: 'demoVideo',
+                camStream: 'frontCam',
+                masks: { polygons: [] },
+            }
+        await writeStreamConfig('frontCam', defaultConfig)
+        configs = [defaultConfig]
     }
 
-    // Migrate legacy entries: IP + demoVideo → Demo type
-    for (const cam of Object.values(loaded)) {
-        if (cam.type === 'IP' && cam.path === 'demoVideo') {
-            (cam as any).type = 'Demo'
-        }
-    }
-
-    setStreamSetup(loaded)
-    console.log('StreamSetup', streamSetup)
+    console.log('Stream configs:', configs.map(c => c.camStream))
 
     const videoReady = await waitForService(`${VIDEO_API}/cameras`, 'Video API')
     if (!videoReady) {
@@ -188,10 +176,9 @@ async function initStreams() {
         return
     }
 
-    for (const [camStream, cam] of Object.entries(streamSetup)) {
-        if (camStream && cam && !cam.stopped) {
-            writeStreamSettings(camStream, cam)
-            startVideoStream(cam, camStream)
+    for (const config of configs) {
+        if (config.camStream && !config.stopped) {
+            startVideoStream(config, config.camStream)
         }
     }
 }
@@ -200,18 +187,29 @@ initStreams()
 
 // ── Route handlers ─────────────────────────────────────────────────────────
 
-export async function getStreamSetup(ctx: Context): Promise<any> {
-    const params = new URLSearchParams(ctx.request.url.split('?')[1])
-    const camStream = params.get('camStream') ?? ''
-    console.log('getStreamSetup', camStream)
-    const cam = streamSetup[camStream]
+/** GET /streams — list all stream configs */
+export async function handleListStreams(): Promise<StreamConfig[]> {
+    return listStreamConfigs()
+}
 
-    let width = cam?.width
-    let height = cam?.height
+/** GET /streams/:camStream — read a single stream config from disk */
+export async function handleGetStream(ctx: Context): Promise<any> {
+    const camStream = (ctx.params as any)?.camStream
+    if (!camStream) {
+        ctx.set.status = 400
+        return { error: 'camStream is required' }
+    }
+    const config = await readStreamConfig(decodeURIComponent(camStream))
+    if (!config) {
+        ctx.set.status = 404
+        return { error: `Stream "${camStream}" not found` }
+    }
 
-    // If the camera config doesn't have a resolution (Demo, YouTube, IP/RTSP),
-    // read the actual resolution written by the video process after it opened
-    // the source.
+    let width = config.width
+    let height = config.height
+
+    // If the camera config doesn't have a resolution, read it from the
+    // status file written by the video process after opening the source.
     if (!width || !height) {
         try {
             const resFile = Bun.file(`/data/status/${camStream}.resolution.json`)
@@ -224,17 +222,14 @@ export async function getStreamSetup(ctx: Context): Promise<any> {
     }
 
     return {
-        "camera": cam,
-        "width": width ?? 640,
-        "height": height ?? 480,
+        ...config,
+        width: width ?? 640,
+        height: height ?? 480,
     }
 }
 
-export function listStreams(): Camera[] {
-    return Object.values(streamSetup)
-}
-
-export async function createStream(ctx: Context) {
+/** POST /streams — create a new stream */
+export async function handleCreateStream(ctx: Context) {
     let body: any
     try {
         body = typeof ctx.body === 'string' ? JSON.parse(ctx.body) : ctx.body
@@ -248,97 +243,143 @@ export async function createStream(ctx: Context) {
         ctx.set.status = 400
         return { error: 'camStream is required' }
     }
-    if (streamSetup[camStream]) {
+    const existing = await readStreamConfig(camStream)
+    if (existing) {
         ctx.set.status = 409
         return { error: `Stream "${camStream}" already exists` }
     }
-    const newCam: Camera = {
+    const config: StreamConfig = {
         id: camStream,
         type: 'IP',
         name: name || camStream,
         path: '',
         camStream,
+        masks: { polygons: [] },
     }
-    streamSetup[camStream] = newCam
-    await Bun.write(streamSetupFile, JSON.stringify(streamSetup))
-    return newCam
+    await writeStreamConfig(camStream, config)
+    return config
 }
 
-export async function deleteStream(ctx: Context) {
-    const url = new URL(ctx.request.url)
-    const camStream = url.pathname.split('/cameras/streams/')[1]
+/** PUT /streams/:camStream — update a stream config (the single update endpoint) */
+export async function handleUpdateStream(ctx: Context) {
+    const camStream = (ctx.params as any)?.camStream
     if (!camStream) {
         ctx.set.status = 400
         return { error: 'camStream is required' }
     }
     const decoded = decodeURIComponent(camStream)
-    const cam = streamSetup[decoded]
-    if (!cam) {
+
+    let incoming: StreamConfig
+    try {
+        incoming = typeof ctx.body === 'string' ? JSON.parse(ctx.body) : ctx.body as StreamConfig
+    } catch {
+        ctx.set.status = 400
+        return { error: 'Invalid JSON' }
+    }
+
+    // Ensure camStream is consistent
+    incoming.camStream = decoded
+
+    // Migrate legacy type
+    if (incoming.type === 'IP' && incoming.path === 'demoVideo') {
+        incoming.type = 'Demo'
+    }
+
+    // Read previous config from disk to detect source changes
+    const prev = await readStreamConfig(decoded)
+
+    // For USB cameras, resolve device info from the video API
+    if (incoming.type === 'USB') {
+        try {
+            const camList = await getUSBCameras()
+            const cameraDev = camList.find((c: any) => c.id === incoming.id)
+            if (cameraDev) {
+                incoming.path = (cameraDev as any).path ?? incoming.path
+                incoming.name = (cameraDev as any).name ?? incoming.name
+            }
+        } catch { /* proceed with what we have */ }
+    }
+
+    // Ensure masks default
+    if (!incoming.masks) {
+        incoming.masks = prev?.masks ?? { polygons: [] }
+    }
+
+    // Write the full config to disk
+    await writeStreamConfig(decoded, incoming)
+
+    // Determine if we need to restart the video process
+    const needsRestart = sourceChanged(prev, incoming)
+
+    if (needsRestart && prev) {
+        console.log(`Source changed for ${decoded}, restarting video process`)
+        await killVideoStream(prev.path ?? '', decoded, 'stop')
+    }
+
+    if (needsRestart && incoming.path && !incoming.stopped) {
+        startVideoStream(incoming, decoded)
+    }
+
+    return { status: 'ok', camStream: decoded }
+}
+
+/** DELETE /streams/:camStream — delete a stream */
+export async function handleDeleteStream(ctx: Context) {
+    const camStream = (ctx.params as any)?.camStream
+    if (!camStream) {
+        ctx.set.status = 400
+        return { error: 'camStream is required' }
+    }
+    const decoded = decodeURIComponent(camStream)
+    const config = await readStreamConfig(decoded)
+    if (!config) {
         ctx.set.status = 404
         return { error: `Stream "${decoded}" not found` }
     }
-    await killVideoStream(cam.path ?? '', decoded, 'delete')
-    delete streamSetup[decoded]
-    await Bun.write(streamSetupFile, JSON.stringify(streamSetup))
+    await killVideoStream(config.path ?? '', decoded, 'delete')
+    await deleteStreamConfig(decoded)
     return { status: 'deleted', camStream: decoded }
 }
 
-export const selectCamera = async (ctx: Context) => {
-    const cam: Camera = typeof ctx.body === 'string' ? JSON.parse(ctx.body) : ctx.body as Camera
-    console.log('selected camera', cam)
-
-    // Migrate legacy type: demoVideo path → Demo type
-    if (cam.type === 'IP' && cam.path === 'demoVideo') {
-        cam.type = 'Demo'
+/** POST /streams/:camStream/stop — pause a stream */
+export async function handleStopStream(ctx: Context) {
+    const camStream = (ctx.params as any)?.camStream
+    if (!camStream) {
+        ctx.set.status = 400
+        return { error: 'camStream is required' }
     }
-
-    // Preserve inference settings (model, useSahi, confidence, etc.) from the
-    // existing entry so that switching camera source doesn't wipe the user's
-    // previously applied model and tuning.
-    const existing = streamSetup[cam.camStream]
-    const preserved: Partial<Camera> = existing ? {
-        model: existing.model,
-        useSahi: existing.useSahi,
-        useSmoothing: existing.useSmoothing,
-        confidence: existing.confidence,
-        frameBuffer: existing.frameBuffer,
-        nmsIou: existing.nmsIou,
-        sahiIou: existing.sahiIou,
-        overlapRatio: existing.overlapRatio,
-        classList: existing.classList,
-        classNames: existing.classNames,
-    } : {}
-
-    if (cam.type === 'IP' || cam.type === 'YouTube' || cam.type === 'Demo' || cam.type === 'Image') {
-        streamSetup[cam.camStream] = { ...preserved, ...cam }
+    const decoded = decodeURIComponent(camStream)
+    const config = await readStreamConfig(decoded)
+    if (!config) {
+        ctx.set.status = 404
+        return { error: `Stream "${decoded}" not found` }
     }
-    else {
-        const camList = await getUSBCameras()
-        const cameraDev = camList.find((c) => c.id === cam.id)
-        if (!cameraDev) {
-            ctx.set.status = 404
-            return { error: `Camera "${cam.id}" not found` }
-        }
-        // Merge USB device info with user-chosen resolution, preserving inference settings
-        streamSetup[cam.camStream] = {
-            ...preserved,
-            ...cameraDev,
-            camStream: cam.camStream,
-            type: 'USB',
-            width: cam.width,
-            height: cam.height,
-        }
-    }
-
-    const startCam = streamSetup[cam.camStream]
-    startCam.stopped = false                       // user chose a new source → resume
-    await Bun.write(streamSetupFile, JSON.stringify(streamSetup));
-    await writeStreamSettings(cam.camStream, startCam)
-
-    await killVideoStream(startCam.path ?? '', cam.camStream, 'stop')
-
-    startVideoStream(startCam, cam.camStream)
+    await killVideoStream(config.path ?? '', decoded, 'stop')
+    config.stopped = true
+    await writeStreamConfig(decoded, config)
+    return { status: 'stopped', camStream: decoded }
 }
+
+/** POST /streams/:camStream/start — resume a stream */
+export async function handleStartStream(ctx: Context) {
+    const camStream = (ctx.params as any)?.camStream
+    if (!camStream) {
+        ctx.set.status = 400
+        return { error: 'camStream is required' }
+    }
+    const decoded = decodeURIComponent(camStream)
+    const config = await readStreamConfig(decoded)
+    if (!config) {
+        ctx.set.status = 404
+        return { error: `Stream "${decoded}" not found` }
+    }
+    config.stopped = false
+    await writeStreamConfig(decoded, config)
+    startVideoStream(config, decoded)
+    return { status: 'started', camStream: decoded }
+}
+
+// ── Camera discovery ───────────────────────────────────────────────────────
 
 export async function getUSBCameras(): Promise<Camera[]> {
     return getDeviceCameras()
@@ -356,47 +397,4 @@ export async function getDeviceCameras(): Promise<Camera[]> {
         console.error('Error fetching cameras:', err)
         return []
     }
-}
-
-// ── Stop / Start (keep config) ─────────────────────────────────────────────
-
-export async function stopStream(ctx: Context) {
-    const url = new URL(ctx.request.url)
-    const segments = url.pathname.split('/')
-    // /cameras/streams/<camStream>/stop
-    const camStream = decodeURIComponent(segments[segments.length - 2])
-    if (!camStream) {
-        ctx.set.status = 400
-        return { error: 'camStream is required' }
-    }
-    const cam = streamSetup[camStream]
-    if (!cam) {
-        ctx.set.status = 404
-        return { error: `Stream "${camStream}" not found` }
-    }
-    await killVideoStream(cam.path ?? '', camStream, 'stop')
-    cam.stopped = true
-    await Bun.write(streamSetupFile, JSON.stringify(streamSetup))
-    return { status: 'stopped', camStream }
-}
-
-export async function startStream(ctx: Context) {
-    const url = new URL(ctx.request.url)
-    const segments = url.pathname.split('/')
-    // /cameras/streams/<camStream>/start
-    const camStream = decodeURIComponent(segments[segments.length - 2])
-    if (!camStream) {
-        ctx.set.status = 400
-        return { error: 'camStream is required' }
-    }
-    const cam = streamSetup[camStream]
-    if (!cam) {
-        ctx.set.status = 404
-        return { error: `Stream "${camStream}" not found` }
-    }
-    cam.stopped = false
-    await Bun.write(streamSetupFile, JSON.stringify(streamSetup))
-    await writeStreamSettings(camStream, cam)
-    startVideoStream(cam, camStream)
-    return { status: 'started', camStream }
 }

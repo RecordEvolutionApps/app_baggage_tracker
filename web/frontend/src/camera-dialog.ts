@@ -1,7 +1,7 @@
 import { LitElement, html, css, nothing, PropertyValueMap } from 'lit';
 import { property, customElement, state } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
-import { mainStyles, Camera, CamSetup, DeviceCameraInfo } from './utils.js';
+import { mainStyles, CamSetup, DeviceCameraInfo, StreamConfig } from './utils.js';
 
 import '@material/web/dialog/dialog.js';
 import { MdDialog } from '@material/web/dialog/dialog.js';
@@ -204,7 +204,7 @@ export class CameraDialog extends LitElement {
   }
 
   private populateFromSetup() {
-    const cam = this.camSetup?.camera;
+    const cam = this.camSetup;
     if (!cam) {
       this.activeTab = 'Local';
       return;
@@ -304,7 +304,7 @@ export class CameraDialog extends LitElement {
   }
 
   private async applySelection() {
-    let camera: Camera;
+    let sourceFields: Partial<StreamConfig>;
     let width: number | undefined;
     let height: number | undefined;
 
@@ -317,61 +317,56 @@ export class CameraDialog extends LitElement {
           width = w;
           height = h;
         }
-        camera = {
+        sourceFields = {
           id: localCam.id,
           type: 'USB',
           name: localCam.name,
           path: localCam.path,
-          camStream: this.camStream,
           width,
           height,
         };
         break;
       }
       case 'Demo':
-        camera = {
+        sourceFields = {
           type: 'Demo',
           name: 'Demo Video',
           id: 'demoVideo',
           path: 'demoVideo',
-          camStream: this.camStream,
         };
         break;
       case 'YouTube': {
         const url = this.youtubeUrl.trim();
         if (!url) return;
-        camera = {
+        sourceFields = {
           type: 'YouTube',
           name: 'YouTube',
           id: 'youtube',
           path: url,
-          camStream: this.camStream,
         };
         break;
       }
       case 'IP': {
         const path = this.ipPath.trim();
         if (!path) return;
-        camera = {
+        sourceFields = {
           type: 'IP',
           name: 'IP Camera',
           id: 'ip',
           path,
           username: this.ipUsername || undefined,
           password: this.ipPassword || undefined,
-          camStream: this.camStream,
         };
         break;
       }
       case 'Image': {
         const url = this.imageUrl.trim();
         if (!url) return;
-        camera = {
+        sourceFields = {
           type: 'Image',
           name: 'Image',
           id: 'image',
           path: url,
-          camStream: this.camStream,
         };
         break;
       }
@@ -379,19 +374,25 @@ export class CameraDialog extends LitElement {
         return;
     }
 
-    // Post to backend
+    // Merge source fields into existing config and PUT
+    const config: StreamConfig = {
+      ...(this.camSetup ?? {}),
+      ...sourceFields,
+      camStream: this.camStream,
+    } as StreamConfig;
+
     try {
-      await fetch(`${this.basepath}/cameras/select`, {
-        method: 'POST',
+      await fetch(`${this.basepath}/streams/${encodeURIComponent(this.camStream)}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(camera),
+        body: JSON.stringify(config),
       });
     } catch (err) {
-      console.error('Failed to select camera:', err);
+      console.error('Failed to update stream config:', err);
     }
 
     const camSetup: CamSetup = {
-      camera,
+      ...config,
       width: width ?? (Number(this.camSetup?.width) || 640),
       height: height ?? (Number(this.camSetup?.height) || 480),
     };
@@ -552,7 +553,7 @@ export class CameraDialog extends LitElement {
   }
 
   private get currentSourceLabel(): string {
-    const cam = this.camSetup?.camera;
+    const cam = this.camSetup;
     if (!cam) return 'No camera configured';
     switch (cam.type) {
       case 'USB':

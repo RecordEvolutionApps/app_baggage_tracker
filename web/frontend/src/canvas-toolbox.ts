@@ -62,12 +62,38 @@ export class CanvasToolbox extends LitElement {
         --md-outlined-button-label-text-color: #5e5f61;
       }
 
-      .source-label {
-        font-family: sans-serif;
-        font-size: 0.8rem;
-        color: #888;
+      .source-info {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
         margin: 4px 0 0;
-        word-break: break-all;
+        font-family: sans-serif;
+      }
+
+      .source-type {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #334d5c;
+      }
+
+      .source-path {
+        font-size: 0.75rem;
+        color: #888;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .source-resolution {
+        font-size: 0.75rem;
+        color: #5e5f61;
+      }
+
+      .source-none {
+        font-size: 0.8rem;
+        color: #aaa;
+        font-family: sans-serif;
+        margin: 4px 0 0;
       }
 
       @media only screen and (max-width: 600px) {
@@ -108,23 +134,27 @@ export class CanvasToolbox extends LitElement {
     dialog?.show(this.camStream, this.camSetup);
   }
 
-  private get currentSourceLabel(): string {
-    const cam = this.camSetup?.camera;
-    if (!cam) return 'No camera configured';
+  private get sourceTypeLabel(): string {
+    switch (this.camSetup?.type) {
+      case 'USB': return 'Local Camera';
+      case 'Demo': return 'Demo Video';
+      case 'YouTube': return 'YouTube';
+      case 'IP': return 'IP / RTSP';
+      case 'Image': return 'Image';
+      default: return 'Unknown';
+    }
+  }
+
+  private get sourcePathLabel(): string | undefined {
+    const cam = this.camSetup;
+    if (!cam) return undefined;
     switch (cam.type) {
-      case 'USB': {
-        const parts = [cam.name, cam.id, cam.path].filter(Boolean);
-        return `USB: ${parts.join(' · ') || 'Unknown'}`;
-      }
-      case 'Demo':
-        return 'Demo Video';
+      case 'USB': return cam.name || cam.id || cam.path;
+      case 'Demo': return undefined;
       case 'YouTube':
-        return `YouTube: ${cam.path ?? ''}`;
       case 'IP':
-        if (cam.path === 'demoVideo') return 'Demo Video';
-        return `IP: ${cam.path ?? ''}`;
-      default:
-        return cam.path ?? 'Unknown';
+      case 'Image': return cam.path;
+      default: return cam.path;
     }
   }
 
@@ -135,7 +165,16 @@ export class CanvasToolbox extends LitElement {
         <md-outlined-button class="camera-button" @click=${this.openCameraDialog}>
           Configure Camera Source
         </md-outlined-button>
-        <div class="source-label">${this.currentSourceLabel}</div>
+        ${this.camSetup
+          ? html`
+            <div class="source-info">
+              <span class="source-type">${this.sourceTypeLabel}</span>
+              ${this.sourcePathLabel ? html`<span class="source-path">${this.sourcePathLabel}</span>` : ''}
+              ${this.camSetup.width && this.camSetup.height
+                ? html`<span class="source-resolution">${this.camSetup.width} × ${this.camSetup.height} px</span>`
+                : ''}
+            </div>`
+          : html`<div class="source-none">No camera configured</div>`}
 
         <camera-dialog
           .camStream=${this.camStream}

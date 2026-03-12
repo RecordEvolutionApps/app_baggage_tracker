@@ -1,6 +1,29 @@
 import sys
 import os
 
+import collections
+import json
+import time
+import logging
+from asyncio import get_event_loop, sleep
+from datetime import datetime
+
+import cv2
+import supervision as sv
+import torch
+
+from config import parse_args, create_config
+from frame_processing import processFrame
+from gstreamer import open_video_writer
+from inference import infer, empty_detections
+from model_loader import getModel
+from model_zoo import write_backend_status
+from overlay import overlay_text, draw_sahi_grid
+from publisher import Publisher, StubIronFlock
+from sahi import run_sahi_inference
+from video_source import setVideoSource, reopen_source, ImageCapture
+from watchers import watchStreamConfig
+
 # ── Jetson TLS diagnostics & fix (arm64 only) ──────────────────────────────
 # On Jetson (L4T), the static TLS block is limited. PyTorch + CUDA can exhaust
 # it, preventing GStreamer NVIDIA plugins from loading libGLdispatch.so.0.
@@ -26,30 +49,6 @@ if _platform.machine() == 'aarch64':
     print(f'[TLS] LD_PRELOAD={LD_PRELOAD}', flush=True)
     del _lib, _tls_libs, LD_PRELOAD
 del _platform
-# ────────────────────────────────────────────────────────────────────────────
-
-import collections
-import json
-import time
-import logging
-from asyncio import get_event_loop, sleep
-from datetime import datetime
-
-import cv2
-import supervision as sv
-import torch
-
-from config import parse_args, create_config
-from frame_processing import processFrame
-from gstreamer import open_video_writer
-from inference import infer, empty_detections
-from model_loader import getModel
-from model_zoo import write_backend_status
-from overlay import overlay_text, draw_sahi_grid
-from publisher import Publisher, StubIronFlock
-from sahi import run_sahi_inference
-from video_source import setVideoSource, reopen_source, ImageCapture
-from watchers import watchMaskFile, watchSettingsFile
 
 # Configure logging for the whole video service
 logging.basicConfig(
@@ -168,25 +167,38 @@ with open(_resolution_file, 'w') as _rf:
 logger.info('Wrote resolution status: %dx%d → %s', cfg.resolution_x, cfg.resolution_y, _resolution_file)
 
 # ── Load persisted settings (written by web backend) ───────────────────────
-# Read the settings file *before* loading the model so that the user's
-# last-applied model choice takes precedence over the OBJECT_MODEL env var.
-_settings_path = f'/data/settings/{cfg.cam_stream}.json'
-if os.path.exists(_settings_path):
+# Read the unified stream config file *before* loading the model so that the
+# user's last-applied model choice takes precedence over the OBJECT_MODEL env var.
+_config_path = f'/data/streams/{cfg.cam_stream}.json'
+if os.path.exists(_config_path):
     try:
-        with open(_settings_path, 'r') as _sf:
+        with open(_config_path, 'r') as _sf:
             _saved = json.load(_sf)
-        cfg.stream_settings.update(_saved)
+        # Extract settings keys
+        _settings_keys = ['model', 'useSahi', 'useSmoothing', 'confidence', 'frameBuffer',
+                          'nmsIou', 'sahiIou', 'overlapRatio', 'classList', 'classNames']
+        for _k in _settings_keys:
+            if _k in _saved:
+                cfg.stream_settings[_k] = _saved[_k]
         _saved_model = _saved.get('model')
         if _saved_model and _saved_model != 'none':
             cfg.object_model = _saved_model
             cfg.current_model_name = _saved_model
-            logger.info('Loaded model from settings file: %s', cfg.object_model)
+            logger.info('Loaded model from stream config: %s', cfg.object_model)
         else:
-            logger.info('Settings file has no model or model=none')
+            logger.info('Stream config has no model or model=none')
+        # Load initial masks from the same file
+        _masks_data = _saved.get('masks', {})
+        if _masks_data and _masks_data.get('polygons'):
+            from masks import prepMasks
+            cfg.saved_masks.extend(
+                prepMasks(_masks_data, cfg.resolution_x, cfg.resolution_y)
+            )
+            logger.info('Loaded %d masks from stream config', len(cfg.saved_masks))
     except Exception as _e:
-        logger.warning('Could not read settings file %s: %s', _settings_path, _e)
+        logger.warning('Could not read stream config %s: %s', _config_path, _e)
 else:
-    logger.info('No settings file found at %s, using env/defaults', _settings_path)
+    logger.info('No stream config found at %s, using env/defaults', _config_path)
 
 # ── Load initial model ─────────────────────────────────────────────────────
 
@@ -499,8 +511,7 @@ if __name__ == "__main__":
     _signal.signal(_signal.SIGUSR1, _on_sigusr1)
 
     loop = get_event_loop()
-    loop.create_task(watchMaskFile(cfg))
-    loop.create_task(watchSettingsFile(
+    loop.create_task(watchStreamConfig(
         cfg,
         on_change=lambda: publisher.publish_stream(status='started'),
     ))

@@ -1035,7 +1035,7 @@ export class InferenceSetup extends LitElement {
     if (!this.camStream) return;
     try {
       const res = await fetch(
-        `${this.basepath}/cameras/streams/${encodeURIComponent(this.camStream)}/backend`,
+        `${this.basepath}/streams/${encodeURIComponent(this.camStream)}/backend`,
         { signal: AbortSignal.timeout(5000) },
       );
       if (res.ok) {
@@ -1192,28 +1192,28 @@ export class InferenceSetup extends LitElement {
     _changedProperties: PropertyValueMap<any> | Map<PropertyKey, unknown>,
   ) {
     if (_changedProperties.has('camSetup') && this.camSetup) {
-      if (this.camSetup.camera?.model) {
-        this.selectedModel = this.camSetup.camera.model;
+      if (this.camSetup.model) {
+        this.selectedModel = this.camSetup.model;
       }
-      this.useSahi = this.camSetup.camera?.useSahi ?? true;
-      this.useSmoothing = this.camSetup.camera?.useSmoothing ?? true;
-      this.frameBuffer = this.camSetup.camera?.frameBuffer ?? 64;
-      this.confidence = this.camSetup.camera?.confidence ?? 0.1;
-      this.nmsIou = this.camSetup.camera?.nmsIou ?? 0.5;
-      this.sahiIou = this.camSetup.camera?.sahiIou ?? 0.5;
-      this.overlapRatio = this.camSetup.camera?.overlapRatio ?? 0.2;
+      this.useSahi = this.camSetup.useSahi ?? true;
+      this.useSmoothing = this.camSetup.useSmoothing ?? true;
+      this.frameBuffer = this.camSetup.frameBuffer ?? 64;
+      this.confidence = this.camSetup.confidence ?? 0.1;
+      this.nmsIou = this.camSetup.nmsIou ?? 0.5;
+      this.sahiIou = this.camSetup.sahiIou ?? 0.5;
+      this.overlapRatio = this.camSetup.overlapRatio ?? 0.2;
       // Restore persisted class selection
-      if (this.camSetup.camera?.classList && this.camSetup.camera.classList.length > 0) {
-        this.selectedClassIds = new Set(this.camSetup.camera.classList);
+      if (this.camSetup.classList && this.camSetup.classList.length > 0) {
+        this.selectedClassIds = new Set(this.camSetup.classList);
         this.hasPersistedClassList = true;
-      } else if (this.camSetup.camera?.classList !== undefined) {
+      } else if (this.camSetup.classList !== undefined) {
         // Explicitly clear if classList exists but is empty
         this.selectedClassIds = new Set();
         this.hasPersistedClassList = true;
       }
       // Restore persisted open-vocab class names
-      if (this.camSetup.camera?.classNames && this.camSetup.camera.classNames.length > 0) {
-        this.classNamesText = this.camSetup.camera.classNames.join(', ');
+      if (this.camSetup.classNames && this.camSetup.classNames.length > 0) {
+        this.classNamesText = this.camSetup.classNames.join(', ');
       }
     }
     super.update(_changedProperties);
@@ -1231,8 +1231,8 @@ export class InferenceSetup extends LitElement {
     this.fetchTags();
     this.fetchCachedModels();
     // Set current model from camSetup if available
-    if (this.camSetup?.camera?.model) {
-      this.selectedModel = this.camSetup.camera.model;
+    if (this.camSetup?.model) {
+      this.selectedModel = this.camSetup.model;
     }
     if (this.selectedModel) {
       this.fetchModelClasses(this.selectedModel);
@@ -1675,122 +1675,82 @@ export class InferenceSetup extends LitElement {
     }
   }
 
-  private async applyModel(model: string) {
+  /** Save the full stream config via single PUT endpoint. */
+  private async saveConfig(patch: Record<string, unknown> = {}) {
+    // Build the current config from camSetup + local state + optional patch
+    const config = {
+      ...(this.camSetup ?? {}),
+      model: this.selectedModel,
+      useSahi: this.useSahi,
+      useSmoothing: this.useSmoothing,
+      frameBuffer: this.frameBuffer,
+      confidence: this.confidence,
+      nmsIou: this.nmsIou,
+      sahiIou: this.sahiIou,
+      overlapRatio: this.overlapRatio,
+      classList: Array.from(this.selectedClassIds),
+      classNames: this.classNamesText
+        .split(',')
+        .map(s => s.trim())
+        .filter(s => s.length > 0),
+      ...patch,
+    };
     try {
-      await fetch(`${this.basepath}/cameras/model`, {
-        method: 'POST',
+      await fetch(`${this.basepath}/streams/${encodeURIComponent(this.camStream)}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ camStream: this.camStream, model }),
+        body: JSON.stringify(config),
       });
     } catch (err) {
-      console.error('Failed to update model', err);
+      console.error('Failed to save stream config', err);
     }
+  }
+
+  private async applyModel(model: string) {
+    await this.saveConfig({ model });
   }
 
   private async onSahiToggle(ev: Event) {
     const input = ev.target as HTMLInputElement;
-    const useSahi = input.checked;
-    this.useSahi = useSahi;
-    try {
-      await fetch(`${this.basepath}/cameras/sahi`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ camStream: this.camStream, useSahi }),
-      });
-    } catch (err) {
-      console.error('Failed to update SAHI setting', err);
-    }
+    this.useSahi = input.checked;
+    await this.saveConfig();
   }
 
   private async onSmoothingToggle(ev: Event) {
     const input = ev.target as HTMLInputElement;
-    const useSmoothing = input.checked;
-    this.useSmoothing = useSmoothing;
-    try {
-      await fetch(`${this.basepath}/cameras/smoothing`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ camStream: this.camStream, useSmoothing }),
-      });
-    } catch (err) {
-      console.error('Failed to update smoothing setting', err);
-    }
+    this.useSmoothing = input.checked;
+    await this.saveConfig();
   }
 
   private async onFrameBufferChange(ev: Event) {
     const input = ev.target as HTMLInputElement;
-    const frameBuffer = Math.max(0, parseInt(input.value, 10) || 0);
-    this.frameBuffer = frameBuffer;
-    try {
-      await fetch(`${this.basepath}/cameras/frameBuffer`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ camStream: this.camStream, frameBuffer }),
-      });
-    } catch (err) {
-      console.error('Failed to update sahi padding', err);
-    }
+    this.frameBuffer = Math.max(0, parseInt(input.value, 10) || 0);
+    await this.saveConfig();
   }
 
   private async onConfidenceChange(ev: Event) {
     const input = ev.target as HTMLInputElement;
-    const confidence = parseFloat(input.value);
-    this.confidence = confidence;
-    try {
-      await fetch(`${this.basepath}/cameras/confidence`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ camStream: this.camStream, confidence }),
-      });
-    } catch (err) {
-      console.error('Failed to update confidence', err);
-    }
+    this.confidence = parseFloat(input.value);
+    await this.saveConfig();
   }
 
   private async onNmsIouChange(ev: Event) {
     const input = ev.target as HTMLInputElement;
-    const nmsIou = Math.min(1, Math.max(0.1, parseFloat(input.value)));
-    this.nmsIou = nmsIou;
-    try {
-      await fetch(`${this.basepath}/cameras/nmsIou`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ camStream: this.camStream, nmsIou }),
-      });
-    } catch (err) {
-      console.error('Failed to update NMS IOU', err);
-    }
+    this.nmsIou = Math.min(1, Math.max(0.1, parseFloat(input.value)));
+    await this.saveConfig();
   }
 
   private async onSahiIouChange(ev: Event) {
     const input = ev.target as HTMLInputElement;
-    const sahiIou = Math.min(1, Math.max(0.1, parseFloat(input.value)));
-    this.sahiIou = sahiIou;
-    try {
-      await fetch(`${this.basepath}/cameras/sahiIou`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ camStream: this.camStream, sahiIou }),
-      });
-    } catch (err) {
-      console.error('Failed to update SAHI IOU', err);
-    }
+    this.sahiIou = Math.min(1, Math.max(0.1, parseFloat(input.value)));
+    await this.saveConfig();
   }
 
   private async onOverlapRatioChange(ev: Event) {
     const input = ev.target as HTMLInputElement;
     const percentValue = Math.min(50, Math.max(5, parseFloat(input.value) || 0));
-    const overlapRatio = percentValue / 100;
-    this.overlapRatio = overlapRatio;
-    try {
-      await fetch(`${this.basepath}/cameras/overlapRatio`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ camStream: this.camStream, overlapRatio }),
-      });
-    } catch (err) {
-      console.error('Failed to update overlap ratio', err);
-    }
+    this.overlapRatio = percentValue / 100;
+    await this.saveConfig();
   }
 
   private async fetchModelClasses(modelId: string, retries = 4) {
@@ -1886,16 +1846,7 @@ export class InferenceSetup extends LitElement {
   }
 
   private async persistClassList() {
-    const classList = Array.from(this.selectedClassIds);
-    try {
-      await fetch(`${this.basepath}/cameras/classList`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ camStream: this.camStream, classList }),
-      });
-    } catch (err) {
-      console.error('Failed to update class list', err);
-    }
+    await this.saveConfig();
   }
 
   private onClassNamesInput(ev: Event) {
@@ -1907,19 +1858,7 @@ export class InferenceSetup extends LitElement {
   }
 
   private async persistClassNames() {
-    const classNames = this.classNamesText
-      .split(',')
-      .map(s => s.trim())
-      .filter(s => s.length > 0);
-    try {
-      await fetch(`${this.basepath}/cameras/classNames`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ camStream: this.camStream, classNames }),
-      });
-    } catch (err) {
-      console.error('Failed to update class names', err);
-    }
+    await this.saveConfig();
   }
 
   private get selectedClassOptions(): ClassOption[] {

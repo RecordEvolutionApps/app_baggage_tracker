@@ -11,7 +11,7 @@ export default defineConfig({
     strictPort: true,
     host: true,
     proxy: {
-      '/mask': 'http://localhost:1100',
+      '/streams': 'http://localhost:1100',
       '/cameras': 'http://localhost:1100',
     },
   },

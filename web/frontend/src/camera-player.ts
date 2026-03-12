@@ -7,6 +7,7 @@ import { mainStyles, CamSetup } from './utils.js';
 export class CameraPlayer extends LitElement {
   @property({ type: String }) declare label: string;
   @property({ type: String }) declare id: string;
+  @property({ type: Boolean }) declare stopped: boolean;
   basepath: string;
 
   @state()
@@ -29,7 +30,7 @@ export class CameraPlayer extends LitElement {
   async getCameraMetadata() {
     try {
       this.camSetup = await fetch(
-        `${this.basepath}/cameras/setup?camStream=${this.id}`,
+        `${this.basepath}/streams/${encodeURIComponent(this.id)}`,
         {
           method: 'GET',
           headers: {
@@ -100,6 +101,7 @@ protected async firstUpdated() {
         .width=${this.camSetup?.width ?? 1280}
         .height=${this.camSetup?.height ?? 720}
         .camStream=${this.id}
+        .stopped=${this.stopped}
       ></video-canvas>
       <video id="video" autoplay controls muted playsinline hidden></video>
     `;

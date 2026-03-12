@@ -19,12 +19,18 @@ export class StreamEditor extends LitElement {
   @state() declare showDeleteDialog: boolean;
   @state() declare stopped: boolean;
   @state() declare toggling: boolean;
+  @state() declare streamName: string;
+  @state() declare editingName: boolean;
+  @state() declare fullConfig: Record<string, any> | null;
 
   constructor() {
     super();
     this.showDeleteDialog = false;
     this.stopped = false;
     this.toggling = false;
+    this.streamName = '';
+    this.editingName = false;
+    this.fullConfig = null;
   }
 
   private basepath = window.location.protocol + '//' + window.location.host;
@@ -41,11 +47,50 @@ export class StreamEditor extends LitElement {
 
   private async loadStoppedState() {
     try {
-      const res = await fetch(`${this.basepath}/cameras/setup?camStream=${this.camStream}`);
+      const res = await fetch(`${this.basepath}/streams/${encodeURIComponent(this.camStream)}`);
       const data = await res.json();
-      this.stopped = !!data.camera?.stopped;
+      this.stopped = !!data.stopped;
+      this.streamName = data.name || this.camStream;
+      this.fullConfig = data;
     } catch (err) {
       console.error('Failed to load stream state', err);
+    }
+  }
+
+  private startEditName() {
+    this.editingName = true;
+  }
+
+  private cancelEditName() {
+    this.editingName = false;
+  }
+
+  private async saveName(value: string) {
+    const trimmed = value.trim() || this.camStream;
+    this.editingName = false;
+    this.streamName = trimmed;
+    if (!this.fullConfig) return;
+    try {
+      const body = { ...this.fullConfig, name: trimmed };
+      const res = await fetch(
+        `${this.basepath}/streams/${encodeURIComponent(this.camStream)}`,
+        { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+      );
+      if (res.ok) {
+        this.fullConfig = { ...this.fullConfig, name: trimmed };
+      } else {
+        console.error('Failed to rename stream', await res.text());
+      }
+    } catch (err) {
+      console.error('Error renaming stream', err);
+    }
+  }
+
+  override updated(changed: Map<string, unknown>) {
+    super.updated(changed);
+    if (changed.has('editingName') && this.editingName) {
+      const input = this.shadowRoot?.querySelector<HTMLInputElement>('.name-input');
+      if (input) { input.focus(); input.select(); }
     }
   }
 
@@ -65,7 +110,7 @@ export class StreamEditor extends LitElement {
     try {
       const action = this.stopped ? 'start' : 'stop';
       const res = await fetch(
-        `${this.basepath}/cameras/streams/${encodeURIComponent(this.camStream)}/${action}`,
+        `${this.basepath}/streams/${encodeURIComponent(this.camStream)}/${action}`,
         { method: 'POST' },
       );
       if (!res.ok) {
@@ -114,7 +159,7 @@ export class StreamEditor extends LitElement {
 
   private async confirmDelete() {
     try {
-      await fetch(`${this.basepath}/cameras/streams/${encodeURIComponent(this.camStream)}`, {
+      await fetch(`${this.basepath}/streams/${encodeURIComponent(this.camStream)}`, {
         method: 'DELETE',
       });
     } catch (err) {
@@ -153,11 +198,39 @@ export class StreamEditor extends LitElement {
         font-size: 1.15rem;
       }
 
+      .stream-title {
+        cursor: pointer;
+        border-radius: 4px;
+        padding: 2px 4px;
+        transition: background 0.15s;
+      }
+
+      .stream-title:hover {
+        background: rgba(0, 46, 106, 0.08);
+        text-decoration: underline dotted;
+      }
+
+      .name-input {
+        flex: 1;
+        margin: 0;
+        padding: 2px 6px;
+        background: #fff;
+        border: 2px solid #002e6a;
+        border-radius: 4px;
+        color: #002e6a;
+        font-family: sans-serif;
+        font-weight: 600;
+        font-size: 1.15rem;
+        outline: none;
+        min-width: 0;
+      }
+
       .editor-body {
         flex: 1;
         overflow: auto;
         display: flex;
         flex-direction: column;
+        position: relative;
       }
 
       .editor-body camera-player {
@@ -216,33 +289,7 @@ export class StreamEditor extends LitElement {
         --md-filled-button-container-color: #1a7d2f;
       }
 
-      .stopped-overlay {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        background: #1a1a2eee;
-        z-index: 10;
-        gap: 16px;
-      }
 
-      .stopped-overlay md-icon {
-        font-size: 64px;
-        color: #5e7ce0;
-      }
-
-      .stopped-overlay span {
-        font-family: sans-serif;
-        font-size: 1.1rem;
-        font-weight: 600;
-        color: #ccd0e0;
-      }
-
-      .editor-body {
-        position: relative;
-      }
     `,
   ];
 
@@ -252,7 +299,19 @@ export class StreamEditor extends LitElement {
         <md-icon-button class="back-btn" @click=${this.goBack}>
           <md-icon>arrow_back</md-icon>
         </md-icon-button>
-        <h3>${this.camStream}</h3>
+        ${this.editingName ? html`
+          <input
+            class="name-input"
+            .value=${this.streamName}
+            @keydown=${(e: KeyboardEvent) => {
+              if (e.key === 'Enter') this.saveName((e.target as HTMLInputElement).value);
+              if (e.key === 'Escape') this.cancelEditName();
+            }}
+            @blur=${(e: FocusEvent) => this.saveName((e.target as HTMLInputElement).value)}
+          />
+        ` : html`
+          <h3 class="stream-title" @click=${this.startEditName} title="Click to rename">${this.streamName || this.camStream}</h3>
+        `}
 
         ${this.stopped ? html`
           <md-filled-button class="play-btn" @click=${this.toggleStream} ?disabled=${this.toggling}>
@@ -274,15 +333,10 @@ export class StreamEditor extends LitElement {
       </div>
 
       <div class="editor-body">
-        ${this.stopped ? html`
-          <div class="stopped-overlay">
-            <md-icon>videocam_off</md-icon>
-            <span>Stream stopped</span>
-          </div>
-        ` : html``}
         <camera-player
           id=${this.camStream}
           label=${this.camStream}
+          ?stopped=${this.stopped}
           @video-ready=${this.onVideoReady}
         ></camera-player>
       </div>

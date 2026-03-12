@@ -1,12 +1,10 @@
 /**
- * Barrel re-export — all camera/stream/model/settings handlers.
+ * Barrel re-export — all camera/stream/model handlers.
  *
  * The implementation is split across:
- *   shared.ts   – types, config, shared mutable state
+ *   shared.ts   – types, config, persistence helpers
  *   models.ts   – model discovery & preparation proxy
  *   streams.ts  – stream lifecycle, CRUD, camera discovery
- *   settings.ts – per-stream settings updates
  */
 export { getModels, getModelTags, getModelStatus, prepareModel, buildTrtModel, getModelClasses, getCachedModels, deleteCachedModel, clearAllCache } from './models.js'
-export { getStreamSetup, listStreams, createStream, deleteStream, selectCamera, getUSBCameras, getDeviceCameras, getStreamBackendStatus, stopStream, startStream } from './streams.js'
-export { updateStreamModel, updateStreamSahi, updateStreamSmoothing, updateStreamConfidence, updateStreamFrameBuffer, updateStreamNmsIou, updateStreamSahiIou, updateStreamOverlapRatio, updateStreamClassList, updateStreamClassNames } from './settings.js'
+export { handleListStreams, handleGetStream, handleCreateStream, handleUpdateStream, handleDeleteStream, handleStopStream, handleStartStream, getUSBCameras, getDeviceCameras, getStreamBackendStatus } from './streams.js'

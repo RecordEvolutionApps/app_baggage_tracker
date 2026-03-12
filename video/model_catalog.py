@@ -1110,7 +1110,7 @@ def discover_hf_models() -> list[dict]:
             'arch': arch,
             'dataset': dataset,
             'architecture': f'{arch} (HuggingFace)',
-            'task': 'object_detection',
+            'task': entry.get('hf_task', 'object_detection'),
             'paper': f'https://huggingface.co/{entry.get("repo_id", model_id)}',
             'summary': description,
             'description': description,

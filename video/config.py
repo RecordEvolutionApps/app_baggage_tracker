@@ -66,10 +66,10 @@ class StreamConfig:
 
     def settings_fingerprint(self) -> str:
         """Build a hashable fingerprint of all settings that affect inference."""
-        mask_path = f'/data/masks/{self.cam_stream}.json'
-        mask_mtime = 0.0
+        config_path = f'/data/streams/{self.cam_stream}.json'
+        config_mtime = 0.0
         try:
-            mask_mtime = os.path.getmtime(mask_path)
+            config_mtime = os.path.getmtime(config_path)
         except OSError:
             pass
         parts = (
@@ -83,7 +83,7 @@ class StreamConfig:
             str(self.stream_settings.get('frameBuffer', '') or ''),
             str(self.stream_settings.get('classList', []) or []),
             str(self.stream_settings.get('classNames', []) or []),
-            str(mask_mtime),
+            str(config_mtime),
             str(len(self.saved_masks)),
         )
         return '|'.join(parts)

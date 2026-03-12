@@ -150,28 +150,37 @@ export class PolygonManager extends EventTarget {
   async importFromRemote() {
     if (!this.camStream) return;
     try {
-      const result = await fetch(`${basepath}/mask?camStream=${encodeURIComponent(this.camStream)}`, {
+      const res = await fetch(`${basepath}/streams/${encodeURIComponent(this.camStream)}`, {
         method: 'GET',
-        headers: {
-          Accept: 'application/json',
-        },
-      }).then(res => res.json());
-
-      this.import(result)
+        headers: { Accept: 'application/json' },
+      });
+      const config = await res.json();
+      if (config.masks) {
+        this.import(config.masks);
+      }
     } catch (error) {
       console.error('Failed to load polygons from remote', error)
     }
   }
 
-  updateRemote(data: PolygonState) {
+  async updateRemote(data: PolygonState) {
     if (!this.camStream) return;
-    return fetch(`${basepath}/mask/save?camStream=${encodeURIComponent(this.camStream)}`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
+    // Read existing config, merge masks, and PUT back
+    try {
+      const res = await fetch(`${basepath}/streams/${encodeURIComponent(this.camStream)}`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      });
+      const config = await res.json();
+      config.masks = data;
+      return fetch(`${basepath}/streams/${encodeURIComponent(this.camStream)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+    } catch (error) {
+      console.error('Failed to save masks', error);
+    }
   }
 
   create(label?: string, type: PolygonType = 'ZONE') {

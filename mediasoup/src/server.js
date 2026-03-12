@@ -247,7 +247,12 @@ function startSignaling() {
           ws.send(JSON.stringify({ id: msg.id, ...reply }));
         }
       } catch (err) {
-        console.error(`[signaling] Error handling "${msg.type}":`, err);
+        const isNotFound = err.message?.includes('not found');
+        if (isNotFound) {
+          console.debug(`[signaling] ${msg.type}: ${err.message}`);
+        } else {
+          console.error(`[signaling] Error handling "${msg.type}":`, err);
+        }
         ws.send(JSON.stringify({ id: msg.id, error: err.message }));
       }
     });

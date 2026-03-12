@@ -3,6 +3,7 @@ import { property, customElement, state } from 'lit/decorators.js';
 import { PolygonManager, Polygon } from './polygon.js';
 
 import '@material/web/elevation/elevation.js';
+import '@material/web/icon/icon.js';
 import './canvas-toolbox.js';
 import './polygon-list.js';
 import { mainStyles, CamSetup } from './utils.js';
@@ -30,6 +31,9 @@ export class VideoCanvas extends LitElement {
 
   @state()
   declare loading: boolean;
+
+  @property({ type: Boolean })
+  declare stopped: boolean;
 
   initialized = false;
 
@@ -157,7 +161,7 @@ export class VideoCanvas extends LitElement {
     }
 
     // If camSetup loaded and no source configured, stop showing spinner
-    if (changedProps.has('camSetup') && this.camSetup && !this.camSetup.camera?.path) {
+    if (changedProps.has('camSetup') && this.camSetup && !this.camSetup.path) {
       this.loading = false;
     }
 
@@ -253,6 +257,35 @@ export class VideoCanvas extends LitElement {
         display: none;
       }
 
+      .stopped-overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #1a1a2eee;
+        border-radius: 4px;
+        z-index: 3;
+        gap: 16px;
+      }
+
+      .stopped-overlay[hidden] {
+        display: none;
+      }
+
+      .stopped-overlay md-icon {
+        font-size: 64px;
+        color: #5e7ce0;
+      }
+
+      .stopped-overlay span {
+        font-family: sans-serif;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #ccd0e0;
+      }
+
       .spinner {
         width: 40px;
         height: 40px;
@@ -309,11 +342,15 @@ export class VideoCanvas extends LitElement {
           <div class="spinner"></div>
           <span class="loading-text">Connecting to video stream…</span>
         </div>
-        ${!this.loading && this.camSetup && !this.camSetup.camera?.path ? html`
+        ${!this.loading && this.camSetup && !this.camSetup.path ? html`
           <div class="loading-overlay">
             <span class="loading-text">No video source configured</span>
           </div>
         ` : ''}
+        <div class="stopped-overlay" ?hidden=${!this.stopped}>
+          <md-icon>videocam_off</md-icon>
+          <span>Stream stopped</span>
+        </div>
         <canvas id="canvas"></canvas>
       </div>
     </div>`;

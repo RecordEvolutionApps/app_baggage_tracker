@@ -2,8 +2,7 @@ import { Elysia } from "elysia";
 import { staticPlugin } from '@elysiajs/static'
 import { html } from '@elysiajs/html'
 import { cors } from '@elysiajs/cors'
-import { getUSBCameras, getStreamSetup, selectCamera, listStreams, createStream, deleteStream, getModels, getModelTags, getModelClasses, getModelStatus, prepareModel, buildTrtModel, getCachedModels, deleteCachedModel, clearAllCache, updateStreamModel, updateStreamSahi, updateStreamSmoothing, updateStreamConfidence, updateStreamFrameBuffer, updateStreamNmsIou, updateStreamSahiIou, updateStreamOverlapRatio, updateStreamClassList, updateStreamClassNames, getStreamBackendStatus, stopStream, startStream } from './cameras.js'
-import { getMask, saveMask } from "./mask.js";
+import { getUSBCameras, handleListStreams, handleGetStream, handleCreateStream, handleUpdateStream, handleDeleteStream, handleStopStream, handleStartStream, getModels, getModelTags, getModelClasses, getModelStatus, prepareModel, buildTrtModel, getCachedModels, deleteCachedModel, clearAllCache, getStreamBackendStatus } from './cameras.js'
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 console.log('CURRENT', process.cwd())
@@ -25,14 +24,18 @@ if (hasFrontendDist) {
 }
 app.use(html())
 app.use(cors())
-app.get('/mask', getMask)
-app.post('/mask/save', saveMask)
+// ── Stream CRUD ────────────────────────────────────────────────────────────
+app.get('/streams', handleListStreams)
+app.get('/streams/:camStream', handleGetStream)
+app.post('/streams', handleCreateStream)
+app.put('/streams/:camStream', handleUpdateStream)
+app.delete('/streams/:camStream', handleDeleteStream)
+app.post('/streams/:camStream/stop', handleStopStream)
+app.post('/streams/:camStream/start', handleStartStream)
+app.get('/streams/:camStream/backend', getStreamBackendStatus)
+// ── Camera discovery ───────────────────────────────────────────────────────
 app.get('/cameras', getUSBCameras)
-app.get('/cameras/setup', getStreamSetup)
-app.post('/cameras/select', selectCamera)
-app.get('/cameras/streams', listStreams)
-app.post('/cameras/streams', createStream)
-app.delete('/cameras/streams/*', deleteStream)
+// ── Model catalog ──────────────────────────────────────────────────────────
 app.get('/cameras/models', getModels)
 app.get('/cameras/models/tags', getModelTags)
 app.get('/cameras/models/cache', getCachedModels)
@@ -44,19 +47,6 @@ app.get('/cameras/models/:modelId/status', getModelStatus)
 app.get('/cameras/models/*/status', getModelStatus)
 app.post('/cameras/models/prepare', prepareModel)
 app.post('/cameras/models/build-trt', buildTrtModel)
-app.post('/cameras/model', updateStreamModel)
-app.post('/cameras/sahi', updateStreamSahi)
-app.post('/cameras/smoothing', updateStreamSmoothing)
-app.post('/cameras/confidence', updateStreamConfidence)
-app.post('/cameras/frameBuffer', updateStreamFrameBuffer)
-app.post('/cameras/nmsIou', updateStreamNmsIou)
-app.post('/cameras/sahiIou', updateStreamSahiIou)
-app.post('/cameras/overlapRatio', updateStreamOverlapRatio)
-app.post('/cameras/classList', updateStreamClassList)
-app.post('/cameras/classNames', updateStreamClassNames)
-app.get('/cameras/streams/:camStream/backend', getStreamBackendStatus)
-app.post('/cameras/streams/:camStream/stop', stopStream)
-app.post('/cameras/streams/:camStream/start', startStream)
 app.get('/', async () => {
   if (hasFrontendDist) {
     return Bun.file(join(frontendDist, "index.html"))

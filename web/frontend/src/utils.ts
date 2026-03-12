@@ -123,10 +123,23 @@ export type PolygonState = {
   }[];
 }
 
-export type Camera = {
+export type MaskData = {
+  selectedPolygonId?: number;
+  polygons: {
+    id: number;
+    label: string;
+    type: PolygonType;
+    lineColor: string;
+    fillColor: string;
+    committed: boolean;
+    points: { x: number; y: number }[];
+  }[];
+}
+
+export type StreamConfig = {
+  id: string
   type: 'USB' | 'IP' | 'Demo' | 'YouTube' | 'Image'
-  name?: string
-  id?: string
+  name: string
   camStream: string
   path?: string
   username?: string
@@ -144,7 +157,11 @@ export type Camera = {
   classList?: number[]
   classNames?: string[]
   stopped?: boolean
+  masks?: MaskData
 }
+
+/** @deprecated Use StreamConfig instead */
+export type Camera = StreamConfig
 
 export type USBCameraInfo = DeviceCameraInfo   // backward compat alias
 export type DeviceCameraInfo = {
@@ -175,8 +192,11 @@ export type ClassOption = {
   name: string
 }
 
-export type CamSetup = {
-  camera: Camera
+/**
+ * Stream config as returned by GET /streams/:camStream.
+ * Width and height are guaranteed to have values (resolved from source or defaults).
+ */
+export type CamSetup = StreamConfig & {
   width: number
   height: number
 }

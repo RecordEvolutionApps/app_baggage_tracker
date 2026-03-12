@@ -207,20 +207,27 @@ def get_huggingface_model(model_name: str, config: StreamConfig | None = None) -
         )
 
     from model_zoo import HF_MODEL_ZOO
-    from transformers import AutoModelForObjectDetection, AutoImageProcessor
+    from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
     zoo_entry = HF_MODEL_ZOO.get(model_name, {})
     repo_id = zoo_entry.get('repo_id', model_name)
     native_wh = zoo_entry.get('native_input_wh', (640, 640))
+    hf_task = zoo_entry.get('hf_task', 'object_detection')
+    is_segmentation = hf_task == 'instance_segmentation'
 
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
     cache_dir = '/data/huggingface'
 
-    logger.info('Loading HuggingFace model %s (repo: %s) on %s...', model_name, repo_id, device)
+    logger.info('Loading HuggingFace model %s (repo: %s, task: %s) on %s...',
+                model_name, repo_id, hf_task, device)
 
     try:
         processor = AutoImageProcessor.from_pretrained(repo_id, cache_dir=cache_dir)
-        model = AutoModelForObjectDetection.from_pretrained(repo_id, cache_dir=cache_dir)
+        if is_segmentation:
+            from transformers import AutoModelForUniversalSegmentation
+            model = AutoModelForUniversalSegmentation.from_pretrained(repo_id, cache_dir=cache_dir)
+        else:
+            model = AutoModelForObjectDetection.from_pretrained(repo_id, cache_dir=cache_dir)
         model = model.to(device)
         model.eval()
     except Exception as exc:
@@ -241,6 +248,7 @@ def get_huggingface_model(model_name: str, config: StreamConfig | None = None) -
         'processor': processor,
         'model_name': model_name,
         'native_input_wh': native_wh,
+        'is_segmentation': is_segmentation,
     }
 
 
