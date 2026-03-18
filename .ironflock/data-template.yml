@@ -184,7 +184,7 @@ data:
           max(videolink) AS videolink,
           max(devicelink) AS devicelink
         FROM 
-          cameras
+          camera_hubs
         WHERE 
           tsp > now() - INTERVAL '1 days'
         GROUP BY
