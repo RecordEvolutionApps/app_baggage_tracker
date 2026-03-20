@@ -235,7 +235,7 @@ def get_huggingface_model(model_name: str, config: StreamConfig | None = None) -
             f'Failed to load HuggingFace model "{repo_id}": {exc}'
         ) from exc
 
-    # Extract class names from model config
+    # Extract class names from model config — indexed by native class ID.
     id2label = getattr(model.config, 'id2label', {})
     if id2label and config is not None and not config.class_names:
         config.class_names = [id2label.get(i, f'class_{i}') for i in sorted(id2label.keys())]

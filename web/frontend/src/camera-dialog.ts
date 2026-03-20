@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing, PropertyValueMap } from 'lit';
 import { property, customElement, state } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { mainStyles, CamSetup, DeviceCameraInfo, StreamConfig } from './utils.js';
+import { writeStream } from './streams-sdk.js';
 
 import '@material/web/dialog/dialog.js';
 import { MdDialog } from '@material/web/dialog/dialog.js';
@@ -382,11 +383,7 @@ export class CameraDialog extends LitElement {
     } as StreamConfig;
 
     try {
-      await fetch(`${this.basepath}/streams/${encodeURIComponent(this.camStream)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-      });
+      await writeStream(this.camStream, config);
     } catch (err) {
       console.error('Failed to update stream config:', err);
     }

@@ -149,7 +149,7 @@ widgets:
     chartconfig:
       webUrl:
         valueRef:
-          tablename: cameras
+          tablename: camera_hubs
           column: videolink
           queryParams:
             filterAnd:
@@ -245,13 +245,13 @@ widgets:
     version: 1.1.7
   - package_name: widget-sidenav
     chartconfig:
-      title: $str:Cameras
+      title: $str:Camera Hubs
       style:
         fontSize: $num:16
         fontWeight: $num:400
       navItems:
         tableRef:
-          tablename: cameras
+          tablename: camera_hubs
           queryParams:
             limit: 500
             filterAnd:
@@ -279,7 +279,7 @@ widgets:
       title: "$str:"
       subTitle:
         valueRef:
-          tablename: cameras
+          tablename: camera_hubs
           column: devname
           queryParams:
             filterAnd:

@@ -3,6 +3,8 @@ import { customElement, state } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { mainStyles, Camera } from './utils.js';
 import { initMediasoup, stopMediasoup } from './modules/webRTCPlayer.js';
+import { listStreams, writeStream, subscribeStreams } from './streams-sdk.js';
+import type { StreamConfig } from './utils.js';
 
 import '@material/web/button/filled-button.js';
 import '@material/web/button/text-button.js';
@@ -31,6 +33,10 @@ export class StreamGallery extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.loadStreams();
+    subscribeStreams((config) => {
+      // Re-fetch the full list on any change to keep it in sync
+      this.loadStreams();
+    });
   }
 
   disconnectedCallback() {
@@ -40,8 +46,7 @@ export class StreamGallery extends LitElement {
 
   async loadStreams() {
     try {
-      const res = await fetch(`${this.basepath}/streams`);
-      this.streams = await res.json();
+      this.streams = await listStreams();
     } catch (err) {
       console.error('Failed to load streams', err);
       this.streams = [];
@@ -105,16 +110,15 @@ export class StreamGallery extends LitElement {
     const camStream = name.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/_{2,}/g, '_');
 
     try {
-      const res = await fetch(`${this.basepath}/streams`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, camStream }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        console.error('Failed to create stream', err);
-        return;
-      }
+      const config: StreamConfig = {
+        id: camStream,
+        type: 'IP',
+        name: name || camStream,
+        path: '',
+        camStream,
+        masks: { polygons: [] },
+      };
+      await writeStream(camStream, config);
     } catch (err) {
       console.error('Failed to create stream', err);
       return;

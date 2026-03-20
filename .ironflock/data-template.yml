@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://gist.githubusercontent.com/markope/80d99a0bb28cd602cc4a0af790086163/raw/ironflock-data-template-schema.yml
 data:
   tables:
-    - tablename: detections
+    - tablename: zone_counts
       description: >
         Per-zone object detection counts produced by real-time video AI inference.
         A new row is emitted for every (zone, frame-cycle) combination each time the analytics pipeline processes a frame.
@@ -28,8 +28,12 @@ data:
           dataType: json
         - id: devname
           name: Device Name
-          description: Unique name of the edge device (Edge PC / Jetson) that produced this detection. Auto-populated from the device's DEVICE_NAME environment variable. Use this to filter or group results by physical device.
+          description: Unique name of the camera hub. This is the primary key for identifying a camera hub.
           path: kwargs.DEVICE_NAME
+          dataType: string
+        - id: stream_name
+          name: Stream Name
+          description: Name of the camera stream that produced this detection. Use to link with stream configuration or to filter detections by stream.
           dataType: string
 
     - tablename: linecounts
@@ -46,17 +50,14 @@ data:
         - id: tsp
           name: Timestamp
           description: ISO 8601 timestamp (with timezone) of when the line-crossing event was recorded. Use for time-range filtering and aggregation.
-          path: args[0].tsp
           dataType: timestamp
         - id: num_in
           name: Number of Crossings In
           description: Number of tracked objects that crossed the line in the "in" direction (left-to-right relative to the line's drawn orientation) during this interval. Always a non-negative integer.
-          path: args[0].num_in
           dataType: numeric
         - id: num_out
           name: Number of Crossings Out
           description: Number of tracked objects that crossed the line in the "out" direction (right-to-left relative to the line's drawn orientation) during this interval. Always a non-negative integer.
-          path: args[0].num_out
           dataType: numeric
         - id: linename
           name: Line Name
@@ -65,8 +66,12 @@ data:
           dataType: string
         - id: devname
           name: Device Name
-          description: Unique name of the edge device that produced this count. Auto-populated from DEVICE_NAME. Use to filter or group by physical device.
+          description: Unique name of the camera hub. This is the primary key for identifying a camera hub.
           path: kwargs.DEVICE_NAME
+          dataType: string
+        - id: stream_name
+          name: Stream Name
+          description: Name of the camera stream that produced this count. Use to link with stream configuration or to filter counts by stream.
           dataType: string
 
 
@@ -75,11 +80,9 @@ data:
         Device registry and heartbeat table for camera hubs (edge PCs with attached cameras).
         Each edge device periodically publishes a row to signal it is alive and provide its access URLs.
         The maintainLatestFlagFor=[devname] setting marks only the most recent row per device as current, so querying for the latest row per devname yields the set of currently active camera hubs.
-        Rows older than 2 hours are dropped automatically; a device that stops publishing will disappear from the latest view.
-        Use this table to list available devices, build navigation links, or detect offline devices.
+        Use this table to list available camera hubs, find navigation links.
       chunkTimeInterval: 1 month
       maintainLatestFlagFor: [devname]
-      dropAfter: 2 hour
       columns:
         - id: tsp
           name: Timestamp
@@ -87,16 +90,16 @@ data:
           dataType: timestamp
         - id: devname
           name: Device Name
-          description: Unique name of the edge device (Edge PC / Jetson). This is the primary key for identifying a camera hub. Auto-populated from DEVICE_NAME.
+          description: Unique name of the edge device (Edge PC / Jetson). This is the primary key for identifying a camera hub.
           path: kwargs.DEVICE_NAME
           dataType: string
         - id: videolink
           name: Video Link
-          description: Full HTTPS URL to the device's live video stream web page (e.g. "https://<device-key>-baggagetracker-1100.app.ironflock.com"). Can be used to embed or link to the live camera view.
+          description: Full HTTPS URL to the camera hub's stream editor web page (e.g. "https://<device-key>-baggagetracker-1100.app.ironflock.com"). Can be used to embed or link to the live camera view.
           dataType: string
         - id: devicelink
           name: Device Link
-          description: Full HTTPS URL to the device's management/settings page on the IronFlock platform. Use to link users to device configuration.
+          description: Full HTTPS URL to the camera hub's device settings page on the IronFlock platform. Use to link users to device configuration.
           dataType: string
         - id: deleted
           name: Deleted Flag
@@ -121,12 +124,16 @@ data:
           dataType: timestamp
         - id: devname
           name: Device Name
-          description: Unique name of the edge device running this stream. Auto-populated from DEVICE_NAME. Foreign key to camera_hubs.devname.
+          description: Unique name of the edge device running this stream. Foreign key to camera_hubs.devname.
           path: kwargs.DEVICE_NAME
           dataType: string
-        - id: cam_stream
+        - id: stream_name
           name: Stream Name
           description: Unique identifier for this camera stream within its device (e.g. "cam0", "warehouse-north"). Together with devname it forms the composite key for the stream.
+          dataType: string
+        - id: stream_url
+          name: Stream URL
+          description: The fully qualified url where the raw stream is served on. (using the IronFlock Proxy Service)
           dataType: string
         - id: cam_path
           name: Camera Path
@@ -159,7 +166,6 @@ data:
         - id: tsp
           name: Timestamp
           description: ISO 8601 timestamp (with timezone) of when the frame was captured. Use for ordering or selecting the most recent snapshot.
-          path: args[0].tsp
           dataType: timestamp
         - id: image
           name: Image Frame
@@ -167,58 +173,36 @@ data:
             Base64-encoded image frame with a data-URI prefix ("data:image/webp;base64,...").
             The image is WebP-encoded at 80% quality with AI detection overlays (bounding boxes, labels) already rendered.
             To display in HTML, use this value directly as an <img> src attribute.
-          path: args[0].image
           dataType: string
-
-  transforms:
-    - tablename: device_agg
-      description: >
-        Materialized view that provides a deduplicated, one-row-per-device summary of active camera hubs.
-        Refreshed every minute. Sources from the camera_hubs table (aliased as "cameras" in the query) and keeps only devices seen in the last 24 hours.
-        Use this table when you need a simple list of currently active devices with their access links — prefer it over querying camera_hubs directly to avoid dealing with duplicates and heartbeat rows.
-      materialize: true
-      schedule: "* * * * *" # crontab interface: Minute(1-60) Hour(1-24) MonthDay(1-31) Month(1-12) WeekDay(1-7)
-      sql: |
-        SELECT
-          devname,
-          max(videolink) AS videolink,
-          max(devicelink) AS devicelink
-        FROM 
-          cameras
-        WHERE 
-          tsp > now() - INTERVAL '1 days'
-        GROUP BY
-          devname
-      columns:
         - id: devname
           name: Device Name
-          description: Unique name of the edge device. One row per device. Use as a join key to link with detections, linecounts, or streams tables.
-          dataType: string # (string, numeric, boolean, timestamp)
-        - id: videolink
-          name: Video Link
-          description: Most recent HTTPS URL to the device's live video stream page. Safe to use directly in links or iframes.
+          description: Unique name of the camera hub. This is the primary key for identifying a camera hub.
+          path: kwargs.DEVICE_NAME
           dataType: string
-        - id: devicelink
-          name: Device Link
-          description: Most recent HTTPS URL to the device's management/settings page on the IronFlock platform.
+        - id: stream_name
+          name: Stream Name
+          description: Unique identifier for this camera stream within its device (e.g. "cam0", "warehouse-north"). Stream where the image was recorded.
           dataType: string
 
+
+  transforms:
     - tablename: linecount_agg
       description: >
         Materialized view that aggregates line-crossing counts into 1-hour buckets over the last 24 hours.
-        Refreshed every minute. Each row represents one (device, line, hour) combination with its crossing totals.
-        Additionally includes per-device totals (num_in_dev, num_out_dev) computed as window sums across all lines for the same device and hour.
+        Refreshed every minute. Each row represents one (device, stream, line, hour) combination with its crossing totals.
+        Additionally includes per-stream totals (num_in_dev, num_out_dev) computed as window sums across all lines for the same device and stream during the same hour.
         Use this table for dashboards, hourly trend charts, and cross-line comparisons — prefer it over raw linecounts to avoid re-aggregating at query time.
       materialize: true
       schedule: "* * * * *" # crontab interface: Minute(1-60) Hour(1-24) MonthDay(1-31) Month(1-12) WeekDay(1-7)
       sql: |
         SELECT
           *,
-          sum(num_in) over (partition by devname, period) as num_in_dev,  
-          sum(num_out) over (partition by devname, period) as num_out_dev
+          sum(num_in) over (partition by devname, stream_name, period) as num_in_dev,  
+          sum(num_out) over (partition by devname, stream_name, period) as num_out_dev
         FROM (
           SELECT
             devname,
+            stream_name,
             linename,
             time_bucket('1 hour', tsp) as period,
             sum(num_in) AS num_in,
@@ -228,16 +212,20 @@ data:
           WHERE 
             tsp > now() - INTERVAL '1 days'
           GROUP BY
-            devname, linename, period
+            devname, stream_name, linename, period
           ) x
       columns:
         - id: devname
           name: Device Name
           description: Unique name of the edge device. Use as a join key or group-by dimension when comparing devices.
           dataType: string # (string, numeric, boolean, timestamp)
+        - id: stream_name
+          name: Stream Name
+          description: Unique identifier for this camera stream within its device (e.g. "cam0", "warehouse-north"). Use as a join key or group-by dimension when comparing streams.
+          dataType: string
         - id: linename
           name: Line Name
-          description: Name of the counting line (e.g. "entrance", "exit gate"). Combined with devname and period, this forms the unique key for each row.
+          description: Name of the counting line (e.g. "entrance", "exit gate"). Combined with devname, stream_name, and period, this forms the unique key for each row.
           dataType: string
         - id: period
           name: Hour
@@ -253,9 +241,9 @@ data:
           dataType: numeric
         - id: num_in_dev
           name: Count In Total
-          description: Sum of num_in across ALL lines on the same device during the same hour. Use to show device-level inbound traffic regardless of which line was crossed.
+          description: Sum of num_in across ALL lines on the same device and stream during the same hour. Use to show device-level inbound traffic regardless of which line was crossed.
           dataType: numeric
         - id: num_out_dev
           name: Count Out Total
-          description: Sum of num_out across ALL lines on the same device during the same hour. Use to show device-level outbound traffic regardless of which line was crossed.
+          description: Sum of num_out across ALL lines on the same device and stream during the same hour. Use to show device-level outbound traffic regardless of which line was crossed.
           dataType: numeric

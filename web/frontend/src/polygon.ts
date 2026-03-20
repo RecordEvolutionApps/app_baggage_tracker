@@ -1,6 +1,5 @@
 import { PolygonState, getRandomColor, hexToTransparent, PolygonType } from './utils';
-
-const basepath = window.location.protocol + '//' + window.location.host;
+import { readStream, writeStream } from './streams-sdk.js';
 let polygonID = 0;
 
 export class Polygon extends EventTarget {
@@ -150,12 +149,8 @@ export class PolygonManager extends EventTarget {
   async importFromRemote() {
     if (!this.camStream) return;
     try {
-      const res = await fetch(`${basepath}/streams/${encodeURIComponent(this.camStream)}`, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-      });
-      const config = await res.json();
-      if (config.masks) {
+      const config = await readStream(this.camStream);
+      if (config?.masks) {
         this.import(config.masks);
       }
     } catch (error) {
@@ -165,19 +160,12 @@ export class PolygonManager extends EventTarget {
 
   async updateRemote(data: PolygonState) {
     if (!this.camStream) return;
-    // Read existing config, merge masks, and PUT back
+    // Read existing config, merge masks, and write back
     try {
-      const res = await fetch(`${basepath}/streams/${encodeURIComponent(this.camStream)}`, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-      });
-      const config = await res.json();
-      config.masks = data;
-      return fetch(`${basepath}/streams/${encodeURIComponent(this.camStream)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-      });
+      const config = await readStream(this.camStream);
+      if (!config) return;
+      const updated = { ...config, masks: data };
+      await writeStream(this.camStream, updated as any);
     } catch (error) {
       console.error('Failed to save masks', error);
     }

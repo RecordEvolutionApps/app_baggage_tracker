@@ -11,6 +11,7 @@ import {
     sourceChanged,
     waitForService,
     migrateFromLegacy,
+    migrateFromFiles,
 } from './shared.js'
 
 // ── Stream lifecycle ───────────────────────────────────────────────────────
@@ -138,34 +139,15 @@ export async function getStreamBackendStatus(ctx: Context): Promise<any> {
 // ── Initialization ─────────────────────────────────────────────────────────
 
 async function initStreams() {
-    // Migrate from legacy file layout if needed
+    // Migrate from legacy file layouts if needed
     await migrateFromLegacy()
+    await migrateFromFiles()
 
-    let configs = await listStreamConfigs()
+    const configs = await listStreamConfigs()
 
-    // If no streams exist, create a default demo stream
     if (configs.length === 0) {
-        let camList: StreamConfig[] = []
-        try {
-            camList = await getUSBCameras()
-        } catch (error) {
-            console.error('Failed to load cameras', error)
-        }
-        console.log("CAMERA LIST", { camList })
-
-        const firstCam = camList?.[0]
-        const defaultConfig: StreamConfig = firstCam
-            ? { ...firstCam, camStream: 'frontCam', masks: { polygons: [] } }
-            : {
-                id: 'frontCam',
-                type: 'Demo',
-                name: 'Demo Video',
-                path: 'demoVideo',
-                camStream: 'frontCam',
-                masks: { polygons: [] },
-            }
-        await writeStreamConfig('frontCam', defaultConfig)
-        configs = [defaultConfig]
+        console.log('No stream configs found in backend table — waiting for streams to be created')
+        return
     }
 
     console.log('Stream configs:', configs.map(c => c.camStream))
@@ -192,7 +174,7 @@ export async function handleListStreams(): Promise<StreamConfig[]> {
     return listStreamConfigs()
 }
 
-/** GET /streams/:camStream — read a single stream config from disk */
+/** GET /streams/:camStream — read a single stream config from the backend table */
 export async function handleGetStream(ctx: Context): Promise<any> {
     const camStream = (ctx.params as any)?.camStream
     if (!camStream) {
@@ -260,7 +242,7 @@ export async function handleCreateStream(ctx: Context) {
     return config
 }
 
-/** PUT /streams/:camStream — update a stream config (the single update endpoint) */
+/** PUT /streams/:camStream — update a stream config */
 export async function handleUpdateStream(ctx: Context) {
     const camStream = (ctx.params as any)?.camStream
     if (!camStream) {
@@ -285,7 +267,7 @@ export async function handleUpdateStream(ctx: Context) {
         incoming.type = 'Demo'
     }
 
-    // Read previous config from disk to detect source changes
+    // Read previous config to detect source changes
     const prev = await readStreamConfig(decoded)
 
     // For USB cameras, resolve device info from the video API
@@ -305,8 +287,9 @@ export async function handleUpdateStream(ctx: Context) {
         incoming.masks = prev?.masks ?? { polygons: [] }
     }
 
-    // Write the full config to disk
-    await writeStreamConfig(decoded, incoming)
+    // Write the full config to the backend table
+    const status = incoming.stopped ? 'stopped' : 'configured'
+    await writeStreamConfig(decoded, incoming, status)
 
     // Determine if we need to restart the video process
     const needsRestart = sourceChanged(prev, incoming)
@@ -356,7 +339,7 @@ export async function handleStopStream(ctx: Context) {
     }
     await killVideoStream(config.path ?? '', decoded, 'stop')
     config.stopped = true
-    await writeStreamConfig(decoded, config)
+    await writeStreamConfig(decoded, config, 'stopped')
     return { status: 'stopped', camStream: decoded }
 }
 
@@ -374,7 +357,7 @@ export async function handleStartStream(ctx: Context) {
         return { error: `Stream "${decoded}" not found` }
     }
     config.stopped = false
-    await writeStreamConfig(decoded, config)
+    await writeStreamConfig(decoded, config, 'started')
     startVideoStream(config, decoded)
     return { status: 'started', camStream: decoded }
 }

@@ -3,6 +3,7 @@ import { staticPlugin } from '@elysiajs/static'
 import { html } from '@elysiajs/html'
 import { cors } from '@elysiajs/cors'
 import { getUSBCameras, handleListStreams, handleGetStream, handleCreateStream, handleUpdateStream, handleDeleteStream, handleStopStream, handleStartStream, getModels, getModelTags, getModelClasses, getModelStatus, prepareModel, buildTrtModel, getCachedModels, deleteCachedModel, clearAllCache, getStreamBackendStatus } from './cameras.js'
+import { ironflock, getIronFlockConfig } from './ironflock.js'
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 console.log('CURRENT', process.cwd())
@@ -24,6 +25,8 @@ if (hasFrontendDist) {
 }
 app.use(html())
 app.use(cors())
+// ── IronFlock config for frontend SDK ──────────────────────────────────────
+app.get('/api/ironflock-config', () => getIronFlockConfig())
 // ── Stream CRUD ────────────────────────────────────────────────────────────
 app.get('/streams', handleListStreams)
 app.get('/streams/:camStream', handleGetStream)

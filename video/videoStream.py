@@ -166,39 +166,57 @@ with open(_resolution_file, 'w') as _rf:
     json.dump({'width': cfg.resolution_x, 'height': cfg.resolution_y}, _rf)
 logger.info('Wrote resolution status: %dx%d → %s', cfg.resolution_x, cfg.resolution_y, _resolution_file)
 
-# ── Load persisted settings (written by web backend) ───────────────────────
-# Read the unified stream config file *before* loading the model so that the
-# user's last-applied model choice takes precedence over the OBJECT_MODEL env var.
-_config_path = f'/data/streams/{cfg.cam_stream}.json'
-if os.path.exists(_config_path):
+# ── Load persisted settings from IronFlock backend table ───────────────────
+# Query the streams table for any previously saved config for this stream,
+# so the user's last-applied model choice takes precedence over the OBJECT_MODEL env var.
+import asyncio as _asyncio
+
+async def _load_stream_config_from_table(ironflock_instance, config):
+    """Load stream config from the backend table. Returns True if config was found."""
     try:
-        with open(_config_path, 'r') as _sf:
-            _saved = json.load(_sf)
-        # Extract settings keys
+        rows = await ironflock_instance.getHistory('streams', {
+            'limit': 1,
+            'filterAnd': [
+                {'column': 'stream_name', 'operator': '=', 'value': config.cam_stream},
+                {'column': 'latest_flag', 'operator': '=', 'value': True},
+                {'column': 'deleted', 'operator': '!=', 'value': True},
+            ],
+        })
+        if not rows:
+            logger.info('No stream config found in backend table for %s, using env/defaults', config.cam_stream)
+            return False
+
+        row = rows[0]
+        raw = row.get('stream_config', '{}')
+        _saved = json.loads(raw) if isinstance(raw, str) else raw
+
+        # Preserve the full config blob so the publisher can include all fields
+        config._full_config = dict(_saved)
+
         _settings_keys = ['model', 'useSahi', 'useSmoothing', 'confidence', 'frameBuffer',
                           'nmsIou', 'sahiIou', 'overlapRatio', 'classList', 'classNames']
         for _k in _settings_keys:
             if _k in _saved:
-                cfg.stream_settings[_k] = _saved[_k]
+                config.stream_settings[_k] = _saved[_k]
         _saved_model = _saved.get('model')
         if _saved_model and _saved_model != 'none':
-            cfg.object_model = _saved_model
-            cfg.current_model_name = _saved_model
-            logger.info('Loaded model from stream config: %s', cfg.object_model)
+            config.object_model = _saved_model
+            config.current_model_name = _saved_model
+            logger.info('Loaded model from backend table: %s', config.object_model)
         else:
-            logger.info('Stream config has no model or model=none')
-        # Load initial masks from the same file
+            logger.info('Backend table config has no model or model=none')
+
         _masks_data = _saved.get('masks', {})
         if _masks_data and _masks_data.get('polygons'):
             from masks import prepMasks
-            cfg.saved_masks.extend(
-                prepMasks(_masks_data, cfg.resolution_x, cfg.resolution_y)
+            config.saved_masks.extend(
+                prepMasks(_masks_data, config.resolution_x, config.resolution_y)
             )
-            logger.info('Loaded %d masks from stream config', len(cfg.saved_masks))
+            logger.info('Loaded %d masks from backend table', len(config.saved_masks))
+        return True
     except Exception as _e:
-        logger.warning('Could not read stream config %s: %s', _config_path, _e)
-else:
-    logger.info('No stream config found at %s, using env/defaults', _config_path)
+        logger.warning('Could not read stream config from backend table: %s', _e)
+        return False
 
 # ── Load initial model ─────────────────────────────────────────────────────
 
@@ -484,6 +502,10 @@ if __name__ == "__main__":
         from ironflock import IronFlock
         ironflock = IronFlock()
 
+    # Load stream config from backend table before starting
+    loop = get_event_loop()
+    _config_found = loop.run_until_complete(_load_stream_config_from_table(ironflock, cfg))
+
     cfg._publisher = Publisher(ironflock, cfg)
     publisher = cfg._publisher
 
@@ -510,8 +532,8 @@ if __name__ == "__main__":
     _signal.signal(_signal.SIGTERM, _on_sigterm)
     _signal.signal(_signal.SIGUSR1, _on_sigusr1)
 
-    loop = get_event_loop()
     loop.create_task(watchStreamConfig(
+        ironflock,
         cfg,
         on_change=lambda: publisher.publish_stream(status='started'),
     ))

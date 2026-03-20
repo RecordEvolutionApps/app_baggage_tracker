@@ -4,6 +4,7 @@ import { mainStyles } from './utils.js';
 import './camera-player.js';
 import { CameraPlayer } from './camera-player.js';
 import { initMediasoup, stopMediasoup } from './modules/webRTCPlayer.js';
+import { readStream, writeStream, deleteStream, subscribeStreams } from './streams-sdk.js';
 
 import '@material/web/button/filled-button.js';
 import '@material/web/button/text-button.js';
@@ -38,6 +39,7 @@ export class StreamEditor extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.loadStoppedState();
+    this._subscribeToChanges();
   }
 
   disconnectedCallback() {
@@ -45,13 +47,55 @@ export class StreamEditor extends LitElement {
     stopMediasoup();
   }
 
+  private _subscribeToChanges() {
+    subscribeStreams((config) => {
+      if (config.camStream !== this.camStream) return;
+
+      // Stream was deleted by another user — go back
+      if ((config as any).deleted) {
+        this.goBack();
+        return;
+      }
+
+      // Update name if changed externally
+      if (config.name && config.name !== this.streamName && !this.editingName) {
+        this.streamName = config.name;
+      }
+
+      // Update stopped state and handle WebRTC accordingly
+      const wasStopped = this.stopped;
+      const nowStopped = !!config.stopped;
+      if (nowStopped !== wasStopped && !this.toggling) {
+        this.stopped = nowStopped;
+        if (nowStopped) {
+          stopMediasoup();
+        } else {
+          this.updateComplete.then(() => {
+            setTimeout(() => {
+              const videoPlayers: Record<string, HTMLVideoElement | undefined> = {};
+              const player = this.shadowRoot?.querySelector('camera-player') as CameraPlayer;
+              if (player?.id && player.videoElement) {
+                videoPlayers[player.id] = player.videoElement;
+              }
+              initMediasoup(videoPlayers);
+            }, 500);
+          });
+        }
+      }
+
+      // Update full config
+      this.fullConfig = config;
+    });
+  }
+
   private async loadStoppedState() {
     try {
-      const res = await fetch(`${this.basepath}/streams/${encodeURIComponent(this.camStream)}`);
-      const data = await res.json();
-      this.stopped = !!data.stopped;
-      this.streamName = data.name || this.camStream;
-      this.fullConfig = data;
+      const data = await readStream(this.camStream);
+      if (data) {
+        this.stopped = !!data.stopped;
+        this.streamName = data.name || this.camStream;
+        this.fullConfig = data;
+      }
     } catch (err) {
       console.error('Failed to load stream state', err);
     }
@@ -71,16 +115,9 @@ export class StreamEditor extends LitElement {
     this.streamName = trimmed;
     if (!this.fullConfig) return;
     try {
-      const body = { ...this.fullConfig, name: trimmed };
-      const res = await fetch(
-        `${this.basepath}/streams/${encodeURIComponent(this.camStream)}`,
-        { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
-      );
-      if (res.ok) {
-        this.fullConfig = { ...this.fullConfig, name: trimmed };
-      } else {
-        console.error('Failed to rename stream', await res.text());
-      }
+      const updated = { ...this.fullConfig, name: trimmed } as any;
+      await writeStream(this.camStream, updated);
+      this.fullConfig = updated;
     } catch (err) {
       console.error('Error renaming stream', err);
     }
@@ -117,15 +154,14 @@ export class StreamEditor extends LitElement {
         console.error(`Failed to ${action} stream`, await res.text());
         return;
       }
+      // State will be updated by the subscription callback.
+      // Set it locally too for immediate feedback.
       this.stopped = !this.stopped;
 
       if (this.stopped) {
-        // Tear down WebRTC player
         stopMediasoup();
       } else {
-        // Re-init WebRTC after the video process comes back
         await this.updateComplete;
-        // Small delay to let the video process start and begin producing RTP
         setTimeout(() => {
           const videoPlayers: Record<string, HTMLVideoElement | undefined> = {};
           const player = this.shadowRoot?.querySelector('camera-player') as CameraPlayer;
@@ -159,9 +195,7 @@ export class StreamEditor extends LitElement {
 
   private async confirmDelete() {
     try {
-      await fetch(`${this.basepath}/streams/${encodeURIComponent(this.camStream)}`, {
-        method: 'DELETE',
-      });
+      await deleteStream(this.camStream);
     } catch (err) {
       console.error('Failed to delete stream', err);
     }

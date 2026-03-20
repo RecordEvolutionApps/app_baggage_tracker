@@ -2,6 +2,7 @@ import { LitElement, html, css } from 'lit';
 import { property, customElement, state } from 'lit/decorators.js';
 import './video-canvas.js';
 import { mainStyles, CamSetup } from './utils.js';
+import { readStream } from './streams-sdk.js';
 
 @customElement('camera-player')
 export class CameraPlayer extends LitElement {
@@ -29,15 +30,14 @@ export class CameraPlayer extends LitElement {
 
   async getCameraMetadata() {
     try {
-      this.camSetup = await fetch(
-        `${this.basepath}/streams/${encodeURIComponent(this.id)}`,
-        {
-          method: 'GET',
-          headers: {
-            Accept: 'application/json',
-          },
-        },
-      ).then(res => res.json());
+      const config = await readStream(this.id);
+      if (config) {
+        this.camSetup = {
+          ...config,
+          width: config.width ?? 640,
+          height: config.height ?? 480,
+        } as CamSetup;
+      }
       console.log('got Camera Setup', this.camSetup)
     } catch (error) {
       console.error('Failed to get cameras', error);

@@ -71,6 +71,7 @@ services:
       - video
     environment:
       - VIDEO_API=http://mediasoup:8000
+      - ENV=DEV
     entrypoint: ["/app/entrypoint.dev.sh"]
 
 volumes:

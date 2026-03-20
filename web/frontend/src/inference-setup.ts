@@ -2,6 +2,7 @@ import { LitElement, html, css, PropertyValueMap } from 'lit';
 import { property, customElement, state } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { mainStyles, CamSetup, ModelOption, ClassOption } from './utils.js';
+import { writeStream } from './streams-sdk.js';
 import prettyBytes from 'pretty-bytes';
 import '@material/web/chips/filter-chip.js';
 import '@material/web/dialog/dialog.js';
@@ -1696,11 +1697,7 @@ export class InferenceSetup extends LitElement {
       ...patch,
     };
     try {
-      await fetch(`${this.basepath}/streams/${encodeURIComponent(this.camStream)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-      });
+      await writeStream(this.camStream, config as any);
     } catch (err) {
       console.error('Failed to save stream config', err);
     }

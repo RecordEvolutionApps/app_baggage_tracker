@@ -1,11 +1,9 @@
-import { mkdir, readdir } from 'node:fs/promises'
-import { join } from 'node:path'
+import { ironflock } from './ironflock.js'
 
 // ── Config constants ───────────────────────────────────────────────────────
 
 export const VIDEO_API = Bun.env.VIDEO_API || "http://video:8000";
 export const MEDIASOUP_WS = Bun.env.MEDIASOUP_WS || "ws://mediasoup:1200";
-export const streamsDir = '/data/streams'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -64,58 +62,76 @@ export type DeviceCameraInfo = {
 
 export const ports = new Map<string, any>()
 
-// ── Stream config persistence (one file per stream) ────────────────────────
+// ── Stream config persistence (IronFlock backend table) ────────────────────
 
-async function ensureStreamsDir() {
-    await mkdir(streamsDir, { recursive: true })
+function rowToStreamConfig(row: any): StreamConfig {
+    const config = typeof row.stream_config === 'string'
+        ? JSON.parse(row.stream_config)
+        : row.stream_config ?? {}
+    return {
+        ...config,
+        camStream: row.stream_name ?? config.camStream,
+    } as StreamConfig
 }
 
-function streamPath(camStream: string): string {
-    return join(streamsDir, `${camStream}.json`)
-}
-
-/** Read a single stream config from disk. Returns null if not found. */
+/** Read a single stream config from the backend table. Returns null if not found. */
 export async function readStreamConfig(camStream: string): Promise<StreamConfig | null> {
     try {
-        const file = Bun.file(streamPath(camStream))
-        if (await file.exists()) return await file.json()
+        const rows = await ironflock.getHistory('streams', {
+            limit: 1,
+            filterAnd: [
+                { column: 'stream_name', operator: '=', value: camStream },
+                { column: 'latest_flag', operator: '=', value: true },
+                { column: 'deleted', operator: '!=', value: true },
+            ],
+        })
+        if (rows && rows.length > 0) return rowToStreamConfig(rows[0])
     } catch (err) {
         console.error(`Failed to read stream config for ${camStream}:`, err)
     }
     return null
 }
 
-/** Write a full stream config to disk. */
-export async function writeStreamConfig(camStream: string, config: StreamConfig): Promise<void> {
-    await ensureStreamsDir()
-    await Bun.write(streamPath(camStream), JSON.stringify(config, null, 2))
+/** Write a full stream config to the backend table. */
+export async function writeStreamConfig(camStream: string, config: StreamConfig, status = 'configured'): Promise<void> {
+    const now = new Date().toISOString()
+    await ironflock.publishToTable('streams', {
+        tsp: now,
+        stream_name: camStream,
+        cam_path: config.path ?? '',
+        stream_config: JSON.stringify(config),
+        status,
+        deleted: false,
+    }, { exclude_me: true })
 }
 
-/** Delete a stream config file from disk. */
+/** Mark a stream as deleted in the backend table. */
 export async function deleteStreamConfig(camStream: string): Promise<void> {
-    const { unlink } = await import('node:fs/promises')
-    try {
-        await unlink(streamPath(camStream))
-    } catch (err: any) {
-        if (err.code !== 'ENOENT') throw err
-    }
+    const now = new Date().toISOString()
+    await ironflock.publishToTable('streams', {
+        tsp: now,
+        stream_name: camStream,
+        cam_path: '',
+        stream_config: '{}',
+        status: 'deleted',
+        deleted: true,
+    }, { exclude_me: true })
 }
 
-/** List all stream configs by reading all JSON files in the streams dir. */
+/** List all active stream configs from the backend table. */
 export async function listStreamConfigs(): Promise<StreamConfig[]> {
-    await ensureStreamsDir()
-    const files = await readdir(streamsDir)
-    const configs: StreamConfig[] = []
-    for (const file of files) {
-        if (!file.endsWith('.json')) continue
-        try {
-            const data = await Bun.file(join(streamsDir, file)).json()
-            configs.push(data)
-        } catch (err) {
-            console.error(`Failed to read stream config ${file}:`, err)
-        }
+    try {
+        const rows = await ironflock.getHistory('streams', {
+            filterAnd: [
+                { column: 'latest_flag', operator: '=', value: true },
+                { column: 'deleted', operator: '!=', value: true },
+            ],
+        })
+        return (rows ?? []).map(rowToStreamConfig)
+    } catch (err) {
+        console.error('Failed to list stream configs:', err)
+        return []
     }
-    return configs
 }
 
 // ── Source field comparison ─────────────────────────────────────────────────
@@ -131,20 +147,12 @@ export function sourceChanged(prev: StreamConfig | null, next: StreamConfig): bo
 // ── Migration from legacy files ────────────────────────────────────────────
 
 export async function migrateFromLegacy(): Promise<void> {
-    await ensureStreamsDir()
+    const { readdir, rename } = await import('node:fs/promises')
+    const { join } = await import('node:path')
 
-    // Check if migration is needed
-    const existing = await readdir(streamsDir)
-    if (existing.some(f => f.endsWith('.json'))) {
-        console.log('Streams dir already has config files, skipping legacy migration')
-        return
-    }
-
+    // Check if legacy streamSetup.json exists
     const legacySetupFile = Bun.file('/data/streamSetup.json')
-    if (!(await legacySetupFile.exists())) {
-        console.log('No legacy streamSetup.json found, nothing to migrate')
-        return
-    }
+    if (!(await legacySetupFile.exists())) return
 
     let legacy: Record<string, any>
     try {
@@ -154,7 +162,7 @@ export async function migrateFromLegacy(): Promise<void> {
         return
     }
 
-    console.log('Migrating legacy stream configs...')
+    console.log('Migrating legacy stream configs to backend table...')
 
     for (const [camStream, cam] of Object.entries(legacy)) {
         // Read per-stream settings file if it exists
@@ -182,7 +190,6 @@ export async function migrateFromLegacy(): Promise<void> {
             } catch { /* ignore */ }
         }
 
-        // Merge: cam fields + settings overrides + masks
         const config: StreamConfig = {
             ...(cam as StreamConfig),
             model: settings.model ?? cam.model ?? undefined,
@@ -202,10 +209,44 @@ export async function migrateFromLegacy(): Promise<void> {
         console.log(`  Migrated stream: ${camStream}`)
     }
 
-    // Rename legacy files to .bak
-    const { rename } = await import('node:fs/promises')
+    // Rename legacy file to .bak
     try { await rename('/data/streamSetup.json', '/data/streamSetup.json.bak') } catch { }
     console.log('Legacy migration complete')
+}
+
+// ── Also migrate from /data/streams/*.json files to backend table ──────────
+
+export async function migrateFromFiles(): Promise<void> {
+    const { readdir } = await import('node:fs/promises')
+    const { join } = await import('node:path')
+    const streamsDir = '/data/streams'
+
+    let files: string[]
+    try {
+        files = await readdir(streamsDir)
+    } catch {
+        return // no streams dir
+    }
+
+    const jsonFiles = files.filter(f => f.endsWith('.json'))
+    if (jsonFiles.length === 0) return
+
+    // Check if the backend table already has configs — if so, skip file migration
+    const existing = await listStreamConfigs()
+    if (existing.length > 0) return
+
+    console.log('Migrating stream configs from files to backend table...')
+    for (const file of jsonFiles) {
+        try {
+            const data = await Bun.file(join(streamsDir, file)).json()
+            const camStream = data.camStream ?? file.replace('.json', '')
+            await writeStreamConfig(camStream, data as StreamConfig)
+            console.log(`  Migrated file: ${file}`)
+        } catch (err) {
+            console.error(`Failed to migrate ${file}:`, err)
+        }
+    }
+    console.log('File migration complete')
 }
 
 // ── Utilities ──────────────────────────────────────────────────────────────
