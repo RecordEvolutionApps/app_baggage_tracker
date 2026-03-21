@@ -218,19 +218,6 @@ async def _load_stream_config_from_table(ironflock_instance, config):
         logger.warning('Could not read stream config from backend table: %s', _e)
         return False
 
-# ── Load initial model ─────────────────────────────────────────────────────
-
-model = getModel(cfg.object_model, cfg)
-cfg.model = model
-cfg.current_model_name = cfg.object_model
-logger.info('Model native input: %s', model.get('native_input_wh', 'unknown'))
-logger.info('[PROFILE] Backend=%s, model=%s, SAHI=%s, device=%s, res=%dx%d',
-            model.get('backend', '?'), cfg.object_model, cfg.use_sahi,
-            'CUDA' if torch.cuda.is_available() else 'CPU',
-            cfg.resolution_x, cfg.resolution_y)
-write_backend_status(cfg.cam_stream, model, detect_backend=cfg.detect_backend)
-
-
 # ── Inference loop ─────────────────────────────────────────────────────────
 
 async def main(config):
@@ -505,7 +492,17 @@ if __name__ == "__main__":
 
     # Publish initial stream state
     publisher.publish_stream(status='started')
-    publisher.publish_camera_hubs()
+
+    # ── Load initial model (after publish so hub/stream are registered even if this fails)
+    model = getModel(cfg.object_model, cfg)
+    cfg.model = model
+    cfg.current_model_name = cfg.object_model
+    logger.info('Model native input: %s', model.get('native_input_wh', 'unknown'))
+    logger.info('[PROFILE] Backend=%s, model=%s, SAHI=%s, device=%s, res=%dx%d',
+                model.get('backend', '?'), cfg.object_model, cfg.use_sahi,
+                'CUDA' if torch.cuda.is_available() else 'CPU',
+                cfg.resolution_x, cfg.resolution_y)
+    write_backend_status(cfg.cam_stream, model, detect_backend=cfg.detect_backend)
 
     # On SIGTERM (container/process stop), publish the stream as deleted
     import signal as _signal

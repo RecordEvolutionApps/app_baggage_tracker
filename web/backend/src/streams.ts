@@ -13,6 +13,7 @@ import {
     migrateFromLegacy,
     migrateFromFiles,
 } from './shared.js'
+import { ironflock, getIronFlockConfig } from './ironflock.js'
 
 // ── Stream lifecycle ───────────────────────────────────────────────────────
 
@@ -138,7 +139,22 @@ export async function getStreamBackendStatus(ctx: Context): Promise<any> {
 
 // ── Initialization ─────────────────────────────────────────────────────────
 
+async function publishCameraHub() {
+    const { deviceKey, deviceName } = getIronFlockConfig()
+    const now = new Date().toISOString()
+    await ironflock.publishToTable('camera_hubs', [{
+        tsp: now,
+        deleted: false,
+        webpage: deviceKey ? `https://${deviceKey}-visionai-1100.app.ironflock.com` : '',
+        devicelink: Bun.env.DEVICE_URL ?? '',
+    }])
+    console.log('Published camera hub:', deviceName ?? '(no device name)')
+}
+
 async function initStreams() {
+    // Register this device as a camera hub
+    await publishCameraHub()
+
     // Migrate from legacy file layouts if needed
     await migrateFromLegacy()
     await migrateFromFiles()

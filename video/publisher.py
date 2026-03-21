@@ -50,16 +50,6 @@ class Publisher:
 
         get_event_loop().create_task(_publish())
 
-    def publish_camera_hubs(self):
-        """Publish camera hub heartbeat to the ``camera_hubs`` table."""
-        now = datetime.now().astimezone().isoformat()
-        payload = {"tsp": now, "deleted": False}
-        payload["webpage"] = f"https://{self._config.device_key}-visionai-1100.app.ironflock.com"
-        payload["devicelink"] = self._config.device_url or ''
-        get_event_loop().create_task(
-            self._ironflock.publish_to_table('camera_hubs', payload),
-        )
-
     def publish_class_count(self, zone_name, result):
         """Publish per-zone class counts to the ``zone_counts`` table."""
         now = datetime.now().astimezone().isoformat()
