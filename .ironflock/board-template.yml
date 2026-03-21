@@ -4,74 +4,66 @@ layout:
     - x: 0
       y: 0
       w: 12
-      h: 4
-      id: a176e5b9-eeeb-4173-b2f7-91a319edc8ef
+      h: 48
+      id: 6c7855ab-d64e-4738-8315-964cc34e5b3f
       z: 1000
       fixedWidth: true
-      fixedHeight: true
     - x: 12
       y: 0
       w: 16
       h: 20
       id: "13"
       z: 1001
-    - x: 28
-      y: 0
-      w: 20
-      h: 20
-      id: "3"
-      z: 1002
-    - x: 0
-      y: 4
-      w: 12
-      h: 44
-      id: 6c7855ab-d64e-4738-8315-964cc34e5b3f
-      z: 999
-      fixedWidth: true
     - x: 12
       y: 20
       w: 36
       h: 28
       id: "12"
+      z: 1002
+    - id: fc6e0783-f039-4796-9ad7-9f124140747d
+      x: 28
+      y: 0
+      w: 20
+      h: 20
+      z: 1003
+    - id: 8230a69a-146b-4c2f-9b49-7199973d8bb8
+      x: 28
+      y: 0
+      w: 5
+      h: 3
       z: 1004
   subRoutes:
     "*":
       gridLayout:
-        - x: 0
-          y: 4
-          w: 12
-          h: 44
-          id: 6c7855ab-d64e-4738-8315-964cc34e5b3f
-          z: 1000
-          fixedWidth: true
         - x: 12
           y: 0
-          w: 8
-          h: 12
-          id: "8"
-          z: 1001
-          fixedHeight: true
-        - x: 20
-          y: 0
-          w: 28
-          h: 12
-          id: "10"
-          z: 1002
-          fixedHeight: true
-        - x: 12
-          y: 12
           w: 36
-          h: 36
+          h: 48
           id: 2a14ba2f-568c-43f2-a5bb-123277502f79
-          z: 1003
+          z: 1000
+        - x: 0
+          y: 0
+          w: 12
+          h: 48
+          id: 6c7855ab-d64e-4738-8315-964cc34e5b3f
+          z: 1001
+          fixedWidth: true
         - x: 0
           y: 0
           w: 12
           h: 4
           id: a176e5b9-eeeb-4173-b2f7-91a319edc8ef
-          z: 1004
+          z: 1003
           fixedWidth: true
           fixedHeight: true
+    streams:
+      gridLayout:
+        - id: 4655059f-b895-4e5a-a382-2f64a8175d1a
+          x: 0
+          y: 0
+          w: 48
+          h: 48
+          z: 1000
 background_color: "#ffc77e"
 text_color: "#575062"
 style:
@@ -115,16 +107,17 @@ widgets:
                 x: period
                 y: num_out
                 pivot: linename
-                r: $num:1
               queryParams:
                 limit: 100
+              swarm_app_databackend_key: 423
           backgroundColor: ""
           borderColor: ""
           styling: {}
           advanced: {}
-      title: $str:History of Counted Bags
+      title: $str:Line Crossings
       subTitle: null
       axis: {}
+    custom_style: null
     version: 1.6.31
     layout_id: "12"
   - package_name: widget-value
@@ -140,17 +133,20 @@ widgets:
             valueRef:
               tablename: linecount_agg
               column: num_out_dev
+              swarm_app_databackend_key: 423
           multiChart: null
-      title: $str:Total Number of Suitcases
-      subTitle: $str:Accross all cameras
+      title: $str:Total Line Crossings
+      subTitle: $str:Accross all camera streams
+    custom_style: null
     version: 1.1.25
     layout_id: "13"
   - package_name: widget-embed
     chartconfig:
       webUrl:
         valueRef:
+          swarm_app_databackend_key: 423
           tablename: camera_hubs
-          column: videolink
+          column: webpage
           queryParams:
             filterAnd:
               - column: devname
@@ -158,38 +154,83 @@ widgets:
                 value: "1"
                 dataType: string
                 useRoute: true
+                useFilter: false
             limit: 1
+      title: null
+      multiEmbed: null
+    custom_style: null
     version: 1.0.7
     layout_id: 2a14ba2f-568c-43f2-a5bb-123277502f79
-  - package_name: widget-value
-    chartconfig:
-      settings:
-        title: $str:Current Baggage Counts
-      dataseries:
-        - label: $str:#
-          labelColor: $str:#000000
-          valueColor: $str:#2b90fd
-          averageLatest: "$num:"
-          unit: "$str:"
-          precision: $num:0
-          advanced:
-            averageLatest: $num:1
-          styling: {}
-          multiChart: $bool:true
-          data:
-            tableRef:
-              tablename: linecount_agg
-              queryParams:
-                limit: 50
-                filterAnd: []
-              format:
-                tsp: null
-                value: num_out
-                pivot: linename
-      title: "$str:"
-      subTitle: null
-    version: 1.1.25
-    layout_id: "3"
+  - chartconfig:
+      markdown: |
+        # Markdown Showcase
+
+         **Inline Data Demo:** Current Temperature {{temperature}} °C
+
+         ## Text formatting
+        Normal, **bold**, *italic*, ~~strikethrough~~, and `inline code`.
+
+        > A blockquote with some *emphasis* and **bold**.
+
+        ---
+
+        ## Links & Images
+
+        ![Placeholder image](https://res.cloudinary.com/dk8bhmsdz/image/upload/c_pad,w_500/v1747230890/samples/imagecon-group.jpg)
+
+        [Google](https://google.com)
+
+        ## Lists
+
+        - Unordered item
+          - Nested item
+        - Another item
+
+        1. Ordered list
+        2. Second item
+           1. Nested ordered
+           2. Another
+
+        ---
+
+        ---
+
+        ## Code blocks
+
+        ```python
+        def greet(name):
+            print(f"Hello, {name}!")
+
+        greet("Markdown")
+        ```
+
+        ---
+
+        ## Tables
+
+        | Name     | Age | Role        |
+        |:---------|:---:|-------------:|
+        | Alice    |  25 | Developer   |
+        | Bob      |  30 | Designer    |
+        | Charlie  |  28 | Product Mgr |
+
+        ---
+
+        ## Task lists
+
+        - [x] Write Markdown
+        - [ ] Preview it
+        - [ ] Share it
+
+        ---
+
+        ##
+      data:
+        - label: $str:temperature
+          value: $str:23
+    version: 1.0.5
+    package_name: widget-markdown
+    layout_id: 3cdae780-99c9-4b97-bdda-e31752715448
   - package_name: widget-table
     chartconfig:
       settings:
@@ -208,6 +249,7 @@ widgets:
                 value: devname
               queryParams:
                 limit: 100
+              swarm_app_databackend_key: 423
         - header: $str:Live Stream
           type: $str:button
           color: $str:#252627
@@ -219,6 +261,7 @@ widgets:
                 link: videolink
               queryParams:
                 limit: 100
+              swarm_app_databackend_key: 423
         - header: $str:Settings
           type: $str:button
           values:
@@ -229,14 +272,41 @@ widgets:
                 link: devicelink
               queryParams:
                 limit: 100
+              swarm_app_databackend_key: 423
       title: "$str:"
     layout_id: "4"
+  - package_name: widget-embed
+    chartconfig:
+      multiEmbed: $bool:true
+      gap: $num:4
+      data:
+        tableRef:
+          swarm_app_databackend_key: 423
+          tablename: streams
+          queryParams:
+            limit: 100
+            filterAnd:
+              - column: deleted
+                operator: =
+                value: "false"
+                dataType: boolean
+              - column: latest_flag
+                operator: =
+                value: "true"
+                dataType: boolean
+          format:
+            url: stream_url
+            title: stream_name
+    custom_style: null
+    version: 1.0.7
+    layout_id: 4655059f-b895-4e5a-a382-2f64a8175d1a
   - package_name: widget-image
     chartconfig:
       imageLink:
         valueRef:
           tablename: images
           column: image
+          swarm_app_databackend_key: 423
       title:
         text: $str:Camera Feed
       subTitle:
@@ -251,26 +321,29 @@ widgets:
         fontWeight: $num:400
       navItems:
         tableRef:
+          swarm_app_databackend_key: 423
           tablename: camera_hubs
           queryParams:
             limit: 500
             filterAnd:
+              - column: deleted
+                operator: =
+                value: "false"
+                dataType: boolean
               - column: latest_flag
                 operator: =
                 value: "true"
                 dataType: boolean
-            windowPeriod: null
-            windowLength: 5
-            nowMinusPeriods: 0
           format:
-            label: devname
-            iconName: null
-            route: devname
+            label: $str:Assets
+            iconName: $str:hub
+            route: $str:/assets/
             leadingSlash: null
             trailingSlash: null
       route: $str:/
       leadingSlash: null
       trailingSlash: null
+    custom_style: null
     version: 1.0.13
     layout_id: 6c7855ab-d64e-4738-8315-964cc34e5b3f
   - package_name: widget-image
@@ -289,6 +362,7 @@ widgets:
                 dataType: string
                 useRoute: true
             limit: 1
+          swarm_app_databackend_key: 423
       useUpload: $bool:false
       imageUrl: $str:https://storage.googleapis.com/reswarm-images/prod/reswarm-0-1706095631331-Cam_icon-682decf0d8.png
       stretchToFit: null
@@ -299,12 +373,39 @@ widgets:
     layout_id: "8"
   - package_name: widget-navbutton
     chartconfig:
-      title: $str:Baggage Vision
-      iconName: $str:home
-      route: $str:/
+      title: $str:Full Screen
+      iconName: $str:zoom_out_map
+      route: $str:/streams
       style:
         fontSize: $num:16
       leadingSlash: null
       trailingSlash: null
+    custom_style: null
     version: 1.0.7
-    layout_id: a176e5b9-eeeb-4173-b2f7-91a319edc8ef
+    layout_id: 8230a69a-146b-4c2f-9b49-7199973d8bb8
+  - package_name: widget-embed
+    chartconfig:
+      multiEmbed: $bool:true
+      gap: $num:4
+      data:
+        tableRef:
+          swarm_app_databackend_key: 423
+          tablename: streams
+          queryParams:
+            limit: 100
+            filterAnd:
+              - column: deleted
+                operator: =
+                value: "false"
+                dataType: boolean
+              - column: latest_flag
+                operator: =
+                value: "true"
+                dataType: boolean
+          format:
+            url: stream_url
+            title: stream_name
+    custom_style:
+      tile_border_color: "#fff0"
+    version: 1.0.7
+    layout_id: fc6e0783-f039-4796-9ad7-9f124140747d
