@@ -253,6 +253,13 @@ async def main(config):
         zoneCounts = []
         lineCounts = []
 
+        # ── Log-throttle timers ──────────────────────────────────────
+        # At high FPS (10-20ms/frame), per-frame logger.info() calls
+        # produce overwhelming output.  Throttle inference profile
+        # logs so they only appear every few seconds.
+        _inf_log_interval = 5.0  # log inference timing every 5s
+        _last_inf_log = 0.0      # force first log immediately
+
         while cap.isOpened():
             prof.begin()
             await sleep(0)  # Give other tasks time to run
@@ -378,21 +385,25 @@ async def main(config):
                         detections, slicer, sahi_grid = run_sahi_inference(
                             frame, slicer, model, saved_masks, stream_settings, config)
                         _dt_inf = time.monotonic() - _t_inference_start
-                        n_slices = getattr(slicer, '_sahi_slice_count', [None])[0]
-                        logger.info('[PROFILE-INF] SAHI: %.0fms total, %s slices, %.0fms/slice, backend=%s, frame=%dx%d',
-                                    _dt_inf * 1000, n_slices,
-                                    (_dt_inf * 1000 / n_slices) if n_slices else 0,
-                                    model.get('backend', '?'),
-                                    frame.shape[1], frame.shape[0])
+                        if _dt_inf + _t_inference_start - _last_inf_log >= _inf_log_interval:
+                            _last_inf_log = _t_inference_start + _dt_inf
+                            n_slices = getattr(slicer, '_sahi_slice_count', [None])[0]
+                            logger.info('[PROFILE-INF] SAHI: %.0fms total, %s slices, %.0fms/slice, backend=%s, frame=%dx%d',
+                                        _dt_inf * 1000, n_slices,
+                                        (_dt_inf * 1000 / n_slices) if n_slices else 0,
+                                        model.get('backend', '?'),
+                                        frame.shape[1], frame.shape[0])
                     else:
                         slicer = None
                         conf = float(stream_settings.get('confidence', config.conf))
                         nms_iou = float(stream_settings.get('nmsIou', config.nms_iou))
                         detections = infer(frame, model, confidence=conf, iou=nms_iou, config=config)
                         _dt_inf = time.monotonic() - _t_inference_start
-                        logger.info('[PROFILE-INF] Direct: %.0fms, backend=%s, frame=%dx%d',
-                                    _dt_inf * 1000, model.get('backend', '?'),
-                                    frame.shape[1], frame.shape[0])
+                        if _dt_inf + _t_inference_start - _last_inf_log >= _inf_log_interval:
+                            _last_inf_log = _t_inference_start + _dt_inf
+                            logger.info('[PROFILE-INF] Direct: %.0fms, backend=%s, frame=%dx%d',
+                                        _dt_inf * 1000, model.get('backend', '?'),
+                                        frame.shape[1], frame.shape[0])
 
                     if not detections:
                         detections = empty_detections()

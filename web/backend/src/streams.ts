@@ -140,15 +140,20 @@ export async function getStreamBackendStatus(ctx: Context): Promise<any> {
 // ── Initialization ─────────────────────────────────────────────────────────
 
 async function publishCameraHub() {
-    const { deviceKey, deviceName } = getIronFlockConfig()
+    const { deviceKey, deviceName, env } = getIronFlockConfig()
+    console.log(`Registering camera hub (env=${env}, deviceKey=${deviceKey ?? 'NOT SET'}, deviceName=${deviceName ?? 'NOT SET'})`)
     const now = new Date().toISOString()
-    await ironflock.publishToTable('camera_hubs', [{
-        tsp: now,
-        deleted: false,
-        webpage: deviceKey ? `https://${deviceKey}-visionai-1100.app.ironflock.com` : '',
-        devicelink: Bun.env.DEVICE_URL ?? '',
-    }])
-    console.log('Published camera hub:', deviceName ?? '(no device name)')
+    try {
+        await ironflock.publishToTable('camera_hubs', [{
+            tsp: now,
+            deleted: false,
+            webpage: deviceKey ? `https://${deviceKey}-visionai-1100.app.ironflock.com` : '',
+            devicelink: Bun.env.DEVICE_URL ?? '',
+        }])
+        console.log('Published camera hub:', deviceName ?? '(no device name)')
+    } catch (err) {
+        console.error('Failed to publish camera hub:', err)
+    }
 }
 
 async function initStreams() {

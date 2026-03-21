@@ -14,6 +14,22 @@ from config import StreamConfig
 
 logger = logging.getLogger('inference')
 
+# Throttle per-frame profile logging to reduce log volume at high FPS.
+# At 50-100 FPS these logger.info() calls produce overwhelming output
+# that obscures meaningful messages.
+_PROFILE_LOG_INTERVAL = 5.0  # seconds
+_last_profile_log = 0.0
+
+
+def _should_log_profile() -> bool:
+    """Return True (and reset timer) when enough time has elapsed for a profile log."""
+    global _last_profile_log
+    now = _time_mod.monotonic()
+    if now - _last_profile_log >= _PROFILE_LOG_INTERVAL:
+        _last_profile_log = now
+        return True
+    return False
+
 
 def empty_detections() -> sv.Detections:
     """Return an empty ``sv.Detections`` object."""
@@ -69,9 +85,10 @@ def infer_mmdet(frame: np.ndarray, inferencer, confidence: float | None = None,
 
         detections = detections[keep]
         _t_post = _time_mod.monotonic()
-        logger.info('[PROFILE-MMDET] forward=%.0fms  post=%.0fms  total=%.0fms  frame=%dx%d',
-                    (_t_forward - _t0) * 1000, (_t_post - _t_forward) * 1000,
-                    (_t_post - _t0) * 1000, frame.shape[1], frame.shape[0])
+        if _should_log_profile():
+            logger.info('[PROFILE-MMDET] forward=%.0fms  post=%.0fms  total=%.0fms  frame=%dx%d',
+                        (_t_forward - _t0) * 1000, (_t_post - _t_forward) * 1000,
+                        (_t_post - _t0) * 1000, frame.shape[1], frame.shape[0])
         return detections if len(detections) > 0 else False
 
     except Exception as e:
@@ -91,8 +108,9 @@ def infer_tensorrt(frame: np.ndarray, model_bundle: Dict[str, Any],
         _t0 = _time_mod.monotonic()
         result = trt_inf(frame, conf=conf, iou=iou_threshold, class_list=class_list)
         _dt = _time_mod.monotonic() - _t0
-        logger.info('[PROFILE-TRT] total=%.0fms  frame=%dx%d',
-                    _dt * 1000, frame.shape[1], frame.shape[0])
+        if _should_log_profile():
+            logger.info('[PROFILE-TRT] total=%.0fms  frame=%dx%d',
+                        _dt * 1000, frame.shape[1], frame.shape[0])
         return result if result is not None else False
     except Exception as e:
         logger.error('TensorRT inference failed: %s', e, exc_info=True)
@@ -197,8 +215,9 @@ def infer_huggingface(frame: np.ndarray, model_bundle: Dict[str, Any],
         if model_bundle.get('is_segmentation'):
             result = _infer_hf_segmentation(frame, model_bundle, conf_threshold, class_list)
             _t1 = _time_mod.monotonic()
-            logger.info('[PROFILE-HF-SEG] total=%.0fms  frame=%dx%d',
-                        (_t1 - _t0) * 1000, frame.shape[1], frame.shape[0])
+            if _should_log_profile():
+                logger.info('[PROFILE-HF-SEG] total=%.0fms  frame=%dx%d',
+                            (_t1 - _t0) * 1000, frame.shape[1], frame.shape[0])
             return result
 
         # Convert BGR (OpenCV) to RGB PIL image
@@ -243,9 +262,10 @@ def infer_huggingface(frame: np.ndarray, model_bundle: Dict[str, Any],
             detections = detections[keep]
 
         _t_post = _time_mod.monotonic()
-        logger.info('[PROFILE-HF] forward=%.0fms  post=%.0fms  total=%.0fms  frame=%dx%d',
-                    (_t_forward - _t0) * 1000, (_t_post - _t_forward) * 1000,
-                    (_t_post - _t0) * 1000, frame.shape[1], frame.shape[0])
+        if _should_log_profile():
+            logger.info('[PROFILE-HF] forward=%.0fms  post=%.0fms  total=%.0fms  frame=%dx%d',
+                        (_t_forward - _t0) * 1000, (_t_post - _t_forward) * 1000,
+                        (_t_post - _t0) * 1000, frame.shape[1], frame.shape[0])
 
         return detections if len(detections) > 0 else False
 
