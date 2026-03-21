@@ -29,7 +29,8 @@ class StubIronFlock {
         renameSync(tmp, this._filePath(table))
     }
 
-    async publishToTable(table: string, data: Record<string, any>, options?: Record<string, any>) {
+    async publishToTable(table: string, args?: unknown[], kwargs?: Record<string, unknown>) {
+        const data = ((args && args.length > 0 ? args[0] : {}) ?? {}) as Record<string, any>
         const rows = this._readTable(table)
         const maxId = rows.reduce((m: number, r: any) => Math.max(m, r._rowId ?? 0), 0)
         const row = { ...data, _rowId: maxId + 1, _publisher: 'ts', latest_flag: true }
@@ -45,7 +46,7 @@ class StubIronFlock {
         this._writeTable(table, rows)
 
         // Fire subscription callbacks (skip own if exclude_me)
-        const excludeMe = options?.exclude_me === true
+        const excludeMe = (kwargs as any)?.exclude_me === true
         const cbs = this._subs.get(table)
         if (cbs && !excludeMe) {
             const { _rowId: _, _publisher: __, ...clean } = row

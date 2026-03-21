@@ -54,7 +54,7 @@ class Publisher:
         """Publish camera hub heartbeat to the ``camera_hubs`` table."""
         now = datetime.now().astimezone().isoformat()
         payload = {"tsp": now}
-        payload["videolink"] = f"https://{self._config.device_key}-baggagetracker-1100.app.ironflock.com"
+        payload["webpage"] = f"https://{self._config.device_key}-visionai-1100.app.ironflock.com"
         payload["devicelink"] = self._config.device_url or ''
         get_event_loop().create_task(
             self._ironflock.publish_to_table('camera_hubs', payload),
@@ -98,6 +98,7 @@ class Publisher:
         payload = {
             "tsp": now,
             "stream_name": self._config.cam_stream,
+            "stream_url": f"https://{self._config.device_key}-visionai-1100.app.ironflock.com",
             "cam_path": self._config.device,
             "stream_config": stream_config,
             "status": status,

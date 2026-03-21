@@ -4,7 +4,7 @@
  * These mirror the backend's shared.ts helpers but run in the browser,
  * talking directly to the IronFlock backend (or the DEV REST stub).
  */
-import { ironflock, ironflockReady } from './ironflock.js'
+import { ironflock, ironflockReady, deviceKey } from './ironflock.js'
 import type { StreamConfig } from './utils.js'
 
 // ── Row ↔ StreamConfig conversion ──────────────────────────────────────────
@@ -25,6 +25,7 @@ function rowToStreamConfig(row: any): StreamConfig {
 export async function listStreams(): Promise<StreamConfig[]> {
     await ironflockReady
     const rows = await ironflock.getHistory('streams', {
+        limit: 10000,
         filterAnd: [
             { column: 'latest_flag', operator: '=', value: true },
             { column: 'deleted', operator: '!=', value: true },
@@ -52,28 +53,30 @@ export async function readStream(camStream: string): Promise<StreamConfig | null
 export async function writeStream(camStream: string, config: StreamConfig, status = 'configured'): Promise<void> {
     await ironflockReady
     const now = new Date().toISOString()
-    await ironflock.publishToTable('streams', {
+    await ironflock.publishToTable('streams', [{
         tsp: now,
         stream_name: camStream,
+        stream_url: `https://${deviceKey}-visionai-1100.app.ironflock.com/#view/${encodeURIComponent(camStream)}`,
         cam_path: config.path ?? '',
         stream_config: JSON.stringify(config),
         status,
         deleted: false,
-    })
+    }])
 }
 
 /** Mark a stream config as deleted in the backend table. */
 export async function deleteStream(camStream: string): Promise<void> {
     await ironflockReady
     const now = new Date().toISOString()
-    await ironflock.publishToTable('streams', {
+    await ironflock.publishToTable('streams', [{
         tsp: now,
         stream_name: camStream,
+        stream_url: `https://${deviceKey}-visionai-1100.app.ironflock.com/#view/${encodeURIComponent(camStream)}`,
         cam_path: '',
         stream_config: '{}',
         status: 'deleted',
         deleted: true,
-    })
+    }])
 }
 
 // ── Subscriptions ──────────────────────────────────────────────────────────

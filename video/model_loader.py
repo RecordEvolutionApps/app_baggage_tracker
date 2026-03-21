@@ -139,6 +139,11 @@ def getModel(model_name: str, config: StreamConfig | None = None) -> Dict[str, A
                 'Neither MMDetection nor HF Transformers is installed. '
                 'Install at least one ML framework.'
             )
+        # If the model is an HF-only model, route to HuggingFace instead of MMDet.
+        from model_zoo import HF_MODEL_ZOO
+        if model_name in HF_MODEL_ZOO and model_name not in MMDET_MODEL_ZOO and HAS_TRANSFORMERS:
+            logger.info('Model %s is a HuggingFace model, routing to huggingface backend', model_name)
+            return get_huggingface_model(model_name, config)
         return get_mmdet_model(model_name, config)
     raise ValueError(f'Unsupported DETECT_BACKEND: {backend}. Supported: mmdet, huggingface, tensorrt')
 
@@ -358,6 +363,11 @@ def get_tensorrt_model(model_name: str, config: StreamConfig | None = None) -> D
         import trt_backend
     except ImportError:
         logger.warning('trt_backend module not found; falling back to available backend')
+        from model_zoo import HF_MODEL_ZOO
+        if model_name in HF_MODEL_ZOO and HAS_TRANSFORMERS:
+            return get_huggingface_model(model_name, config)
+        if model_name in MMDET_MODEL_ZOO and HAS_MMDET:
+            return get_mmdet_model(model_name, config)
         if HAS_MMDET:
             return get_mmdet_model(model_name, config)
         if HAS_TRANSFORMERS:
@@ -366,6 +376,11 @@ def get_tensorrt_model(model_name: str, config: StreamConfig | None = None) -> D
 
     if not trt_backend.is_available():
         logger.warning('TensorRT or CUDA not available; falling back to available backend')
+        from model_zoo import HF_MODEL_ZOO
+        if model_name in HF_MODEL_ZOO and HAS_TRANSFORMERS:
+            return get_huggingface_model(model_name, config)
+        if model_name in MMDET_MODEL_ZOO and HAS_MMDET:
+            return get_mmdet_model(model_name, config)
         if HAS_MMDET:
             return get_mmdet_model(model_name, config)
         if HAS_TRANSFORMERS:
@@ -392,6 +407,15 @@ def get_tensorrt_model(model_name: str, config: StreamConfig | None = None) -> D
             logger.warning('Cached TRT engine failed to load: %s — rebuilding', e)
 
     logger.info('No cached TRT engine for %s — falling back to available backend', model_name)
+    # Route to the correct backend based on which zoo the model belongs to.
+    from model_zoo import HF_MODEL_ZOO
+    is_hf_model = model_name in HF_MODEL_ZOO
+    is_mmdet_model = model_name in MMDET_MODEL_ZOO
+    if is_hf_model and HAS_TRANSFORMERS:
+        return get_huggingface_model(model_name, config)
+    if is_mmdet_model and HAS_MMDET:
+        return get_mmdet_model(model_name, config)
+    # Unknown model — try whatever is available.
     if HAS_MMDET:
         return get_mmdet_model(model_name, config)
     if HAS_TRANSFORMERS:

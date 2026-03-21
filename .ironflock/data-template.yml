@@ -93,9 +93,9 @@ data:
           description: Unique name of the edge device (Edge PC / Jetson). This is the primary key for identifying a camera hub.
           path: kwargs.DEVICE_NAME
           dataType: string
-        - id: videolink
-          name: Video Link
-          description: Full HTTPS URL to the camera hub's stream editor web page (e.g. "https://<device-key>-baggagetracker-1100.app.ironflock.com"). Can be used to embed or link to the live camera view.
+        - id: webpage
+          name: Web Page URL
+          description: Full HTTPS URL to the camera hub's stream gallery web page (e.g. "https://<device-key>-visionai-1100.app.ironflock.com").
           dataType: string
         - id: devicelink
           name: Device Link

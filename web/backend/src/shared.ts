@@ -1,4 +1,4 @@
-import { ironflock } from './ironflock.js'
+import { ironflock, getIronFlockConfig } from './ironflock.js'
 
 // ── Config constants ───────────────────────────────────────────────────────
 
@@ -84,7 +84,7 @@ export async function readStreamConfig(camStream: string): Promise<StreamConfig 
                 { column: 'latest_flag', operator: '=', value: true },
                 { column: 'deleted', operator: '!=', value: true },
             ],
-        })
+        }) as any[] | null
         if (rows && rows.length > 0) return rowToStreamConfig(rows[0])
     } catch (err) {
         console.error(`Failed to read stream config for ${camStream}:`, err)
@@ -95,38 +95,43 @@ export async function readStreamConfig(camStream: string): Promise<StreamConfig 
 /** Write a full stream config to the backend table. */
 export async function writeStreamConfig(camStream: string, config: StreamConfig, status = 'configured'): Promise<void> {
     const now = new Date().toISOString()
-    await ironflock.publishToTable('streams', {
+    const { deviceKey } = getIronFlockConfig()
+    await ironflock.publishToTable('streams', [{
         tsp: now,
         stream_name: camStream,
+        stream_url: `https://${deviceKey}-visionai-1100.app.ironflock.com/#view/${encodeURIComponent(camStream)}`,
         cam_path: config.path ?? '',
         stream_config: JSON.stringify(config),
         status,
         deleted: false,
-    }, { exclude_me: true })
+    }], { exclude_me: true })
 }
 
 /** Mark a stream as deleted in the backend table. */
 export async function deleteStreamConfig(camStream: string): Promise<void> {
     const now = new Date().toISOString()
-    await ironflock.publishToTable('streams', {
+    const { deviceKey } = getIronFlockConfig()
+    await ironflock.publishToTable('streams', [{
         tsp: now,
         stream_name: camStream,
+        stream_url: `https://${deviceKey}-visionai-1100.app.ironflock.com/#view/${encodeURIComponent(camStream)}`,
         cam_path: '',
         stream_config: '{}',
         status: 'deleted',
         deleted: true,
-    }, { exclude_me: true })
+    }], { exclude_me: true })
 }
 
 /** List all active stream configs from the backend table. */
 export async function listStreamConfigs(): Promise<StreamConfig[]> {
     try {
         const rows = await ironflock.getHistory('streams', {
+            limit: 10000,
             filterAnd: [
                 { column: 'latest_flag', operator: '=', value: true },
                 { column: 'deleted', operator: '!=', value: true },
             ],
-        })
+        }) as any[] | null
         return (rows ?? []).map(rowToStreamConfig)
     } catch (err) {
         console.error('Failed to list stream configs:', err)

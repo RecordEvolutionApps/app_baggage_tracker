@@ -89,7 +89,7 @@ function cleanup() {
 
 function getSignalingUrl(): string {
   // In production (ironflock tunnel): replace port segment in hostname
-  // e.g. device-baggagetracker-1100.app.ironflock.com → device-baggagetracker-1200.app.ironflock.com
+  // e.g. device-visionai-1100.app.ironflock.com → device-visionai-1200.app.ironflock.com
   const pa = location.host.split('-');
   if (pa.length >= 3) {
     const jns = pa[2]?.split('.') ?? [];

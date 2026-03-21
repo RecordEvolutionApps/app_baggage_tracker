@@ -2,14 +2,16 @@ import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import './stream-gallery.js';
 import './stream-editor.js';
+import './stream-embed.js';
 import { stopMediasoup } from './modules/webRTCPlayer.js';
 import { mainStyles } from './utils.js';
 
 @customElement('camera-shell')
 export class CameraShell extends LitElement {
 
-  @state() declare private view: 'gallery' | 'editor';
+  @state() declare private view: 'gallery' | 'editor' | 'embed';
   @state() declare private editCamStream: string;
+  @state() declare private embedCamStream: string;
 
   private boundHashChange = this.onHashChange.bind(this);
 
@@ -17,6 +19,7 @@ export class CameraShell extends LitElement {
     super();
     this.view = 'gallery';
     this.editCamStream = '';
+    this.embedCamStream = '';
   }
 
   connectedCallback() {
@@ -39,10 +42,18 @@ export class CameraShell extends LitElement {
     if (hash.startsWith('#edit/')) {
       const camStream = decodeURIComponent(hash.slice('#edit/'.length));
       if (camStream) {
-        // Stop any previous mediasoup connections before switching view
         stopMediasoup();
         this.editCamStream = camStream;
         this.view = 'editor';
+        return;
+      }
+    }
+    if (hash.startsWith('#view/')) {
+      const camStream = decodeURIComponent(hash.slice('#view/'.length));
+      if (camStream) {
+        stopMediasoup();
+        this.embedCamStream = camStream;
+        this.view = 'embed';
         return;
       }
     }
@@ -50,6 +61,7 @@ export class CameraShell extends LitElement {
     stopMediasoup();
     this.view = 'gallery';
     this.editCamStream = '';
+    this.embedCamStream = '';
   }
 
   private onEditStream(e: CustomEvent) {
@@ -79,6 +91,14 @@ export class CameraShell extends LitElement {
   ];
 
   render() {
+    if (this.view === 'embed' && this.embedCamStream) {
+      return html`
+        <stream-embed
+          .camStream=${this.embedCamStream}
+        ></stream-embed>
+      `;
+    }
+
     if (this.view === 'editor' && this.editCamStream) {
       return html`
         <stream-editor

@@ -142,6 +142,7 @@ class StubIronFlock {
 // ── Export singleton ────────────────────────────────────────────────────────
 
 let ironflock: any
+let deviceKey = ''
 
 const ironflockReady: Promise<void> = (async () => {
     if (isDev) {
@@ -151,6 +152,13 @@ const ironflockReady: Promise<void> = (async () => {
         ironflock = await IronFlock.fromServer('/api/ironflock-config')
         await ironflock.start()
     }
+    try {
+        const res = await fetch('/api/ironflock-config')
+        if (res.ok) {
+            const cfg = await res.json()
+            deviceKey = cfg.deviceKey ?? ''
+        }
+    } catch { /* deviceKey stays empty */ }
 })()
 
-export { ironflock, ironflockReady }
+export { ironflock, ironflockReady, deviceKey }
