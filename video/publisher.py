@@ -50,10 +50,10 @@ class Publisher:
 
         get_event_loop().create_task(_publish())
 
-    def publish_cameras(self):
+    def publish_camera_hubs(self):
         """Publish camera hub heartbeat to the ``camera_hubs`` table."""
         now = datetime.now().astimezone().isoformat()
-        payload = {"tsp": now}
+        payload = {"tsp": now, "deleted": False}
         payload["webpage"] = f"https://{self._config.device_key}-visionai-1100.app.ironflock.com"
         payload["devicelink"] = self._config.device_url or ''
         get_event_loop().create_task(

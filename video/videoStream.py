@@ -331,9 +331,6 @@ async def main(config):
                     if elapsed_time1 >= 2.0:
                         publisher.publish_image(out_frame)
                         start_time1 = time.time()
-                    if elapsed_time > 10.0:
-                        publisher.publish_cameras()
-                        start_time = time.time()
 
                     out.write(out_frame)
                     continue
@@ -464,9 +461,6 @@ async def main(config):
                 aggCounts = []
                 start_time1 = time.time()
 
-            if elapsed_time > 10.0:
-                publisher.publish_cameras()
-                start_time = time.time()
             prof.mark('publish')
 
             # ── Image source: cache the annotated frame for reuse ───────
@@ -511,6 +505,7 @@ if __name__ == "__main__":
 
     # Publish initial stream state
     publisher.publish_stream(status='started')
+    publisher.publish_camera_hubs()
 
     # On SIGTERM (container/process stop), publish the stream as deleted
     import signal as _signal
