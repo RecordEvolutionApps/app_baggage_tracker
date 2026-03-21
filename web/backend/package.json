@@ -11,7 +11,7 @@
     "@elysiajs/html": "^1.4.0",
     "@elysiajs/static": "^1.4.7",
     "elysia": "^1.4.24",
-    "ironflock": "^1.1.1",
+    "ironflock": "^1.2.2",
     "@sinclair/typebox": "^0.34.48"
   },
   "devDependencies": {

@@ -15,7 +15,7 @@ class StubIronFlock {
     private _subs = new Map<string, { callback: (row: any) => void; lastSnapshot: string }[]>()
     private _pollTimers = new Map<string, ReturnType<typeof setInterval>>()
 
-    async publishToTable(table: string, data: Record<string, any>, _options?: Record<string, any>) {
+    async appendToTable(table: string, data: Record<string, any>, _options?: Record<string, any>) {
         if (table !== 'streams') return
 
         const camStream = data.stream_name

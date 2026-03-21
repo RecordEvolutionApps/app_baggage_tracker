@@ -29,7 +29,7 @@ class StubIronFlock {
         renameSync(tmp, this._filePath(table))
     }
 
-    async publishToTable(table: string, args?: unknown[], kwargs?: Record<string, unknown>) {
+    async appendToTable(table: string, args?: unknown[], kwargs?: Record<string, unknown>) {
         const data = ((args && args.length > 0 ? args[0] : {}) ?? {}) as Record<string, any>
         const rows = this._readTable(table)
         const maxId = rows.reduce((m: number, r: any) => Math.max(m, r._rowId ?? 0), 0)

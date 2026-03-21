@@ -43,7 +43,7 @@ class Publisher:
                 _publish_pool, _encode_image, frame.copy(),
             )
             now = datetime.now().astimezone().isoformat()
-            await ironflock.publish_to_table(
+            await ironflock.append_to_table(
                 'images',
                 {"tsp": now, "image": 'data:image/webp;base64,' + base64_encoded_frame, "stream_name": stream_name},
             )
@@ -63,7 +63,7 @@ class Publisher:
         }
 
         get_event_loop().create_task(
-            self._ironflock.publish_to_table('zone_counts', payload),
+            self._ironflock.append_to_table('zone_counts', payload),
         )
 
     def publish_line_count(self, line_name, num_in, num_out):
@@ -77,7 +77,7 @@ class Publisher:
             "stream_name": self._config.cam_stream,
         }
         get_event_loop().create_task(
-            self._ironflock.publish_to_table('linecounts', payload),
+            self._ironflock.append_to_table('linecounts', payload),
         )
 
     def publish_stream(self, *, status: str, deleted: bool = False):
@@ -95,7 +95,7 @@ class Publisher:
             "deleted": deleted,
         }
         get_event_loop().create_task(
-            self._ironflock.publish_to_table('streams', payload, exclude_me=True),
+            self._ironflock.append_to_table('streams', payload, exclude_me=True),
         )
 
 
@@ -128,7 +128,7 @@ class StubIronFlock:
             json.dump(rows, f, indent=2)
         os.replace(tmp, self._file_path(table))
 
-    async def publish_to_table(self, table, data, **kwargs):
+    async def append_to_table(self, table, data, **kwargs):
         rows = self._read_table(table)
         max_id = max((r.get('_rowId', 0) for r in rows), default=0)
         row = {**data, '_rowId': max_id + 1, '_publisher': 'py', 'latest_flag': True}

@@ -53,7 +53,7 @@ export async function readStream(camStream: string): Promise<StreamConfig | null
 export async function writeStream(camStream: string, config: StreamConfig, status = 'configured'): Promise<void> {
     await ironflockReady
     const now = new Date().toISOString()
-    await ironflock.publishToTable('streams', [{
+    await ironflock.appendToTable('streams', [{
         tsp: now,
         stream_name: camStream,
         stream_url: `https://${deviceKey}-visionai-1100.app.ironflock.com/#view/${encodeURIComponent(camStream)}`,
@@ -68,7 +68,7 @@ export async function writeStream(camStream: string, config: StreamConfig, statu
 export async function deleteStream(camStream: string): Promise<void> {
     await ironflockReady
     const now = new Date().toISOString()
-    await ironflock.publishToTable('streams', [{
+    await ironflock.appendToTable('streams', [{
         tsp: now,
         stream_name: camStream,
         stream_url: `https://${deviceKey}-visionai-1100.app.ironflock.com/#view/${encodeURIComponent(camStream)}`,

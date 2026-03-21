@@ -144,7 +144,7 @@ async function publishCameraHub() {
     console.log(`Registering camera hub (env=${env}, deviceKey=${deviceKey ?? 'NOT SET'}, deviceName=${deviceName ?? 'NOT SET'})`)
     const now = new Date().toISOString()
     try {
-        await ironflock.publishToTable('camera_hubs', [{
+        await ironflock.appendToTable('camera_hubs', [{
             tsp: now,
             deleted: false,
             webpage: deviceKey ? `https://${deviceKey}-visionai-1100.app.ironflock.com` : '',
