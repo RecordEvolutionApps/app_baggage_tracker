@@ -100,7 +100,7 @@ class Publisher:
 
 
 class StubIronFlock:
-    """File-backed IronFlock stub for ``ENV=DEV``.
+    """File-backed IronFlock stub for ``ENV=LOCAL``.
 
     Persists rows to ``/data/stub/<table>.json`` so the web backend
     (running in a separate container) can share state.

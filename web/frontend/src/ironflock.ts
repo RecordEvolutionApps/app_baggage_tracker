@@ -3,7 +3,7 @@ const ENV = (window as any).__ENV__ || ''
 // ── Determine DEV mode ─────────────────────────────────────────────────────
 // In production the ironflock runtime injects connection details.
 // In DEV mode we use a stub that proxies through our Elysia REST backend.
-const isDev = ENV === 'DEV' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+const isDev = ENV === 'LOCAL' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
 
 // ── REST-backed stub for DEV mode ──────────────────────────────────────────
 

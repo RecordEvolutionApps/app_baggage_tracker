@@ -22,7 +22,7 @@ This document summarizes the migration from Ultralytics to a pure MMDetection-ba
 ### 2. Docker Compose Files
 
 - [docker-compose.yml](docker-compose.yml): Production (Jetson with NVIDIA runtime)
-- [docker-compose.dev.yml](docker-compose.dev.yml): Local dev (CPU-only, no NVIDIA runtime, with live code reload)
+- [docker-compose.local.yml](docker-compose.local.yml): Local dev (CPU-only, no NVIDIA runtime, with live code reload)
 
 ### 3. Model Backend ([video/model_utils.py](video/model_utils.py))
 
@@ -92,7 +92,7 @@ docker compose up --build
 
 **Local dev (Mac/Linux):**
 ```bash
-docker compose -f docker-compose.dev.yml up --build
+docker compose -f docker-compose.local.yml up --build
 ```
 
 ## Migration Notes

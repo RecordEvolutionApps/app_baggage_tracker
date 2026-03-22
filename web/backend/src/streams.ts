@@ -150,7 +150,7 @@ async function publishCameraHub() {
             webpage: deviceKey ? `https://${deviceKey}-visionai-1100.app.ironflock.com` : '',
             devicelink: Bun.env.DEVICE_URL ?? '',
         }])
-        console.log('Published camera hub:', deviceName ?? '(no device name)')
+        console.log('Appended camera hub:', deviceName ?? '(no device name)')
     } catch (err) {
         console.error('Failed to publish camera hub:', err)
     }

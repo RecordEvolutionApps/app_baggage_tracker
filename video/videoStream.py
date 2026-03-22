@@ -488,7 +488,7 @@ async def main(config):
 if __name__ == "__main__":
     ENV = os.environ.get('ENV', '')
 
-    if ENV == 'DEV':
+    if ENV == 'LOCAL':
         ironflock = StubIronFlock()
     else:
         from ironflock import IronFlock
@@ -542,7 +542,7 @@ if __name__ == "__main__":
     ))
     loop.create_task(main(cfg))
 
-    if ENV == 'DEV':
+    if ENV == 'LOCAL':
         loop.run_forever()
     else:
         ironflock.run()

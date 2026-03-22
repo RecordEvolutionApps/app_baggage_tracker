@@ -21,14 +21,14 @@ docker compose -f docker-compose.yml up --build
 
 ```bash
 # Use the development compose file with live code reload
-docker compose -f docker-compose.dev.yml up --build
+docker compose -f docker-compose.local.yml up --build
 ```
 
 **Note:** The video container stays running but doesn't auto-start the video stream. To test video inference:
 
 ```bash
 # In another terminal, exec into the video container
-docker compose -f docker-compose.dev.yml exec video bash
+docker compose -f docker-compose.local.yml exec video bash
 
 # Run the video stream with the demo video
 python3 /app/video/videoStream.py demoVideo frontCam
@@ -133,7 +133,7 @@ If models fail to download, check:
 docker compose up --build
 
 # Development (local with live reload)
-docker compose -f docker-compose.dev.yml up --build
+docker compose -f docker-compose.local.yml up --build
 ```
 
 ### SSH Access (Production Only)

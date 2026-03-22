@@ -60,7 +60,7 @@ This repository is a **generic, broadly applicable Vision AI streaming platform*
 
 ## Key files
 - `docker-compose.yml` — Production stack (NVIDIA runtime, Jetson).
-- `docker-compose.dev.yml` — Local dev stack (CPU-only, bind mounts).
+- `docker-compose.local.yml` — Local dev stack (CPU-only, bind mounts).
 - `justfile` — Dev commands (`just dev`, `just dev-down`).
 - `mediasoup/src/server.js` — WebRTC SFU server.
 - `video/api.py` — FastAPI entrypoint.
@@ -86,7 +86,7 @@ This repository is a **generic, broadly applicable Vision AI streaming platform*
 
 ## How to run
 - **Production (Jetson):** `docker compose up --build` — Web UI at `:1100`, mediasoup at `:1200`.
-- **Local dev (CPU):** `just dev` or `docker compose -f docker-compose.dev.yml up --build` — Web at `:1100`, Vite dev server at `:5173`.
+- **Local dev (CPU):** `just dev` or `docker compose -f docker-compose.local.yml up --build` — Web at `:1100`, Vite dev server at `:5173`.
 
 ## Copilot guidance
 - Prefer small, scoped changes within a single service at a time.

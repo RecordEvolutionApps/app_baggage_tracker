@@ -118,7 +118,7 @@ export function getIronFlockConfig() {
 
 let ironflock: IronFlock | StubIronFlock
 
-if (ENV === 'DEV') {
+if (ENV === 'LOCAL') {
     ironflock = new StubIronFlock()
 } else {
     ironflock = new IronFlock()
