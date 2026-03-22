@@ -6,7 +6,7 @@ layout:
       w: 12
       h: 48
       id: 6c7855ab-d64e-4738-8315-964cc34e5b3f
-      z: 1000
+      z: 1001
       fixedWidth: true
     - x: 12
       y: 0
@@ -46,7 +46,7 @@ layout:
           w: 12
           h: 48
           id: 6c7855ab-d64e-4738-8315-964cc34e5b3f
-          z: 1000
+          z: 1001
           fixedWidth: true
         - x: 0
           y: 0
@@ -202,8 +202,8 @@ widgets:
           format:
             label: devname
             iconName: $str:hub
-            route: $str:/assets/
-            leadingSlash: null
+            route: devname
+            leadingSlash: $bool:true
             trailingSlash: null
       route: $str:/
       leadingSlash: null
