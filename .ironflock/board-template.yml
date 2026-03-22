@@ -46,14 +46,14 @@ layout:
           w: 12
           h: 48
           id: 6c7855ab-d64e-4738-8315-964cc34e5b3f
-          z: 1001
+          z: 1000
           fixedWidth: true
         - x: 0
           y: 0
           w: 12
           h: 4
           id: a176e5b9-eeeb-4173-b2f7-91a319edc8ef
-          z: 1003
+          z: 1002
           fixedWidth: true
           fixedHeight: true
     streams:
@@ -64,6 +64,12 @@ layout:
           w: 48
           h: 48
           z: 1000
+        - id: 70b1d05b-91e4-4625-92c0-c44becdb4008
+          x: 0
+          y: 0
+          w: 5
+          h: 3
+          z: 1001
 background_color: "#ffc77e"
 text_color: "#575062"
 style:
@@ -75,21 +81,6 @@ style:
   tile_border_color: "#cccccc54"
   overflow: false
 widgets:
-  - package_name: widget-textbox
-    chartconfig:
-      title:
-        color: $str:#5a6666
-        text: $str:Live Video Stream
-        backgroundColor: ""
-      subTitle:
-        text: $str:including YOLO Model inception
-        color: $str:#5a6666
-      body:
-        text: "$str:Video Latency at around 200ms. Any USB or IP Camera can be used with the NVIDIA PC. "
-        color: $str:#5a6666
-        backgroundColor: ""
-    version: 1.1.8
-    layout_id: "10"
   - package_name: widget-linechart
     chartconfig:
       settings:
@@ -161,120 +152,6 @@ widgets:
     custom_style: null
     version: 1.0.7
     layout_id: 2a14ba2f-568c-43f2-a5bb-123277502f79
-  - chartconfig:
-      markdown: |
-        # Markdown Showcase
-
-         **Inline Data Demo:** Current Temperature {{temperature}} °C
-
-         ## Text formatting
-        Normal, **bold**, *italic*, ~~strikethrough~~, and `inline code`.
-
-        > A blockquote with some *emphasis* and **bold**.
-
-        ---
-
-        ## Links & Images
-
-        ![Placeholder image](https://res.cloudinary.com/dk8bhmsdz/image/upload/c_pad,w_500/v1747230890/samples/imagecon-group.jpg)
-
-        [Google](https://google.com)
-
-        ## Lists
-
-        - Unordered item
-          - Nested item
-        - Another item
-
-        1. Ordered list
-        2. Second item
-           1. Nested ordered
-           2. Another
-
-        ---
-
-        ---
-
-        ## Code blocks
-
-        ```python
-        def greet(name):
-            print(f"Hello, {name}!")
-
-        greet("Markdown")
-        ```
-
-        ---
-
-        ## Tables
-
-        | Name     | Age | Role        |
-        |:---------|:---:|-------------:|
-        | Alice    |  25 | Developer   |
-        | Bob      |  30 | Designer    |
-        | Charlie  |  28 | Product Mgr |
-
-        ---
-
-        ## Task lists
-
-        - [x] Write Markdown
-        - [ ] Preview it
-        - [ ] Share it
-
-        ---
-
-        ##
-      data:
-        - label: $str:temperature
-          value: $str:23
-    version: 1.0.5
-    package_name: widget-markdown
-    layout_id: 3cdae780-99c9-4b97-bdda-e31752715448
-  - package_name: widget-table
-    chartconfig:
-      settings:
-        headerFontSize: $str:16px
-        headerBackground: $str:#cce6ff
-        rowHeight: $str:40px
-        title: "$str:"
-      columns:
-        - header: $str:Camera
-          type: $str:string
-          color: $str:#252627
-          values:
-            tableRef:
-              tablename: device_agg
-              format:
-                value: devname
-              queryParams:
-                limit: 100
-              swarm_app_databackend_key: 423
-        - header: $str:Live Stream
-          type: $str:button
-          color: $str:#252627
-          values:
-            tableRef:
-              tablename: device_agg
-              format:
-                value: $str:Live Video
-                link: videolink
-              queryParams:
-                limit: 100
-              swarm_app_databackend_key: 423
-        - header: $str:Settings
-          type: $str:button
-          values:
-            tableRef:
-              tablename: device_agg
-              format:
-                value: $str:Settings
-                link: devicelink
-              queryParams:
-                limit: 100
-              swarm_app_databackend_key: 423
-      title: "$str:"
-    layout_id: "4"
   - package_name: widget-embed
     chartconfig:
       multiEmbed: $bool:true
@@ -297,22 +174,10 @@ widgets:
           format:
             url: stream_url
             title: stream_name
-    custom_style: null
+    custom_style:
+      tile_border_color: "#fff0"
     version: 1.0.7
     layout_id: 4655059f-b895-4e5a-a382-2f64a8175d1a
-  - package_name: widget-image
-    chartconfig:
-      imageLink:
-        valueRef:
-          tablename: images
-          column: image
-          swarm_app_databackend_key: 423
-      title:
-        text: $str:Camera Feed
-      subTitle:
-        text: "$str:"
-    layout_id: "5"
-    version: 1.1.7
   - package_name: widget-sidenav
     chartconfig:
       title: $str:Camera Hubs
@@ -335,7 +200,7 @@ widgets:
                 value: "true"
                 dataType: boolean
           format:
-            label: $str:Assets
+            label: devname
             iconName: $str:hub
             route: $str:/assets/
             leadingSlash: null
@@ -346,31 +211,18 @@ widgets:
     custom_style: null
     version: 1.0.13
     layout_id: 6c7855ab-d64e-4738-8315-964cc34e5b3f
-  - package_name: widget-image
+  - package_name: widget-navbutton
     chartconfig:
-      imageLink: $str:https://storage.googleapis.com/reswarm-images/prod/reswarm-0-1706095631331-Cam_icon-682decf0d8.png
-      title: "$str:"
-      subTitle:
-        valueRef:
-          tablename: camera_hubs
-          column: devname
-          queryParams:
-            filterAnd:
-              - column: devname
-                operator: =
-                value: "1"
-                dataType: string
-                useRoute: true
-            limit: 1
-          swarm_app_databackend_key: 423
-      useUpload: $bool:false
-      imageUrl: $str:https://storage.googleapis.com/reswarm-images/prod/reswarm-0-1706095631331-Cam_icon-682decf0d8.png
-      stretchToFit: null
-      multiImage: null
-      labelFontSize: null
+      title: $str:Home
+      iconName: $str:zoom_in_map
+      route: $str:/
+      style:
+        fontSize: $num:16
+      leadingSlash: null
+      trailingSlash: null
     custom_style: null
-    version: 1.1.17
-    layout_id: "8"
+    version: 1.0.7
+    layout_id: 70b1d05b-91e4-4625-92c0-c44becdb4008
   - package_name: widget-navbutton
     chartconfig:
       title: $str:Full Screen
