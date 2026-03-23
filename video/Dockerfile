@@ -116,7 +116,8 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
 			defusedxml==0.7.1 pillow==10.3.0 lapx==0.5.5 yt_dlp==2024.4.9 \
 			fastapi==0.115.0 "uvicorn[standard]==0.30.6" \
 			onnx onnxruntime && \
-		pip install ironflock==1.3.13 --ignore-requires-python; \
+		pip install hatchling cffi && \
+		pip install ironflock==1.3.13 --no-build-isolation --ignore-requires-python; \
 	else \
 		uv pip install --system \
 			"transformers==5.2.0" "huggingface_hub>=1.3,<2" \
