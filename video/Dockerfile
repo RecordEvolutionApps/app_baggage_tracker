@@ -116,7 +116,7 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
 			defusedxml==0.7.1 pillow==10.3.0 lapx==0.5.5 yt_dlp==2024.4.9 \
 			fastapi==0.115.0 "uvicorn[standard]==0.30.6" \
 			onnx onnxruntime && \
-		pip install "autobahn[serialization]<25" && \
+		pip install "autobahn[serialization]<25" "timm>=0.9,<1" && \
 		pip install ironflock==1.3.13 --no-deps --ignore-requires-python; \
 	else \
 		uv pip install --system \
