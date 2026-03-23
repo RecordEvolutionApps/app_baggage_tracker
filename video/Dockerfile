@@ -110,7 +110,7 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
 		uv pip install --system mmengine==0.10.4 mmdet==3.3.0 mmpretrain==1.2.0 && \
 		uv pip install --system \
 			"transformers==4.45.2" "huggingface_hub>=0.25,<1" "safetensors>=0.4" \
-			ironflock==1.0.6 matplotlib==3.7.5 pyyaml==6.0.1 \
+			ironflock==1.3.13 matplotlib==3.7.5 pyyaml==6.0.1 \
 			defusedxml==0.7.1 pillow==10.3.0 lapx==0.5.5 yt_dlp==2024.4.9 \
 			fastapi==0.115.0 "uvicorn[standard]==0.30.6" \
 			onnx onnxruntime; \
@@ -118,7 +118,7 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
 		uv pip install --system \
 			"transformers==5.2.0" "huggingface_hub>=1.3,<2" \
 			"safetensors>=0.5" "timm>=1.0.11" \
-			ironflock==1.0.6 matplotlib==3.8.4 pyyaml==6.0.1 \
+			ironflock==1.3.13 matplotlib==3.8.4 pyyaml==6.0.1 \
 			defusedxml==0.7.1 pillow==10.3.0 lapx==0.5.5 yt_dlp==2024.4.9 \
 			numpy==1.26.4 fastapi==0.115.0 "uvicorn[standard]==0.30.6" \
 			onnx onnxruntime; \
