@@ -1,14 +1,19 @@
-"""Model zoo data, checkpoint download/cache management, and backend status reporting."""
+"""Model zoo data, checkpoint download/cache management, and backend status reporting.
+
+The canonical model zoo dicts now live in their respective engine modules:
+  - ``engines.huggingface.HF_MODEL_ZOO``
+  - ``engines.mmdet.MMDET_MODEL_ZOO``
+
+This module re-exports them (and related helpers) so that existing callers
+such as ``routes/models.py`` and ``model_catalog.py`` continue to work.
+"""
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
-import pickle
 import platform
 import shutil
-import zipfile
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -17,11 +22,8 @@ import torch
 logger = logging.getLogger('model_zoo')
 
 # ── Platform detection ──────────────────────────────────────────────────────
-# amd64 (x86_64) builds use a modern software stack that only supports
-# HuggingFace Transformers — MMDetection is not available there.
 IS_AMD64 = platform.machine() in ('x86_64', 'AMD64')
 
-# ── Detect available ML frameworks ──────────────────────────────────────────
 try:
     import mmdet as _mmdet  # noqa: F401
     HAS_MMDET = True
@@ -37,265 +39,16 @@ try:
 except ImportError:
     HAS_TRANSFORMERS = False
 
-# Exceptions raised by torch.load() for corrupted checkpoint files
-_CORRUPT_CHECKPOINT_ERRORS = (RuntimeError, pickle.UnpicklingError, zipfile.BadZipFile, EOFError, OSError)
-
-_MMDET_MODEL_ZOO_FULL = {
-    "rtmdet_tiny_8xb32-300e_coco": {
-        "config": "https://raw.githubusercontent.com/open-mmlab/mmdetection/v3.3.0/configs/rtmdet/rtmdet_tiny_8xb32-300e_coco.py",
-        "checkpoint": "https://download.openmmlab.com/mmdetection/v3.0/rtmdet/rtmdet_tiny_8xb32-300e_coco/rtmdet_tiny_8xb32-300e_coco_20220902_112414-78e30dcc.pth",
-        "native_input_wh": (640, 640),
-        "expected_size": 57532893,
-        "sha256": "78e30dcce0c6f594eaff0d6977b84b4103688b4aff0ad1aa16008a8cc854a7fb",
-    },
-    "rtmdet_s_8xb32-300e_coco": {
-        "config": "https://raw.githubusercontent.com/open-mmlab/mmdetection/v3.3.0/configs/rtmdet/rtmdet_s_8xb32-300e_coco.py",
-        "checkpoint": "https://download.openmmlab.com/mmdetection/v3.0/rtmdet/rtmdet_s_8xb32-300e_coco/rtmdet_s_8xb32-300e_coco_20220905_161602-387a891e.pth",
-        "native_input_wh": (640, 640),
-        "expected_size": 91450098,
-        "sha256": "387a891e157cf0ab57d76b3ffc17bf77247089d672532427930b3140f9e789d6",
-    },
-    "rtmdet_m_8xb32-300e_coco": {
-        "config": "https://raw.githubusercontent.com/open-mmlab/mmdetection/v3.3.0/configs/rtmdet/rtmdet_m_8xb32-300e_coco.py",
-        "checkpoint": "https://download.openmmlab.com/mmdetection/v3.0/rtmdet/rtmdet_m_8xb32-300e_coco/rtmdet_m_8xb32-300e_coco_20220719_112220-229f527c.pth",
-        "native_input_wh": (640, 640),
-        "expected_size": 224299609,
-        "sha256": "229f527ca88498e8894a778a62a878a322b4a3ea2cae09ea537d34b7e907792b",
-    },
-}
-
-# On amd64 the software stack is too modern for MMDetection; expose an empty zoo.
-MMDET_MODEL_ZOO = {} if IS_AMD64 else _MMDET_MODEL_ZOO_FULL
-
-
-# ── HuggingFace model zoo ───────────────────────────────────────────────────
-# Curated set of HF Transformers detection models.
-# Keys are short IDs used in the UI/API; 'repo_id' is the HF Hub identifier.
-# All models output COCO-80 class detections by default.
-
-HF_MODEL_ZOO = {
-    "rt-detr-l": {
-        "repo_id": "PekingU/rtdetr_r50vd_coco_o365",
-        "label": "RT-DETR-L (ResNet-50)",
-        "arch": "rt-detr",
-        "dataset": "coco+objects365",
-        "native_input_wh": (640, 640),
-        "description": "Real-Time Detection Transformer with ResNet-50 backbone. "
-                       "End-to-end transformer detector, no NMS needed.",
-        "license": "Apache-2.0",
-    },
-    "rt-detr-x": {
-        "repo_id": "PekingU/rtdetr_r101vd_coco_o365",
-        "label": "RT-DETR-X (ResNet-101)",
-        "arch": "rt-detr",
-        "dataset": "coco+objects365",
-        "native_input_wh": (640, 640),
-        "description": "Real-Time Detection Transformer with ResNet-101 backbone. "
-                       "Higher accuracy variant.",
-        "license": "Apache-2.0",
-    },
-    "detr-resnet-50": {
-        "repo_id": "facebook/detr-resnet-50",
-        "label": "DETR (ResNet-50)",
-        "arch": "detr",
-        "dataset": "coco_hf",
-        "native_input_wh": (800, 800),
-        "description": "Original DEtection TRansformer with ResNet-50 backbone. "
-                       "End-to-end set prediction, no NMS needed.",
-        "license": "Apache-2.0",
-    },
-    "detr-resnet-101": {
-        "repo_id": "facebook/detr-resnet-101",
-        "label": "DETR (ResNet-101)",
-        "arch": "detr",
-        "dataset": "coco_hf",
-        "native_input_wh": (800, 800),
-        "description": "DETR with ResNet-101 backbone. Higher accuracy, heavier.",
-        "license": "Apache-2.0",
-    },
-    "conditional-detr-resnet-50": {
-        "repo_id": "microsoft/conditional-detr-resnet-50",
-        "label": "Conditional DETR (ResNet-50)",
-        "arch": "conditional-detr",
-        "dataset": "coco_hf",
-        "native_input_wh": (800, 800),
-        "description": "Conditional DETR with faster convergence than vanilla DETR.",
-        "license": "Apache-2.0",
-    },
-    "deformable-detr": {
-        "repo_id": "SenseTime/deformable-detr",
-        "label": "Deformable DETR",
-        "arch": "deformable-detr",
-        "dataset": "coco_hf",
-        "native_input_wh": (800, 800),
-        "description": "Deformable attention for efficient multi-scale detection.",
-        "license": "Apache-2.0",
-    },
-    "yolos-tiny": {
-        "repo_id": "hustvl/yolos-tiny",
-        "label": "YOLOS Tiny",
-        "arch": "yolos",
-        "dataset": "coco_hf",
-        "native_input_wh": (512, 512),
-        "description": "YOLO-style detection with a Vision Transformer backbone. "
-                       "Lightweight and fast.",
-        "license": "Apache-2.0",
-    },
-    "yolos-small": {
-        "repo_id": "hustvl/yolos-small",
-        "label": "YOLOS Small",
-        "arch": "yolos",
-        "dataset": "coco_hf",
-        "native_input_wh": (512, 512),
-        "description": "YOLOS Small — balanced speed and accuracy.",
-        "license": "Apache-2.0",
-    },
-    "yolos-base": {
-        "repo_id": "hustvl/yolos-base",
-        "label": "YOLOS Base",
-        "arch": "yolos",
-        "dataset": "coco_hf",
-        "native_input_wh": (800, 800),
-        "description": "YOLOS Base — higher accuracy than YOLOS Small, still ViT-based.",
-        "license": "Apache-2.0",
-    },
-    "detr-resnet-50-dc5": {
-        "repo_id": "facebook/detr-resnet-50-dc5",
-        "label": "DETR DC5 (ResNet-50)",
-        "arch": "detr",
-        "dataset": "coco_hf",
-        "native_input_wh": (800, 800),
-        "description": "DETR with dilated C5 feature map — better small-object detection than vanilla DETR.",
-        "license": "Apache-2.0",
-    },
-    "detr-resnet-101-dc5": {
-        "repo_id": "facebook/detr-resnet-101-dc5",
-        "label": "DETR DC5 (ResNet-101)",
-        "arch": "detr",
-        "dataset": "coco_hf",
-        "native_input_wh": (800, 800),
-        "description": "DETR DC5 with ResNet-101 backbone — highest accuracy pure-DETR variant.",
-        "license": "Apache-2.0",
-    },
-    "rt-detr-nano": {
-        "repo_id": "PekingU/rtdetr_r18vd",
-        "label": "RT-DETR Nano (ResNet-18)",
-        "arch": "rt-detr",
-        "dataset": "coco",
-        "native_input_wh": (640, 640),
-        "description": "Lightest RT-DETR variant with ResNet-18 backbone. "
-                       "Best choice for CPU / memory-constrained devices.",
-        "license": "Apache-2.0",
-    },
-    # ── Instance segmentation ─────────────────────────────────────────────────
-    "mask2former-swin-tiny-coco-instance": {
-        "repo_id": "facebook/mask2former-swin-tiny-coco-instance",
-        "label": "Mask2Former Swin-T (Instance)",
-        "arch": "mask2former",
-        "dataset": "coco",
-        "native_input_wh": (800, 800),
-        "hf_task": "instance_segmentation",
-        "description": "Mask2Former with Swin-Tiny backbone for COCO instance segmentation. "
-                       "Produces per-instance binary masks alongside bounding boxes.",
-        "license": "Apache-2.0",
-    },
-    "mask2former-swin-small-coco-instance": {
-        "repo_id": "facebook/mask2former-swin-small-coco-instance",
-        "label": "Mask2Former Swin-S (Instance)",
-        "arch": "mask2former",
-        "dataset": "coco",
-        "native_input_wh": (800, 800),
-        "hf_task": "instance_segmentation",
-        "description": "Mask2Former with Swin-Small backbone for COCO instance segmentation. "
-                       "Higher accuracy than Swin-Tiny, ~2× slower on CPU.",
-        "license": "Apache-2.0",
-    },
-}
-
-
-# ── Download helpers ────────────────────────────────────────────────────────
-
-def download_file(url: str, destination: str) -> None:
-    """Download a file to *destination* atomically via a .part temp file.
-
-    Verifies that the number of bytes written matches the server's
-    Content-Length header.  On mismatch the partial file is removed and
-    a RuntimeError is raised.
-    """
-    import urllib.request
-
-    logger.info('Downloading %s...', url)
-    dest = Path(destination)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    part = dest.with_suffix(dest.suffix + '.part')
-
-    try:
-        response = urllib.request.urlopen(url)
-        total = int(response.headers.get('Content-Length', 0))
-        downloaded = 0
-        block_size = 1024 * 256  # 256 KB
-        with open(part, 'wb') as f:
-            while True:
-                chunk = response.read(block_size)
-                if not chunk:
-                    break
-                f.write(chunk)
-                downloaded += len(chunk)
-
-        if total > 0 and downloaded != total:
-            part.unlink(missing_ok=True)
-            raise RuntimeError(
-                f'Download size mismatch for {url}: expected {total} bytes, got {downloaded}'
-            )
-
-        # Atomic rename: only a fully-downloaded file lands at the final path
-        shutil.move(str(part), str(dest))
-        logger.info('Download complete (%d bytes)', downloaded)
-    except Exception:
-        part.unlink(missing_ok=True)
-        raise
-
-
-def _validate_checkpoint(path: Path, expected_size: int | None = None,
-                         sha256_hex: str | None = None) -> bool:
-    """Return True if the checkpoint file at *path* passes integrity checks."""
-    if not path.is_file():
-        return False
-
-    actual_size = path.stat().st_size
-
-    if expected_size is not None:
-        if actual_size != expected_size:
-            logger.warning('Checkpoint %s: size mismatch — expected %d, got %d',
-                           path.name, expected_size, actual_size)
-            return False
-
-    if sha256_hex is not None:
-        h = hashlib.sha256()
-        with open(path, 'rb') as f:
-            for chunk in iter(lambda: f.read(1024 * 1024), b''):
-                h.update(chunk)
-        if h.hexdigest() != sha256_hex:
-            logger.warning('Checkpoint %s: SHA-256 mismatch — expected %s, got %s',
-                           path.name, sha256_hex, h.hexdigest())
-            return False
-
-    # If no expected_size / sha256 were supplied, at least sanity-check size
-    if expected_size is None and sha256_hex is None:
-        if actual_size < 4096:
-            logger.warning('Checkpoint %s: suspiciously small (%d bytes)', path.name, actual_size)
-            return False
-
-    return True
-
-
-def _delete_corrupt_checkpoint(path: Path) -> None:
-    """Remove a corrupt checkpoint file and log the action."""
-    try:
-        path.unlink(missing_ok=True)
-        logger.warning('Deleted corrupt checkpoint: %s', path)
-    except OSError as e:
-        logger.error('Failed to delete corrupt checkpoint %s: %s', path, e)
+# ── Re-export zoo dicts and utilities from engine modules ───────────────────
+from engines.huggingface import HF_MODEL_ZOO  # noqa: F401
+from engines.mmdet import (  # noqa: F401
+    MMDET_MODEL_ZOO,
+    download_file,
+    _validate_checkpoint,
+    _delete_corrupt_checkpoint,
+    _download_checkpoint,
+    _resolve_weight_url,
+)
 
 
 # ── Cache management ───────────────────────────────────────────────────────
@@ -640,55 +393,6 @@ def _download_with_progress(url: str, dest: str, report_fn):
     except Exception:
         part.unlink(missing_ok=True)
         raise
-
-
-def _resolve_weight_url(model_name: str) -> str | None:
-    """Look up the checkpoint download URL from openmim's metafile data."""
-    if not HAS_MMDET:
-        return None
-    try:
-        from model_catalog import _patch_packaging_version
-        _patch_packaging_version()
-        from mim.commands.search import get_model_info
-        import pandas as pd
-        df = get_model_info('mmdet', shown_fields=['config', 'weight'])
-        for _, row in df.iterrows():
-            config_path = row.get('config', '')
-            if not config_path:
-                continue
-            name = os.path.basename(config_path).replace('.py', '')
-            if name == model_name:
-                weight = row.get('weight', '')
-                if pd.notna(weight) and str(weight).startswith('http'):
-                    return str(weight)
-    except Exception as e:
-        logger.warning('_resolve_weight_url failed for %s: %s', model_name, e)
-    return None
-
-
-def _download_checkpoint(model_name: str, checkpoint_path: Path) -> None:
-    """Download the checkpoint for *model_name* to *checkpoint_path*."""
-    zoo = MMDET_MODEL_ZOO.get(model_name)
-    if zoo:
-        download_file(zoo['checkpoint'], str(checkpoint_path))
-        if not _validate_checkpoint(
-            checkpoint_path,
-            expected_size=zoo.get('expected_size'),
-            sha256_hex=zoo.get('sha256'),
-        ):
-            _delete_corrupt_checkpoint(checkpoint_path)
-            raise RuntimeError(f'Downloaded checkpoint for {model_name} failed integrity validation')
-        return
-
-    weight_url = _resolve_weight_url(model_name)
-    if weight_url:
-        download_file(weight_url, str(checkpoint_path))
-        if not _validate_checkpoint(checkpoint_path):
-            _delete_corrupt_checkpoint(checkpoint_path)
-            raise RuntimeError(f'Downloaded checkpoint for {model_name} failed integrity validation')
-        return
-
-    logger.info('No download URL found for %s — relying on DetInferencer auto-download', model_name)
 
 
 # ── Backend status reporting ────────────────────────────────────────────────

@@ -211,12 +211,13 @@ export class CameraDialog extends LitElement {
       return;
     }
 
-    switch (cam.type) {
+    const src = cam.source;
+    switch (src.type) {
       case 'USB':
         this.activeTab = 'Local';
-        this.selectedLocalId = cam.id ?? '';
-        if (cam.width && cam.height) {
-          this.selectedResolution = `${cam.width}x${cam.height}`;
+        this.selectedLocalId = src.id ?? '';
+        if (src.width && src.height) {
+          this.selectedResolution = `${src.width}x${src.height}`;
         }
         break;
       case 'Demo':
@@ -224,25 +225,25 @@ export class CameraDialog extends LitElement {
         break;
       case 'YouTube':
         this.activeTab = 'YouTube';
-        this.youtubeUrl = cam.path ?? '';
+        this.youtubeUrl = src.path ?? '';
         break;
       case 'Image':
         this.activeTab = 'Image';
-        this.imageUrl = cam.path ?? '';
+        this.imageUrl = src.path ?? '';
         break;
       case 'IP':
       default:
         // Legacy: YouTube URLs stored as IP type
-        if (cam.path?.startsWith('https://youtu') || cam.path?.startsWith('https://www.youtube.com')) {
+        if (src.path?.startsWith('https://youtu') || src.path?.startsWith('https://www.youtube.com')) {
           this.activeTab = 'YouTube';
-          this.youtubeUrl = cam.path ?? '';
-        } else if (cam.path === 'demoVideo') {
+          this.youtubeUrl = src.path ?? '';
+        } else if (src.path === 'demoVideo') {
           this.activeTab = 'Demo';
         } else {
           this.activeTab = 'IP';
-          this.ipPath = cam.path ?? '';
-          this.ipUsername = cam.username ?? '';
-          this.ipPassword = cam.password ?? '';
+          this.ipPath = src.path ?? '';
+          this.ipUsername = src.username ?? '';
+          this.ipPassword = src.password ?? '';
         }
         break;
     }
@@ -305,23 +306,22 @@ export class CameraDialog extends LitElement {
   }
 
   private async applySelection() {
-    let sourceFields: Partial<StreamConfig>;
-    let width: number | undefined;
-    let height: number | undefined;
+    let source: StreamConfig['source'];
 
     switch (this.activeTab) {
       case 'Local': {
         const localCam = this.selectedCamera;
         if (!localCam) return;
+        let width: number | undefined;
+        let height: number | undefined;
         if (this.selectedResolution) {
           const [w, h] = this.selectedResolution.split('x').map(Number);
           width = w;
           height = h;
         }
-        sourceFields = {
+        source = {
           id: localCam.id,
           type: 'USB',
-          name: localCam.name,
           path: localCam.path,
           width,
           height,
@@ -329,9 +329,8 @@ export class CameraDialog extends LitElement {
         break;
       }
       case 'Demo':
-        sourceFields = {
+        source = {
           type: 'Demo',
-          name: 'Demo Video',
           id: 'demoVideo',
           path: 'demoVideo',
         };
@@ -339,9 +338,8 @@ export class CameraDialog extends LitElement {
       case 'YouTube': {
         const url = this.youtubeUrl.trim();
         if (!url) return;
-        sourceFields = {
+        source = {
           type: 'YouTube',
-          name: 'YouTube',
           id: 'youtube',
           path: url,
         };
@@ -350,9 +348,8 @@ export class CameraDialog extends LitElement {
       case 'IP': {
         const path = this.ipPath.trim();
         if (!path) return;
-        sourceFields = {
+        source = {
           type: 'IP',
-          name: 'IP Camera',
           id: 'ip',
           path,
           username: this.ipUsername || undefined,
@@ -363,9 +360,8 @@ export class CameraDialog extends LitElement {
       case 'Image': {
         const url = this.imageUrl.trim();
         if (!url) return;
-        sourceFields = {
+        source = {
           type: 'Image',
-          name: 'Image',
           id: 'image',
           path: url,
         };
@@ -375,10 +371,10 @@ export class CameraDialog extends LitElement {
         return;
     }
 
-    // Merge source fields into existing config and PUT
+    // Merge source into existing config and PUT
     const config: StreamConfig = {
       ...(this.camSetup ?? {}),
-      ...sourceFields,
+      source,
       camStream: this.camStream,
     } as StreamConfig;
 
@@ -390,8 +386,11 @@ export class CameraDialog extends LitElement {
 
     const camSetup: CamSetup = {
       ...config,
-      width: width ?? (Number(this.camSetup?.width) || 640),
-      height: height ?? (Number(this.camSetup?.height) || 480),
+      source: {
+        ...source,
+        width: source.width ?? (this.camSetup?.source?.width || 640),
+        height: source.height ?? (this.camSetup?.source?.height || 480),
+      },
     };
 
     this.camSetup = camSetup;
@@ -552,20 +551,21 @@ export class CameraDialog extends LitElement {
   private get currentSourceLabel(): string {
     const cam = this.camSetup;
     if (!cam) return 'No camera configured';
-    switch (cam.type) {
+    const src = cam.source;
+    switch (src.type) {
       case 'USB':
-        return `Camera: ${cam.name ?? cam.id ?? 'Unknown'}`;
+        return `Camera: ${cam.name ?? src.id ?? 'Unknown'}`;
       case 'Demo':
         return 'Demo Video';
       case 'YouTube':
-        return `YouTube: ${cam.path?.substring(0, 40) ?? ''}`;
+        return `YouTube: ${src.path?.substring(0, 40) ?? ''}`;
       case 'IP':
-        if (cam.path === 'demoVideo') return 'Demo Video';
-        return `IP: ${cam.path?.substring(0, 40) ?? ''}`;
+        if (src.path === 'demoVideo') return 'Demo Video';
+        return `IP: ${src.path?.substring(0, 40) ?? ''}`;
       case 'Image':
-        return `Image: ${cam.path?.substring(0, 40) ?? ''}`;
+        return `Image: ${src.path?.substring(0, 40) ?? ''}`;
       default:
-        return cam.path ?? 'Unknown';
+        return src.path ?? 'Unknown';
     }
   }
 

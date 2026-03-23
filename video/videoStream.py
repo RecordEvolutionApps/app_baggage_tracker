@@ -193,12 +193,23 @@ async def _load_stream_config_from_table(ironflock_instance, config):
         # Preserve the full config blob so the publisher can include all fields
         config._full_config = dict(_saved)
 
-        _settings_keys = ['model', 'useSahi', 'useSmoothing', 'confidence', 'frameBuffer',
-                          'nmsIou', 'sahiIou', 'overlapRatio', 'classList', 'classNames']
-        for _k in _settings_keys:
-            if _k in _saved:
+        # Extract settings from nested sections (with flat fallback for compat)
+        _inference = _saved.get('inference', {})
+        _processing = _saved.get('processing', {})
+        _inference_keys = ['model', 'useSahi', 'useSmoothing', 'confidence', 'frameBuffer',
+                          'nmsIou', 'sahiIou', 'overlapRatio']
+        _processing_keys = ['classList', 'classNames']
+        for _k in _inference_keys:
+            if _k in _inference:
+                config.stream_settings[_k] = _inference[_k]
+            elif _k in _saved:  # flat fallback
                 config.stream_settings[_k] = _saved[_k]
-        _saved_model = _saved.get('model')
+        for _k in _processing_keys:
+            if _k in _processing:
+                config.stream_settings[_k] = _processing[_k]
+            elif _k in _saved:  # flat fallback
+                config.stream_settings[_k] = _saved[_k]
+        _saved_model = _inference.get('model') or _saved.get('model')
         if _saved_model and _saved_model != 'none':
             config.object_model = _saved_model
             config.current_model_name = _saved_model
@@ -206,7 +217,7 @@ async def _load_stream_config_from_table(ironflock_instance, config):
         else:
             logger.info('Backend table config has no model or model=none')
 
-        _masks_data = _saved.get('masks', {})
+        _masks_data = _processing.get('masks', _saved.get('masks', {}))
         if _masks_data and _masks_data.get('polygons'):
             from masks import prepMasks
             config.saved_masks.extend(
@@ -518,19 +529,29 @@ if __name__ == "__main__":
     # On SIGTERM (container/process stop), publish the stream as deleted
     import signal as _signal
 
+    _shutting_down = False
+
     def _on_sigterm(*_args):
+        global _shutting_down
+        if _shutting_down:
+            return
+        _shutting_down = True
         try:
             publisher.publish_stream(status='stopped')
         except Exception:
             pass
-        sys.exit(0)
+        loop.call_soon_threadsafe(loop.stop)
 
     def _on_sigusr1(*_args):
+        global _shutting_down
+        if _shutting_down:
+            return
+        _shutting_down = True
         try:
             publisher.publish_stream(status='stopped', deleted=True)
         except Exception:
             pass
-        sys.exit(0)
+        loop.call_soon_threadsafe(loop.stop)
 
     _signal.signal(_signal.SIGTERM, _on_sigterm)
     _signal.signal(_signal.SIGUSR1, _on_sigusr1)

@@ -136,28 +136,83 @@ export type MaskData = {
   }[];
 }
 
-export type StreamConfig = {
+export type SourceConfig = {
   id: string
   type: 'USB' | 'IP' | 'Demo' | 'YouTube' | 'Image'
-  name: string
-  camStream: string
   path?: string
   username?: string
   password?: string
   width?: number
   height?: number
+}
+
+export type InferenceConfig = {
   model?: string
   useSahi?: boolean
   useSmoothing?: boolean
-  frameBuffer?: number
   confidence?: number
   nmsIou?: number
   sahiIou?: number
+  frameBuffer?: number
   overlapRatio?: number
+}
+
+export type ProcessingConfig = {
+  masks?: MaskData
   classList?: number[]
   classNames?: string[]
+}
+
+export type StreamConfig = {
+  camStream: string
+  name: string
   stopped?: boolean
-  masks?: MaskData
+  source: SourceConfig
+  inference?: InferenceConfig
+  processing?: ProcessingConfig
+}
+
+/** Auto-migrate a flat (legacy) or nested config into the canonical nested shape. */
+export function normalizeStreamConfig(raw: any): StreamConfig {
+  if (raw.source && typeof raw.source === 'object') {
+    return raw as StreamConfig
+  }
+
+  const source: SourceConfig = {
+    id: raw.id ?? '',
+    type: raw.type ?? 'IP',
+    path: raw.path,
+    username: raw.username,
+    password: raw.password,
+    width: raw.width,
+    height: raw.height,
+  }
+
+  const inference: InferenceConfig = {
+    model: raw.model,
+    useSahi: raw.useSahi,
+    useSmoothing: raw.useSmoothing,
+    confidence: raw.confidence,
+    nmsIou: raw.nmsIou,
+    sahiIou: raw.sahiIou,
+    frameBuffer: raw.frameBuffer,
+    overlapRatio: raw.overlapRatio,
+  }
+
+  const processing: ProcessingConfig = {
+    masks: raw.masks,
+    classList: raw.classList,
+    classNames: raw.classNames,
+  }
+
+  return {
+    camStream: raw.camStream ?? '',
+    name: raw.name ?? '',
+    stopped: raw.stopped,
+    source,
+    inference,
+    processing,
+  }
 }
 
 /** @deprecated Use StreamConfig instead */
@@ -197,6 +252,5 @@ export type ClassOption = {
  * Width and height are guaranteed to have values (resolved from source or defaults).
  */
 export type CamSetup = StreamConfig & {
-  width: number
-  height: number
+  source: SourceConfig & { width: number; height: number }
 }

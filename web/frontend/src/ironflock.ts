@@ -15,39 +15,44 @@ class StubIronFlock {
     private _subs = new Map<string, { callback: (row: any) => void; lastSnapshot: string }[]>()
     private _pollTimers = new Map<string, ReturnType<typeof setInterval>>()
 
-    async appendToTable(table: string, data: Record<string, any>, _options?: Record<string, any>) {
+    async appendToTable(table: string, data: Record<string, any> | Record<string, any>[], _options?: Record<string, any>) {
         if (table !== 'streams') return
 
-        const camStream = data.stream_name
-        if (!camStream) return
+        // The IronFlock SDK accepts an array of rows; handle both forms
+        const rows = Array.isArray(data) ? data : [data]
 
-        // Check if stream already exists → PUT, otherwise POST
-        const existing = await this._fetchJson(`${this._basepath}/streams/${encodeURIComponent(camStream)}`)
+        for (const row of rows) {
+            const camStream = row.stream_name
+            if (!camStream) continue
 
-        if (data.deleted) {
-            // Delete via REST
-            await fetch(`${this._basepath}/streams/${encodeURIComponent(camStream)}`, { method: 'DELETE' })
-            return
-        }
+            // Check if stream already exists → PUT, otherwise POST
+            const existing = await this._fetchJson(`${this._basepath}/streams/${encodeURIComponent(camStream)}`)
 
-        // Parse out the config from the stream_config JSON string
-        let config: Record<string, any> = {}
-        if (data.stream_config) {
-            config = typeof data.stream_config === 'string' ? JSON.parse(data.stream_config) : data.stream_config
-        }
+            if (row.deleted) {
+                // Delete via REST
+                await fetch(`${this._basepath}/streams/${encodeURIComponent(camStream)}`, { method: 'DELETE' })
+                continue
+            }
 
-        if (existing) {
-            await fetch(`${this._basepath}/streams/${encodeURIComponent(camStream)}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(config),
-            })
-        } else {
-            await fetch(`${this._basepath}/streams`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: config.name ?? camStream, camStream, ...config }),
-            })
+            // Parse out the config from the stream_config JSON string
+            let config: Record<string, any> = {}
+            if (row.stream_config) {
+                config = typeof row.stream_config === 'string' ? JSON.parse(row.stream_config) : row.stream_config
+            }
+
+            if (existing) {
+                await fetch(`${this._basepath}/streams/${encodeURIComponent(camStream)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config),
+                })
+            } else {
+                await fetch(`${this._basepath}/streams`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: config.name ?? camStream, camStream, ...config }),
+                })
+            }
         }
     }
 
@@ -120,7 +125,7 @@ class StubIronFlock {
     private _configToRow(config: any): Record<string, any> {
         return {
             stream_name: config.camStream ?? '',
-            cam_path: config.path ?? '',
+            cam_path: config.source?.path ?? config.path ?? '',
             stream_config: JSON.stringify(config),
             status: config.stopped ? 'stopped' : 'configured',
             deleted: false,

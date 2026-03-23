@@ -9,6 +9,7 @@ import {
     deleteStreamConfig,
     listStreamConfigs,
     sourceChanged,
+    normalizeStreamConfig,
     waitForService,
     migrateFromLegacy,
     migrateFromFiles,
@@ -20,25 +21,26 @@ import { ironflock, getIronFlockConfig } from './ironflock.js'
 export async function startVideoStream(cam: StreamConfig, camStream: string) {
     console.log('starting video stream for', cam, camStream)
 
+    const src = cam.source
     let camPath: string
-    if (cam.type === 'IP') {
-        const rawPath = cam.path ?? ''
+    if (src.type === 'IP') {
+        const rawPath = src.path ?? ''
         if (!rawPath || !rawPath.includes('://')) {
             camPath = rawPath
         } else {
             const [protocol, path] = rawPath.split('://')
-            const userpw = cam.username ? (cam.username + (cam.password ? `:${cam.password}@`: '@')) : ''
+            const userpw = src.username ? (src.username + (src.password ? `:${src.password}@`: '@')) : ''
             camPath = `${protocol}://${userpw}${path}`
         }
-    } else if (cam.type === 'Image') {
-        camPath = cam.path ?? ''
+    } else if (src.type === 'Image') {
+        camPath = src.path ?? ''
     } else {
-        camPath = cam.path ?? ''
+        camPath = src.path ?? ''
     }
 
     const body: Record<string, any> = { camPath, camStream }
-    if (cam.width) body.width = cam.width
-    if (cam.height) body.height = cam.height
+    if (src.width) body.width = src.width
+    if (src.height) body.height = src.height
 
     try {
         const res = await fetch(`${VIDEO_API}/streams`, {
@@ -208,8 +210,8 @@ export async function handleGetStream(ctx: Context): Promise<any> {
         return { error: `Stream "${camStream}" not found` }
     }
 
-    let width = config.width
-    let height = config.height
+    let width = config.source?.width
+    let height = config.source?.height
 
     // If the camera config doesn't have a resolution, read it from the
     // status file written by the video process after opening the source.
@@ -226,8 +228,7 @@ export async function handleGetStream(ctx: Context): Promise<any> {
 
     return {
         ...config,
-        width: width ?? 640,
-        height: height ?? 480,
+        source: { ...config.source, width: width ?? 640, height: height ?? 480 },
     }
 }
 
@@ -252,12 +253,14 @@ export async function handleCreateStream(ctx: Context) {
         return { error: `Stream "${camStream}" already exists` }
     }
     const config: StreamConfig = {
-        id: camStream,
-        type: 'IP',
-        name: name || camStream,
-        path: '',
         camStream,
-        masks: { polygons: [] },
+        name: name || camStream,
+        source: {
+            id: camStream,
+            type: 'IP',
+            path: '',
+        },
+        processing: { masks: { polygons: [] } },
     }
     await writeStreamConfig(camStream, config)
     return config
@@ -274,7 +277,8 @@ export async function handleUpdateStream(ctx: Context) {
 
     let incoming: StreamConfig
     try {
-        incoming = typeof ctx.body === 'string' ? JSON.parse(ctx.body) : ctx.body as StreamConfig
+        const raw = typeof ctx.body === 'string' ? JSON.parse(ctx.body) : ctx.body
+        incoming = normalizeStreamConfig(raw)
     } catch {
         ctx.set.status = 400
         return { error: 'Invalid JSON' }
@@ -284,28 +288,29 @@ export async function handleUpdateStream(ctx: Context) {
     incoming.camStream = decoded
 
     // Migrate legacy type
-    if (incoming.type === 'IP' && incoming.path === 'demoVideo') {
-        incoming.type = 'Demo'
+    if (incoming.source.type === 'IP' && incoming.source.path === 'demoVideo') {
+        incoming.source.type = 'Demo'
     }
 
     // Read previous config to detect source changes
     const prev = await readStreamConfig(decoded)
 
     // For USB cameras, resolve device info from the video API
-    if (incoming.type === 'USB') {
+    if (incoming.source.type === 'USB') {
         try {
             const camList = await getUSBCameras()
-            const cameraDev = camList.find((c: any) => c.id === incoming.id)
+            const cameraDev = camList.find((c: any) => c.id === incoming.source.id)
             if (cameraDev) {
-                incoming.path = (cameraDev as any).path ?? incoming.path
-                incoming.name = (cameraDev as any).name ?? incoming.name
+                incoming.source.path = (cameraDev as any).path ?? incoming.source.path
             }
         } catch { /* proceed with what we have */ }
     }
 
     // Ensure masks default
-    if (!incoming.masks) {
-        incoming.masks = prev?.masks ?? { polygons: [] }
+    if (!incoming.processing) {
+        incoming.processing = prev?.processing ?? { masks: { polygons: [] } }
+    } else if (!incoming.processing.masks) {
+        incoming.processing.masks = prev?.processing?.masks ?? { polygons: [] }
     }
 
     // Write the full config to the backend table
@@ -317,10 +322,10 @@ export async function handleUpdateStream(ctx: Context) {
 
     if (needsRestart && prev) {
         console.log(`Source changed for ${decoded}, restarting video process`)
-        await killVideoStream(prev.path ?? '', decoded, 'stop')
+        await killVideoStream(prev.source?.path ?? '', decoded, 'stop')
     }
 
-    if (needsRestart && incoming.path && !incoming.stopped) {
+    if (needsRestart && incoming.source.path && !incoming.stopped) {
         startVideoStream(incoming, decoded)
     }
 
@@ -340,7 +345,7 @@ export async function handleDeleteStream(ctx: Context) {
         ctx.set.status = 404
         return { error: `Stream "${decoded}" not found` }
     }
-    await killVideoStream(config.path ?? '', decoded, 'delete')
+    await killVideoStream(config.source?.path ?? '', decoded, 'delete')
     await deleteStreamConfig(decoded)
     return { status: 'deleted', camStream: decoded }
 }
@@ -358,7 +363,7 @@ export async function handleStopStream(ctx: Context) {
         ctx.set.status = 404
         return { error: `Stream "${decoded}" not found` }
     }
-    await killVideoStream(config.path ?? '', decoded, 'stop')
+    await killVideoStream(config.source?.path ?? '', decoded, 'stop')
     config.stopped = true
     await writeStreamConfig(decoded, config, 'stopped')
     return { status: 'stopped', camStream: decoded }

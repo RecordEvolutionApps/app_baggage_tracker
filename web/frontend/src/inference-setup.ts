@@ -2,7 +2,7 @@ import { LitElement, html, css, PropertyValueMap } from 'lit';
 import { property, customElement, state } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { mainStyles, CamSetup, ModelOption, ClassOption } from './utils.js';
-import { writeStream } from './streams-sdk.js';
+import { readStream, writeStream } from './streams-sdk.js';
 import prettyBytes from 'pretty-bytes';
 import '@material/web/chips/filter-chip.js';
 import '@material/web/dialog/dialog.js';
@@ -428,6 +428,7 @@ export class InferenceSetup extends LitElement {
       .sahi-toggle input[type='checkbox'] {
         width: 18px;
         height: 18px;
+        flex-shrink: 0;
         accent-color: #002e6a;
         cursor: pointer;
       }
@@ -1193,28 +1194,30 @@ export class InferenceSetup extends LitElement {
     _changedProperties: PropertyValueMap<any> | Map<PropertyKey, unknown>,
   ) {
     if (_changedProperties.has('camSetup') && this.camSetup) {
-      if (this.camSetup.model) {
-        this.selectedModel = this.camSetup.model;
+      const inf = this.camSetup.inference;
+      const proc = this.camSetup.processing;
+      if (inf?.model) {
+        this.selectedModel = inf.model;
       }
-      this.useSahi = this.camSetup.useSahi ?? true;
-      this.useSmoothing = this.camSetup.useSmoothing ?? true;
-      this.frameBuffer = this.camSetup.frameBuffer ?? 64;
-      this.confidence = this.camSetup.confidence ?? 0.1;
-      this.nmsIou = this.camSetup.nmsIou ?? 0.5;
-      this.sahiIou = this.camSetup.sahiIou ?? 0.5;
-      this.overlapRatio = this.camSetup.overlapRatio ?? 0.2;
+      this.useSahi = inf?.useSahi ?? true;
+      this.useSmoothing = inf?.useSmoothing ?? true;
+      this.frameBuffer = inf?.frameBuffer ?? 64;
+      this.confidence = inf?.confidence ?? 0.1;
+      this.nmsIou = inf?.nmsIou ?? 0.5;
+      this.sahiIou = inf?.sahiIou ?? 0.5;
+      this.overlapRatio = inf?.overlapRatio ?? 0.2;
       // Restore persisted class selection
-      if (this.camSetup.classList && this.camSetup.classList.length > 0) {
-        this.selectedClassIds = new Set(this.camSetup.classList);
+      if (proc?.classList && proc.classList.length > 0) {
+        this.selectedClassIds = new Set(proc.classList);
         this.hasPersistedClassList = true;
-      } else if (this.camSetup.classList !== undefined) {
+      } else if (proc?.classList !== undefined) {
         // Explicitly clear if classList exists but is empty
         this.selectedClassIds = new Set();
         this.hasPersistedClassList = true;
       }
       // Restore persisted open-vocab class names
-      if (this.camSetup.classNames && this.camSetup.classNames.length > 0) {
-        this.classNamesText = this.camSetup.classNames.join(', ');
+      if (proc?.classNames && proc.classNames.length > 0) {
+        this.classNamesText = proc.classNames.join(', ');
       }
     }
     super.update(_changedProperties);
@@ -1232,8 +1235,8 @@ export class InferenceSetup extends LitElement {
     this.fetchTags();
     this.fetchCachedModels();
     // Set current model from camSetup if available
-    if (this.camSetup?.model) {
-      this.selectedModel = this.camSetup.model;
+    if (this.camSetup?.inference?.model) {
+      this.selectedModel = this.camSetup.inference.model;
     }
     if (this.selectedModel) {
       this.fetchModelClasses(this.selectedModel);
@@ -1678,23 +1681,36 @@ export class InferenceSetup extends LitElement {
 
   /** Save the full stream config via single PUT endpoint. */
   private async saveConfig(patch: Record<string, unknown> = {}) {
-    // Build the current config from camSetup + local state + optional patch
+    // Read fresh config from backend so we don't overwrite concurrent
+    // changes (e.g. masks edited via the polygon manager).
+    let base: any;
+    try {
+      base = await readStream(this.camStream) ?? this.camSetup ?? {};
+    } catch {
+      base = this.camSetup ?? {};
+    }
     const config = {
-      ...(this.camSetup ?? {}),
-      model: this.selectedModel,
-      useSahi: this.useSahi,
-      useSmoothing: this.useSmoothing,
-      frameBuffer: this.frameBuffer,
-      confidence: this.confidence,
-      nmsIou: this.nmsIou,
-      sahiIou: this.sahiIou,
-      overlapRatio: this.overlapRatio,
-      classList: Array.from(this.selectedClassIds),
-      classNames: this.classNamesText
-        .split(',')
-        .map(s => s.trim())
-        .filter(s => s.length > 0),
-      ...patch,
+      ...base,
+      inference: {
+        ...(base.inference ?? {}),
+        model: this.selectedModel,
+        useSahi: this.useSahi,
+        useSmoothing: this.useSmoothing,
+        frameBuffer: this.frameBuffer,
+        confidence: this.confidence,
+        nmsIou: this.nmsIou,
+        sahiIou: this.sahiIou,
+        overlapRatio: this.overlapRatio,
+        ...patch,
+      },
+      processing: {
+        ...(base.processing ?? {}),
+        classList: Array.from(this.selectedClassIds),
+        classNames: this.classNamesText
+          .split(',')
+          .map(s => s.trim())
+          .filter(s => s.length > 0),
+      },
     };
     try {
       await writeStream(this.camStream, config as any);
@@ -1946,6 +1962,20 @@ export class InferenceSetup extends LitElement {
           />
         </div>
 
+        <div class="frame-buffer-row">
+          <label for="nmsIou" class="fb-label">NMS IoU</label>
+          <input
+            id="nmsIou"
+            type="number"
+            min="0.1"
+            max="1.0"
+            step="0.05"
+            .value=${String(this.nmsIou)}
+            @change=${this.onNmsIouChange}
+            class="fb-input"
+          />
+        </div>
+
         <label class="sahi-toggle">
           <input
             type="checkbox"
@@ -2000,20 +2030,6 @@ export class InferenceSetup extends LitElement {
         </div>
         ` : ''}
 
-        <div class="frame-buffer-row">
-          <label for="nmsIou" class="fb-label">NMS IoU</label>
-          <input
-            id="nmsIou"
-            type="number"
-            min="0.1"
-            max="1.0"
-            step="0.05"
-            .value=${String(this.nmsIou)}
-            @change=${this.onNmsIouChange}
-            class="fb-input"
-          />
-        </div>
-
         <label class="sahi-toggle">
           <input
             type="checkbox"
@@ -2043,21 +2059,7 @@ export class InferenceSetup extends LitElement {
             <span class="class-summary-empty" style="font-size: 0.75rem; color: #999;">
               Comma-separated list of objects to detect
             </span>
-          ` : html`
-            <div class="class-summary-chips">
-              ${repeat(this.selectedClassOptions.slice(0, 8), c => c.id, c => html`
-                <md-filter-chip label=${c.name} selected></md-filter-chip>
-              `)}
-              ${this.selectedClassOptions.length > 8 ? html`
-                <span class="class-summary-empty">+${this.selectedClassOptions.length - 8} more</span>
-              ` : ''}
-              ${this.selectedClassOptions.length === 0 ? html`
-                <span class="class-summary-empty">
-                  ${this.classesLoading ? 'Loading classes...' : (this.classesError ? 'Classes unavailable' : (this.availableClasses.length ? 'All classes selected' : 'Classes not loaded'))}
-                </span>
-              ` : ''}
-            </div>
-          `}
+          ` : ''}
         </div>
       </div>
 

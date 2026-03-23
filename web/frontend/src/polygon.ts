@@ -150,8 +150,8 @@ export class PolygonManager extends EventTarget {
     if (!this.camStream) return;
     try {
       const config = await readStream(this.camStream);
-      if (config?.masks) {
-        this.import(config.masks);
+      if (config?.processing?.masks) {
+        this.import(config.processing.masks);
       }
     } catch (error) {
       console.error('Failed to load polygons from remote', error)
@@ -164,7 +164,10 @@ export class PolygonManager extends EventTarget {
     try {
       const config = await readStream(this.camStream);
       if (!config) return;
-      const updated = { ...config, masks: data };
+      const updated = {
+        ...config,
+        processing: { ...(config.processing ?? {}), masks: data },
+      };
       await writeStream(this.camStream, updated as any);
     } catch (error) {
       console.error('Failed to save masks', error);

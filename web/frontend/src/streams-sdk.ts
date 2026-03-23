@@ -5,7 +5,7 @@
  * talking directly to the IronFlock backend (or the DEV REST stub).
  */
 import { ironflock, ironflockReady, deviceKey } from './ironflock.js'
-import type { StreamConfig } from './utils.js'
+import { type StreamConfig, normalizeStreamConfig } from './utils.js'
 
 // ── Row ↔ StreamConfig conversion ──────────────────────────────────────────
 
@@ -13,10 +13,8 @@ function rowToStreamConfig(row: any): StreamConfig {
     const config = typeof row.stream_config === 'string'
         ? JSON.parse(row.stream_config)
         : row.stream_config ?? {}
-    return {
-        ...config,
-        camStream: row.stream_name ?? config.camStream,
-    } as StreamConfig
+    config.camStream = row.stream_name ?? config.camStream
+    return normalizeStreamConfig(config)
 }
 
 // ── CRUD operations ────────────────────────────────────────────────────────
@@ -57,7 +55,7 @@ export async function writeStream(camStream: string, config: StreamConfig, statu
         tsp: now,
         stream_name: camStream,
         stream_url: `https://${deviceKey}-visionai-1100.app.ironflock.com/#view/${encodeURIComponent(camStream)}`,
-        cam_path: config.path ?? '',
+        cam_path: config.source?.path ?? '',
         stream_config: JSON.stringify(config),
         status,
         deleted: false,

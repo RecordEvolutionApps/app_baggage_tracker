@@ -1,9 +1,1 @@
-{
-	"frontCam": {
-		"id": "demoVideo",
-		"type": "IP",
-		"name": "Demo Video",
-		"path": "demoVideo",
-		"camStream": "frontCam"
-	}
-}
+{}

@@ -93,7 +93,7 @@ export class StreamEditor extends LitElement {
       const data = await readStream(this.camStream);
       if (data) {
         this.stopped = !!data.stopped;
-        this.streamName = data.name || this.camStream;
+        this.streamName = data.name ?? '';
         this.fullConfig = data;
       }
     } catch (err) {
@@ -110,7 +110,7 @@ export class StreamEditor extends LitElement {
   }
 
   private async saveName(value: string) {
-    const trimmed = value.trim() || this.camStream;
+    const trimmed = value.trim();
     this.editingName = false;
     this.streamName = trimmed;
     if (!this.fullConfig) return;

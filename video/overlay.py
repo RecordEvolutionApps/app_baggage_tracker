@@ -19,8 +19,12 @@ def draw_sahi_grid(
     overlap_color: tuple[int, int, int] = (120, 120, 120),
     line_thickness: int = 1,
     overlay_alpha: float = 0.25,
+    dim_outside: float = 0.4,
 ) -> np.ndarray:
-    """Draw the SAHI slicing grid overlay on a frame."""
+    """Draw the SAHI slicing grid overlay on a frame.
+
+    *dim_outside*: darken area outside the crop rect (0 = no dim, 1 = black).
+    """
     low_x, low_y, high_x, high_y = crop_rect
     if low_x >= high_x or low_y >= high_y:
         return frame
@@ -34,6 +38,15 @@ def draw_sahi_grid(
     draw_high_y = max(low_y, high_y - 1)
     limit_x = draw_high_x + 1
     limit_y = draw_high_y + 1
+
+    # Dim the area outside the SAHI crop region
+    if dim_outside > 0:
+        h, w = frame.shape[:2]
+        mask = np.ones((h, w), dtype=np.float32)
+        mask[low_y:high_y, low_x:high_x] = 0.0
+        dim_factor = 1.0 - dim_outside
+        frame = frame.copy()
+        frame[mask > 0] = (frame[mask > 0] * dim_factor).astype(frame.dtype)
 
     if overlay_alpha > 0:
         overlay = frame.copy()

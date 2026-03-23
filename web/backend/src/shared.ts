@@ -22,28 +22,40 @@ export type MaskData = {
     polygons: MaskPolygon[]
 }
 
-export type StreamConfig = {
+export type SourceConfig = {
     id: string
     type: 'USB' | 'IP' | 'Demo' | 'YouTube' | 'Image'
-    name: string
     path?: string
     username?: string
     password?: string
-    camStream: string
     width?: number
     height?: number
+}
+
+export type InferenceConfig = {
     model?: string
     useSahi?: boolean
     useSmoothing?: boolean
     confidence?: number
-    frameBuffer?: number
     nmsIou?: number
     sahiIou?: number
+    frameBuffer?: number
     overlapRatio?: number
+}
+
+export type ProcessingConfig = {
+    masks?: MaskData
     classList?: number[]
     classNames?: string[]
+}
+
+export type StreamConfig = {
+    camStream: string
+    name: string
     stopped?: boolean
-    masks?: MaskData
+    source: SourceConfig
+    inference?: InferenceConfig
+    processing?: ProcessingConfig
 }
 
 /** @deprecated Use StreamConfig instead */
@@ -58,6 +70,53 @@ export type DeviceCameraInfo = {
     interface: 'usb' | 'csi' | 'gmsl' | 'other'
 }
 
+// ── Normalize legacy flat configs into nested structure ─────────────────────
+
+/** Auto-migrate a flat (legacy) or nested config into the canonical nested shape. */
+export function normalizeStreamConfig(raw: any): StreamConfig {
+    // Already normalized — has a `source` object
+    if (raw.source && typeof raw.source === 'object') {
+        return raw as StreamConfig
+    }
+
+    // Flat → nested migration
+    const source: SourceConfig = {
+        id: raw.id ?? '',
+        type: raw.type ?? 'IP',
+        path: raw.path,
+        username: raw.username,
+        password: raw.password,
+        width: raw.width,
+        height: raw.height,
+    }
+
+    const inference: InferenceConfig = {
+        model: raw.model,
+        useSahi: raw.useSahi,
+        useSmoothing: raw.useSmoothing,
+        confidence: raw.confidence,
+        nmsIou: raw.nmsIou,
+        sahiIou: raw.sahiIou,
+        frameBuffer: raw.frameBuffer,
+        overlapRatio: raw.overlapRatio,
+    }
+
+    const processing: ProcessingConfig = {
+        masks: raw.masks,
+        classList: raw.classList,
+        classNames: raw.classNames,
+    }
+
+    return {
+        camStream: raw.camStream ?? '',
+        name: raw.name ?? '',
+        stopped: raw.stopped,
+        source,
+        inference,
+        processing,
+    }
+}
+
 // ── Shared mutable state ───────────────────────────────────────────────────
 
 export const ports = new Map<string, any>()
@@ -68,10 +127,8 @@ function rowToStreamConfig(row: any): StreamConfig {
     const config = typeof row.stream_config === 'string'
         ? JSON.parse(row.stream_config)
         : row.stream_config ?? {}
-    return {
-        ...config,
-        camStream: row.stream_name ?? config.camStream,
-    } as StreamConfig
+    config.camStream = row.stream_name ?? config.camStream
+    return normalizeStreamConfig(config)
 }
 
 /** Read a single stream config from the backend table. Returns null if not found. */
@@ -100,7 +157,7 @@ export async function writeStreamConfig(camStream: string, config: StreamConfig,
         tsp: now,
         stream_name: camStream,
         stream_url: `https://${deviceKey}-visionai-1100.app.ironflock.com/#view/${encodeURIComponent(camStream)}`,
-        cam_path: config.path ?? '',
+        cam_path: config.source?.path ?? '',
         stream_config: JSON.stringify(config),
         status,
         deleted: false,
@@ -141,12 +198,12 @@ export async function listStreamConfigs(): Promise<StreamConfig[]> {
 
 // ── Source field comparison ─────────────────────────────────────────────────
 
-const SOURCE_FIELDS: (keyof StreamConfig)[] = ['type', 'path', 'username', 'password', 'width', 'height']
+const SOURCE_FIELDS: (keyof SourceConfig)[] = ['type', 'path', 'username', 'password', 'width', 'height']
 
 /** Returns true if any camera-source field changed between old and new config. */
 export function sourceChanged(prev: StreamConfig | null, next: StreamConfig): boolean {
     if (!prev) return true
-    return SOURCE_FIELDS.some(k => prev[k] !== next[k])
+    return SOURCE_FIELDS.some(k => prev.source?.[k] !== next.source?.[k])
 }
 
 // ── Migration from legacy files ────────────────────────────────────────────
@@ -195,8 +252,9 @@ export async function migrateFromLegacy(): Promise<void> {
             } catch { /* ignore */ }
         }
 
-        const config: StreamConfig = {
-            ...(cam as StreamConfig),
+        const config: StreamConfig = normalizeStreamConfig({
+            ...cam,
+            camStream,
             model: settings.model ?? cam.model ?? undefined,
             useSahi: settings.useSahi ?? cam.useSahi,
             useSmoothing: settings.useSmoothing ?? cam.useSmoothing,
@@ -208,7 +266,7 @@ export async function migrateFromLegacy(): Promise<void> {
             classList: settings.classList ?? cam.classList,
             classNames: settings.classNames ?? cam.classNames,
             masks,
-        }
+        })
 
         await writeStreamConfig(camStream, config)
         console.log(`  Migrated stream: ${camStream}`)
@@ -245,7 +303,7 @@ export async function migrateFromFiles(): Promise<void> {
         try {
             const data = await Bun.file(join(streamsDir, file)).json()
             const camStream = data.camStream ?? file.replace('.json', '')
-            await writeStreamConfig(camStream, data as StreamConfig)
+            await writeStreamConfig(camStream, normalizeStreamConfig(data))
             console.log(`  Migrated file: ${file}`)
         } catch (err) {
             console.error(`Failed to migrate ${file}:`, err)

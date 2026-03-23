@@ -88,16 +88,12 @@ function cleanup() {
 // ── Signaling helpers ──────────────────────────────────────────────────────
 
 function getSignalingUrl(): string {
-  // In production (ironflock tunnel): replace port segment in hostname
-  // e.g. device-visionai-1100.app.ironflock.com → device-visionai-1200.app.ironflock.com
+  // In production (ironflock tunnel): proxy through web backend on port 1100
+  // to avoid needing a separate WebSocket-capable FRP tunnel for port 1200.
   const pa = location.host.split('-');
   if (pa.length >= 3) {
-    const jns = pa[2]?.split('.') ?? [];
-    jns[0] = SIGNALING_PORT;
-    pa[2] = jns.join('.');
-    const host = pa.join('-');
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${host}`;
+    return `${protocol}//${location.host}/ws`;
   }
   // Local dev: connect to mediasoup on port 1200
   return `ws://${location.hostname}:${SIGNALING_PORT}`;

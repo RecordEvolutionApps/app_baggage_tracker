@@ -34,8 +34,11 @@ export class CameraPlayer extends LitElement {
       if (config) {
         this.camSetup = {
           ...config,
-          width: config.width ?? 640,
-          height: config.height ?? 480,
+          source: {
+            ...config.source,
+            width: config.source?.width ?? 640,
+            height: config.source?.height ?? 480,
+          },
         } as CamSetup;
       }
       console.log('got Camera Setup', this.camSetup)
@@ -98,8 +101,8 @@ protected async firstUpdated() {
       <video-canvas
         .video=${this.videoElement}
         .camSetup=${this.camSetup}
-        .width=${this.camSetup?.width ?? 1280}
-        .height=${this.camSetup?.height ?? 720}
+        .width=${this.camSetup?.source?.width ?? 1280}
+        .height=${this.camSetup?.source?.height ?? 720}
         .camStream=${this.id}
         .stopped=${this.stopped}
       ></video-canvas>

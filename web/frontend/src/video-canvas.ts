@@ -161,7 +161,7 @@ export class VideoCanvas extends LitElement {
     }
 
     // If camSetup loaded and no source configured, stop showing spinner
-    if (changedProps.has('camSetup') && this.camSetup && !this.camSetup.path) {
+    if (changedProps.has('camSetup') && this.camSetup && !this.camSetup.source?.path) {
       this.loading = false;
     }
 
@@ -342,7 +342,7 @@ export class VideoCanvas extends LitElement {
           <div class="spinner"></div>
           <span class="loading-text">Connecting to video stream…</span>
         </div>
-        ${!this.loading && this.camSetup && !this.camSetup.path ? html`
+        ${!this.loading && this.camSetup && !this.camSetup.source?.path ? html`
           <div class="loading-overlay">
             <span class="loading-text">No video source configured</span>
           </div>

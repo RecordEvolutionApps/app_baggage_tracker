@@ -9,11 +9,14 @@ from masks import prepMasks
 
 logger = logging.getLogger('watchers')
 
-# Settings keys that the video process cares about
-_SETTINGS_KEYS = frozenset([
+# Settings keys that the video process cares about (inside 'inference' section)
+_INFERENCE_KEYS = frozenset([
     'model', 'useSahi', 'useSmoothing', 'confidence', 'frameBuffer',
-    'nmsIou', 'sahiIou', 'overlapRatio', 'classList', 'classNames',
+    'nmsIou', 'sahiIou', 'overlapRatio',
 ])
+
+# Processing keys (inside 'processing' section)
+_PROCESSING_KEYS = frozenset(['classList', 'classNames'])
 
 
 async def watchStreamConfig(ironflock, config: StreamConfig, on_change=None):
@@ -48,7 +51,20 @@ async def watchStreamConfig(ironflock, config: StreamConfig, on_change=None):
         # Keep full config blob in sync for the publisher
         config._full_config.update(data)
 
-        new_settings = {k: data[k] for k in _SETTINGS_KEYS if k in data}
+        # Extract settings from nested sections (with flat fallback for compat)
+        inference = data.get('inference', {})
+        processing = data.get('processing', {})
+        new_settings = {}
+        for k in _INFERENCE_KEYS:
+            if k in inference:
+                new_settings[k] = inference[k]
+            elif k in data:  # flat fallback
+                new_settings[k] = data[k]
+        for k in _PROCESSING_KEYS:
+            if k in processing:
+                new_settings[k] = processing[k]
+            elif k in data:  # flat fallback
+                new_settings[k] = data[k]
         changed = {}
         for k, v in new_settings.items():
             old_v = config.stream_settings.get(k)
@@ -61,7 +77,7 @@ async def watchStreamConfig(ironflock, config: StreamConfig, on_change=None):
                             config.cam_stream, k, diff['from'], diff['to'])
 
         # ── Masks update ────────────────────────────────────────
-        masks_data = data.get('masks', {})
+        masks_data = processing.get('masks', data.get('masks', {}))
         masks_repr = json.dumps(masks_data.get('polygons', []), sort_keys=True)
         masks_changed = masks_repr != last_masks_repr
         if masks_changed:

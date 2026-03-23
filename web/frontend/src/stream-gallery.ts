@@ -54,7 +54,7 @@ export class StreamGallery extends LitElement {
 
     // Mark only streams with a configured source (and not stopped) as loading
     this.loadingStreams = new Set(
-      this.streams.filter((s) => !!s.path && !s.stopped).map((s) => s.camStream)
+      this.streams.filter((s) => !!s.source?.path && !s.stopped).map((s) => s.camStream)
     );
 
     // Wait for render, then init mediasoup with all video elements
@@ -81,7 +81,7 @@ export class StreamGallery extends LitElement {
 
   private initVideoPlayers() {
     const configuredStreams = new Set(
-      this.streams.filter((s) => !!s.path && !s.stopped).map((s) => s.camStream)
+      this.streams.filter((s) => !!s.source?.path && !s.stopped).map((s) => s.camStream)
     );
     const videoPlayers: Record<string, HTMLVideoElement | undefined> = {};
     this.shadowRoot?.querySelectorAll<HTMLVideoElement>('video[data-cam]').forEach((v) => {
@@ -111,12 +111,14 @@ export class StreamGallery extends LitElement {
 
     try {
       const config: StreamConfig = {
-        id: camStream,
-        type: 'IP',
         name: name || camStream,
-        path: '',
         camStream,
-        masks: { polygons: [] },
+        source: {
+          id: camStream,
+          type: 'IP',
+          path: '',
+        },
+        processing: { masks: { polygons: [] } },
       };
       await writeStream(camStream, config);
     } catch (err) {
@@ -370,7 +372,7 @@ export class StreamGallery extends LitElement {
                   <span>${s.name || s.camStream}</span>
                   <span>Stopped</span>
                 </div>
-              ` : s.path ? html`
+              ` : s.source?.path ? html`
                 <div class="tile-loading" ?hidden=${!this.loadingStreams.has(s.camStream)}>
                   <div class="spinner"></div>
                   <span>${s.name || s.camStream}</span>

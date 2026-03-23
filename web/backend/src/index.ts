@@ -7,6 +7,15 @@ import { ironflock, getIronFlockConfig } from './ironflock.js'
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 console.log('CURRENT', process.cwd())
+
+// ── WebSocket proxy for mediasoup signaling ────────────────────────────────
+// In production the browser can't reach port 1200 directly through the FRP
+// tunnel, so we proxy the WebSocket through the web server on port 1100.
+const videoApiUrl = new URL(Bun.env.VIDEO_API || 'http://mediasoup:8000');
+const MEDIASOUP_WS = `ws://${videoApiUrl.hostname}:1200`;
+const wsUpstreams = new Map<any, WebSocket>();
+const wsBuffers = new Map<any, string[]>();
+
 const app = new Elysia();
 const frontendDist = Bun.env.FRONTEND_DIST || join(process.cwd(), "frontend", "dist");
 let hasFrontendDist = false;
@@ -25,6 +34,53 @@ if (hasFrontendDist) {
 }
 app.use(html())
 app.use(cors())
+
+// ── mediasoup WebSocket proxy (browser ↔ mediasoup signaling) ──────────────
+app.ws('/ws', {
+  open(ws) {
+    const upstream = new WebSocket(MEDIASOUP_WS);
+    wsUpstreams.set(ws, upstream);
+    const buffer: string[] = [];
+    wsBuffers.set(ws, buffer);
+
+    upstream.addEventListener('open', () => {
+      for (const msg of buffer) upstream.send(msg);
+      buffer.length = 0;
+    });
+    upstream.addEventListener('message', (ev) => {
+      ws.send(ev.data as string);
+    });
+    upstream.addEventListener('close', () => {
+      wsUpstreams.delete(ws);
+      wsBuffers.delete(ws);
+      ws.close();
+    });
+    upstream.addEventListener('error', () => {
+      wsUpstreams.delete(ws);
+      wsBuffers.delete(ws);
+      ws.close();
+    });
+  },
+  message(ws, message) {
+    const upstream = wsUpstreams.get(ws);
+    const buffer = wsBuffers.get(ws);
+    const str = typeof message === 'string' ? message : JSON.stringify(message);
+    if (upstream && upstream.readyState === WebSocket.OPEN) {
+      upstream.send(str);
+    } else if (buffer) {
+      buffer.push(str);
+    }
+  },
+  close(ws) {
+    const upstream = wsUpstreams.get(ws);
+    if (upstream) {
+      upstream.close();
+      wsUpstreams.delete(ws);
+    }
+    wsBuffers.delete(ws);
+  }
+})
+
 // ── IronFlock config for frontend SDK ──────────────────────────────────────
 app.get('/api/ironflock-config', () => getIronFlockConfig())
 // ── Stream CRUD ────────────────────────────────────────────────────────────

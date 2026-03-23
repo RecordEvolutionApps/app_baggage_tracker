@@ -135,7 +135,7 @@ export class CanvasToolbox extends LitElement {
   }
 
   private get sourceTypeLabel(): string {
-    switch (this.camSetup?.type) {
+    switch (this.camSetup?.source.type) {
       case 'USB': return 'Local Camera';
       case 'Demo': return 'Demo Video';
       case 'YouTube': return 'YouTube';
@@ -146,15 +146,15 @@ export class CanvasToolbox extends LitElement {
   }
 
   private get sourcePathLabel(): string | undefined {
-    const cam = this.camSetup;
-    if (!cam) return undefined;
-    switch (cam.type) {
-      case 'USB': return cam.name || cam.id || cam.path;
+    const src = this.camSetup?.source;
+    if (!src) return undefined;
+    switch (src.type) {
+      case 'USB': return this.camSetup?.name || src.id || src.path;
       case 'Demo': return undefined;
       case 'YouTube':
       case 'IP':
-      case 'Image': return cam.path;
-      default: return cam.path;
+      case 'Image': return src.path;
+      default: return src.path;
     }
   }
 
@@ -170,8 +170,8 @@ export class CanvasToolbox extends LitElement {
             <div class="source-info">
               <span class="source-type">${this.sourceTypeLabel}</span>
               ${this.sourcePathLabel ? html`<span class="source-path">${this.sourcePathLabel}</span>` : ''}
-              ${this.camSetup.width && this.camSetup.height
-                ? html`<span class="source-resolution">${this.camSetup.width} × ${this.camSetup.height} px</span>`
+              ${this.camSetup.source.width && this.camSetup.source.height
+                ? html`<span class="source-resolution">${this.camSetup.source.width} × ${this.camSetup.source.height} px</span>`
                 : ''}
             </div>`
           : html`<div class="source-none">No camera configured</div>`}
