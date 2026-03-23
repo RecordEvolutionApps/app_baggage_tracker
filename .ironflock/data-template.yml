@@ -111,11 +111,11 @@ data:
       description: >
         Registry of individual camera streams running on edge devices.
         Each stream represents one camera source paired with an AI model and its detection/counting configuration.
-        The maintainLatestFlagFor=[devname, cam_stream] setting marks only the most recent row per (device, stream) pair as current.
+        The maintainLatestFlagFor=[devname, stream_name] setting marks only the most recent row per (device, stream) pair as current.
         Use this table to list active streams across devices, monitor stream health via the status column, or inspect which model and settings each stream is using.
         Retained for 2 months.
       chunkTimeInterval: 1 month
-      maintainLatestFlagFor: [devname, cam_stream]
+      maintainLatestFlagFor: [devname, stream_name]
       dropAfter: 2 month
       columns:
         - id: tsp
