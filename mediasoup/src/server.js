@@ -142,12 +142,17 @@ async function createCameraIngest(camId, rtpPort) {
     },
   });
 
-  // Log when the first RTP packet arrives from the video pipeline
+  // Notify browsers when the first RTP packet arrives (video pipeline is actually sending)
   let firstRtp = true;
   plainTransport.on('tuple', (tuple) => {
     if (firstRtp) {
       firstRtp = false;
       console.log(`[mediasoup] First RTP received for ${camId} from ${tuple.remoteIp}:${tuple.remotePort}`);
+      for (const client of wsClients) {
+        if (client.readyState === 1) { // WebSocket.OPEN
+          client.send(JSON.stringify({ type: 'cameraReady', camId }));
+        }
+      }
     }
   });
 
@@ -192,12 +197,6 @@ function startSignaling() {
           }
           await createCameraIngest(streamId, 0);
           const port = cameras.get(streamId).plainTransport.tuple.localPort;
-          // Notify all connected browsers that this camera is now available
-          for (const client of wsClients) {
-            if (client.readyState === 1) { // WebSocket.OPEN
-              client.send(JSON.stringify({ type: 'cameraReady', camId: streamId }));
-            }
-          }
           res.writeHead(201, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ streamId, port }));
         } catch (err) {

@@ -244,6 +244,11 @@ async def main(config):
         start_time1 = time.time()
 
         out = open_video_writer(config)
+        if not out.isOpened():
+            logger.error('GStreamer VideoWriter is NOT open - frames will not be sent!')
+        else:
+            logger.info('GStreamer VideoWriter opened for %s on port %d', config.cam_stream, config.port)
+        _frame_write_count = 0
 
         # SAHI slicer (created lazily)
         slicer = None  # created lazily by run_sahi_inference()
@@ -338,6 +343,9 @@ async def main(config):
                         start_time1 = time.time()
 
                     out.write(out_frame)
+                    _frame_write_count += 1
+                    if _frame_write_count <= 3 or (_frame_write_count % 300 == 0):
+                        logger.info('Wrote frame %d to GStreamer pipeline (port %d)', _frame_write_count, config.port)
                     continue
                 else:
                     logger.info('[image] Settings changed, re-running inference')
@@ -480,6 +488,9 @@ async def main(config):
                             _img_fingerprint[:40])
 
             out.write(frame)
+            _frame_write_count += 1
+            if _frame_write_count <= 3 or (_frame_write_count % 300 == 0):
+                logger.info('Wrote frame %d to GStreamer pipeline (port %d)', _frame_write_count, config.port)
             prof.mark('gst_write')
             prof.end_loop()
 
