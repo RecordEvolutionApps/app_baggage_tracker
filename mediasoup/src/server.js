@@ -188,6 +188,12 @@ function startSignaling() {
           }
           await createCameraIngest(streamId, 0);
           const port = cameras.get(streamId).plainTransport.tuple.localPort;
+          // Notify all connected browsers that this camera is now available
+          for (const client of wsClients) {
+            if (client.readyState === 1) { // WebSocket.OPEN
+              client.send(JSON.stringify({ type: 'cameraReady', camId: streamId }));
+            }
+          }
           res.writeHead(201, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ streamId, port }));
         } catch (err) {

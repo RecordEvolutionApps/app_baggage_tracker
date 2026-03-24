@@ -62,6 +62,9 @@ const resubscribeTimers = new Map<string, number>();
 const subscribeTokens = new Map<string, number>();
 const noFramesTimers = new Map<string, number>();
 
+// Resolvers waiting for a cameraReady notification from the server
+const cameraReadyWaiters = new Map<string, Array<() => void>>();
+
 function cleanup() {
   for (const consumer of consumers.values()) {
     try { consumer.close(); } catch {}
@@ -83,6 +86,7 @@ function cleanup() {
     try { transport.close(); } catch {}
   }
   transports.clear();
+  cameraReadyWaiters.clear();
 }
 
 // ── Signaling helpers ──────────────────────────────────────────────────────
@@ -121,6 +125,16 @@ function onWsMessage(event: MessageEvent): void {
   const msg = JSON.parse(event.data);
 
   // Handle unsolicited server notifications (no matching request id)
+  if (msg.type === 'cameraReady' && msg.camId) {
+    console.log(`[mediasoup] Camera ready: ${msg.camId}`);
+    const waiters = cameraReadyWaiters.get(msg.camId);
+    if (waiters) {
+      cameraReadyWaiters.delete(msg.camId);
+      for (const resolve of waiters) resolve();
+    }
+    return;
+  }
+
   if (msg.type === 'producerClosed' && msg.camId) {
     console.warn(`[mediasoup] Producer closed for ${msg.camId} — resubscribing…`);
     const videoEl = activeVideoPlayers[msg.camId];
@@ -200,6 +214,14 @@ async function initMediasoup(videoPlayers: VideoPlayers): Promise<void> {
   }
 }
 
+function waitForCameraReady(camId: string): Promise<void> {
+  return new Promise(resolve => {
+    const list = cameraReadyWaiters.get(camId) ?? [];
+    list.push(resolve);
+    cameraReadyWaiters.set(camId, list);
+  });
+}
+
 async function subscribeUntilReady(
   camId: string,
   videoEl: HTMLVideoElement,
@@ -221,9 +243,14 @@ async function subscribeUntilReady(
       const isWsClosed = err?.message?.includes('WebSocket not open');
       if ((isNotFound || isWsClosed) && attempt < MAX_SUBSCRIBE_ATTEMPTS) {
         if (attempt <= 5 || attempt % 10 === 0) {
-          console.log(`[mediasoup] subscribe ${camId} attempt ${attempt}: ${err?.message} — retrying…`);
+          console.log(`[mediasoup] subscribe ${camId} attempt ${attempt}: ${err?.message} — waiting for camera…`);
         }
-        await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+        // Wait for cameraReady notification instead of blind polling,
+        // but cap the wait so we don't hang forever if the event is missed
+        await Promise.race([
+          waitForCameraReady(camId),
+          new Promise(r => setTimeout(r, 10_000)),
+        ]);
       } else {
         console.warn('[mediasoup] subscribe failed for', camId, `after ${attempt} attempts:`, err);
         return;
