@@ -5,7 +5,8 @@ import collections
 import json
 import time
 import logging
-from asyncio import get_event_loop, sleep
+import asyncio
+from asyncio import sleep
 from datetime import datetime
 
 import cv2
@@ -169,7 +170,6 @@ logger.info('Wrote resolution status: %dx%d → %s', cfg.resolution_x, cfg.resol
 # ── Load persisted settings from IronFlock backend table ───────────────────
 # Query the streams table for any previously saved config for this stream,
 # so the user's last-applied model choice takes precedence over the OBJECT_MODEL env var.
-import asyncio as _asyncio
 
 async def _load_stream_config_from_table(ironflock_instance, config):
     """Load stream config from the backend table. Returns True if config was found."""
@@ -243,7 +243,9 @@ async def main(config):
         start_time = time.time()
         start_time1 = time.time()
 
+        logger.info('main() started, opening GStreamer VideoWriter...')
         out = open_video_writer(config)
+        logger.info('open_video_writer() returned, isOpened=%s', out.isOpened())
         if not out.isOpened():
             logger.error('GStreamer VideoWriter is NOT open - frames will not be sent!')
         else:
@@ -516,65 +518,74 @@ if __name__ == "__main__":
         from ironflock import IronFlock
         ironflock = IronFlock()
 
-    # Load stream config from backend table before starting
-    loop = get_event_loop()
-    _config_found = loop.run_until_complete(_load_stream_config_from_table(ironflock, cfg))
+    async def _startup():
+        """Async startup — runs after the IronFlock connection is established."""
+        global model
+        loop = asyncio.get_event_loop()
 
-    cfg._publisher = Publisher(ironflock, cfg)
-    publisher = cfg._publisher
+        # Load stream config from backend table (connection is now ready)
+        await _load_stream_config_from_table(ironflock, cfg)
 
-    # Publish initial stream state
-    publisher.publish_stream(status='started')
+        cfg._publisher = Publisher(ironflock, cfg)
+        publisher = cfg._publisher
 
-    # ── Load initial model (after publish so hub/stream are registered even if this fails)
-    model = getModel(cfg.object_model, cfg)
-    cfg.model = model
-    cfg.current_model_name = cfg.object_model
-    logger.info('Model native input: %s', model.get('native_input_wh', 'unknown'))
-    logger.info('[PROFILE] Backend=%s, model=%s, SAHI=%s, device=%s, res=%dx%d',
-                model.get('backend', '?'), cfg.object_model, cfg.use_sahi,
-                'CUDA' if torch.cuda.is_available() else 'CPU',
-                cfg.resolution_x, cfg.resolution_y)
-    write_backend_status(cfg.cam_stream, model, detect_backend=cfg.detect_backend)
+        # Publish initial stream state
+        publisher.publish_stream(status='started')
 
-    # On SIGTERM (container/process stop), publish the stream as deleted
-    import signal as _signal
+        # ── Load initial model (skip entirely when model is "none") ─────
+        if cfg.object_model and cfg.object_model != 'none':
+            model = getModel(cfg.object_model, cfg)
+        else:
+            model = {}
+            logger.info('Model is "none", skipping model loading')
+        cfg.model = model
+        cfg.current_model_name = cfg.object_model
+        logger.info('Model native input: %s', model.get('native_input_wh', 'unknown'))
+        logger.info('[PROFILE] Backend=%s, model=%s, SAHI=%s, device=%s, res=%dx%d',
+                    model.get('backend', '?'), cfg.object_model, cfg.use_sahi,
+                    'CUDA' if torch.cuda.is_available() else 'CPU',
+                    cfg.resolution_x, cfg.resolution_y)
+        write_backend_status(cfg.cam_stream, model, detect_backend=cfg.detect_backend)
 
-    _shutting_down = False
+        # ── Signal handlers ─────────────────────────────────────────────
+        import signal as _signal
+        _shutting_down = False
 
-    def _on_sigterm(*_args):
-        global _shutting_down
-        if _shutting_down:
-            return
-        _shutting_down = True
-        try:
-            publisher.publish_stream(status='stopped')
-        except Exception:
-            pass
-        loop.call_soon_threadsafe(loop.stop)
+        def _on_sigterm(*_args):
+            nonlocal _shutting_down
+            if _shutting_down:
+                return
+            _shutting_down = True
+            try:
+                publisher.publish_stream(status='stopped')
+            except Exception:
+                pass
+            loop.call_soon_threadsafe(loop.stop)
 
-    def _on_sigusr1(*_args):
-        global _shutting_down
-        if _shutting_down:
-            return
-        _shutting_down = True
-        try:
-            publisher.publish_stream(status='stopped', deleted=True)
-        except Exception:
-            pass
-        loop.call_soon_threadsafe(loop.stop)
+        def _on_sigusr1(*_args):
+            nonlocal _shutting_down
+            if _shutting_down:
+                return
+            _shutting_down = True
+            try:
+                publisher.publish_stream(status='stopped', deleted=True)
+            except Exception:
+                pass
+            loop.call_soon_threadsafe(loop.stop)
 
-    _signal.signal(_signal.SIGTERM, _on_sigterm)
-    _signal.signal(_signal.SIGUSR1, _on_sigusr1)
+        _signal.signal(_signal.SIGTERM, _on_sigterm)
+        _signal.signal(_signal.SIGUSR1, _on_sigusr1)
 
-    loop.create_task(watchStreamConfig(
-        ironflock,
-        cfg,
-        on_change=lambda: publisher.publish_stream(status='started'),
-    ))
-    loop.create_task(main(cfg))
+        # ── Start config watcher & main loop ────────────────────────────
+        asyncio.create_task(watchStreamConfig(
+            ironflock,
+            cfg,
+            on_change=lambda: publisher.publish_stream(status='started'),
+        ))
+        await main(cfg)
 
     if ENV == 'LOCAL':
-        loop.run_forever()
+        asyncio.run(_startup())
     else:
+        ironflock.mainFunc = _startup
         ironflock.run()
