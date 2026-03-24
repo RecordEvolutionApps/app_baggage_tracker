@@ -248,6 +248,11 @@ async function subscribeToCamera(
   if (subscribeTokens.get(camId) !== token) return;
 
   // 2. Create the local RecvTransport
+  console.log(`[mediasoup] Creating RecvTransport for ${camId}:`, {
+    id: transportData.id,
+    iceCandidates: transportData.iceCandidates,
+    iceTransportPolicy: needsTurnRelay() ? 'relay' : 'all',
+  });
   const transport = device.createRecvTransport({
     id:             transportData.id,
     iceParameters:  transportData.iceParameters,
@@ -293,6 +298,7 @@ async function subscribeToCamera(
   }
 
   // 5. Create the Consumer on the local transport
+  console.log(`[mediasoup] Creating consumer for ${camId}: kind=${consumeData.kind}, producerId=${consumeData.producerId}`);
   const consumer = await transport.consume({
     id:            consumeData.id,
     producerId:    consumeData.producerId,
@@ -300,6 +306,7 @@ async function subscribeToCamera(
     rtpParameters: consumeData.rtpParameters,
   });
   consumers.set(camId, consumer);
+  console.log(`[mediasoup] Consumer created for ${camId}: track.readyState=${consumer.track.readyState}, paused=${consumer.paused}`);
   if (subscribeTokens.get(camId) !== token) {
     try { consumer.close(); } catch {}
     consumers.delete(camId);

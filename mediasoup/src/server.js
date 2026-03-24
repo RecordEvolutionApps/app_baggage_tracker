@@ -313,7 +313,7 @@ async function handleMessage(msg, ws, consumerTransports, consumers) {
 
       consumerTransports.set(camId, transport);
 
-      console.log(`[mediasoup] WebRTC transport ${camId} created`);
+      console.log(`[mediasoup] WebRTC transport ${camId} created, ICE candidates:`, transport.iceCandidates.map(c => `${c.protocol}://${c.address || c.ip}:${c.port}`));
 
       return {
         type: 'consumerTransportCreated',
@@ -346,7 +346,9 @@ async function handleMessage(msg, ws, consumerTransports, consumers) {
       const transport = consumerTransports.get(camId);
       if (!transport) throw new Error(`No transport for ${camId}`);
 
-      if (!router.canConsume({ producerId: camera.producer.id, rtpCapabilities: msg.rtpCapabilities })) {
+      const canConsume = router.canConsume({ producerId: camera.producer.id, rtpCapabilities: msg.rtpCapabilities });
+      console.log(`[mediasoup] canConsume(${camId}): ${canConsume}, producerId=${camera.producer.id}, producerPaused=${camera.producer.paused}, producerClosed=${camera.producer.closed}`);
+      if (!canConsume) {
         throw new Error(`Cannot consume ${camId}`);
       }
 
