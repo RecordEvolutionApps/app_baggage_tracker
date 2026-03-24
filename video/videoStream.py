@@ -214,8 +214,12 @@ async def _load_stream_config_from_table(ironflock_instance, config):
             config.object_model = _saved_model
             config.current_model_name = _saved_model
             logger.info('Loaded model from backend table: %s', config.object_model)
+        elif _saved_model == 'none':
+            config.object_model = 'none'
+            config.current_model_name = 'none'
+            logger.info('Backend table config has model=none')
         else:
-            logger.info('Backend table config has no model or model=none')
+            logger.info('Backend table config has no model')
 
         _masks_data = _processing.get('masks', _saved.get('masks', {}))
         if _masks_data and _masks_data.get('polygons'):
@@ -291,19 +295,31 @@ async def main(config):
 
             # ── Hot-reload model when the user picks a different one ──
             new_model_name = stream_settings.get('model', config.current_model_name)
-            if new_model_name and new_model_name != 'none' and new_model_name != config.current_model_name:
-                logger.info('Model changed: %s -> %s — reloading...',
-                            config.current_model_name, new_model_name)
-                try:
-                    model = getModel(new_model_name, config)
-                    config.current_model_name = new_model_name
+            if new_model_name != config.current_model_name:
+                if new_model_name == 'none' or not new_model_name:
+                    # Switching to "none" — unload model and update status
+                    logger.info('Model changed: %s -> none — unloading...',
+                                config.current_model_name)
+                    model = {}
                     config.model = model
-                    slicer = None  # force SAHI re-init with new model
-                    logger.info('Model reloaded: %s, native input: %s',
-                                config.current_model_name, model.get('native_input_wh', 'unknown'))
+                    config.current_model_name = 'none'
+                    slicer = None
                     write_backend_status(config.cam_stream, model, detect_backend=config.detect_backend)
-                except Exception as e:
-                    logger.error('Failed to reload model %s: %s', new_model_name, e, exc_info=True)
+                    logger.info('Model unloaded, inference disabled')
+                else:
+                    # Switching to a real model — load it
+                    logger.info('Model changed: %s -> %s — reloading...',
+                                config.current_model_name, new_model_name)
+                    try:
+                        model = getModel(new_model_name, config)
+                        config.current_model_name = new_model_name
+                        config.model = model
+                        slicer = None  # force SAHI re-init with new model
+                        logger.info('Model reloaded: %s, native input: %s',
+                                    config.current_model_name, model.get('native_input_wh', 'unknown'))
+                        write_backend_status(config.cam_stream, model, detect_backend=config.detect_backend)
+                    except Exception as e:
+                        logger.error('Failed to reload model %s: %s', new_model_name, e, exc_info=True)
 
             # Dynamically update class filter from stream settings
             settings_class_list = stream_settings.get('classList', None)
