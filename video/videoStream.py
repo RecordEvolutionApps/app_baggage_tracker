@@ -256,6 +256,10 @@ async def main(config):
             logger.info('GStreamer VideoWriter opened for %s on port %d', config.cam_stream, config.port)
         _frame_write_count = 0
 
+        # Reset publish timers now that GStreamer init (which can take seconds) is done
+        start_time = time.time()
+        start_time1 = time.time()
+
         # SAHI slicer (created lazily)
         slicer = None  # created lazily by run_sahi_inference()
 
@@ -282,9 +286,76 @@ async def main(config):
         _inf_log_interval = 5.0  # log inference timing every 5s
         _last_inf_log = 0.0      # force first log immediately
 
+        # Periodic model-state diagnostic log (every 30s)
+        _model_diag_interval = 30.0
+        _last_model_diag = 0.0
+
         while cap.isOpened():
             prof.begin()
             await sleep(0)  # Give other tasks time to run
+
+            # ── Live source switch (user changed camera in the UI) ───
+            if config._pending_source is not None:
+                pending = config._pending_source
+                config._pending_source = None
+                new_device = pending['device']
+                logger.info('Switching video source: %s -> %s', config.device, new_device)
+
+                # Update requested resolution if the new source specifies one
+                if pending.get('width'):
+                    config.requested_width = pending['width']
+                    config.resolution_x = pending['width']
+                if pending.get('height'):
+                    config.requested_height = pending['height']
+                    config.resolution_y = pending['height']
+
+                cap.release()
+                config.device = new_device
+                cap = setVideoSource(new_device, config)
+
+                # Retry a few times if source doesn't open immediately
+                _sw_retries = 0
+                while not cap.isOpened() and _sw_retries < 6:
+                    _sw_retries += 1
+                    logger.warning('New source not open, retrying in 3s (%d/6)...', _sw_retries)
+                    await sleep(3)
+                    cap = setVideoSource(new_device, config)
+
+                if not cap.isOpened():
+                    logger.error('Failed to open new source: %s', new_device)
+                    continue
+
+                # Re-open the GStreamer writer if resolution changed
+                if hasattr(out, 'release'):
+                    out.release()
+                out = open_video_writer(config)
+                logger.info('Source switched to %s (%dx%d)', new_device,
+                            config.resolution_x, config.resolution_y)
+
+                # Write updated resolution status file
+                with open(_resolution_file, 'w') as _rf:
+                    json.dump({'width': config.resolution_x, 'height': config.resolution_y}, _rf)
+
+                # Reload masks for the new resolution
+                if config.saved_masks:
+                    from masks import prepMasks
+                    full_cfg = config._full_config
+                    processing = full_cfg.get('processing', {})
+                    masks_data = processing.get('masks', full_cfg.get('masks', {}))
+                    config.saved_masks[:] = prepMasks(masks_data, config.resolution_x, config.resolution_y)
+
+                # Reset frame-pacing and image-source state
+                _is_image_source = isinstance(cap, ImageCapture)
+                _img_cached_frame = None
+                _img_inference_fps = 0.0
+                _img_inference_ts = ''
+                loop_start = time.monotonic()
+                next_frame_time = time.monotonic() + frame_interval
+                _frame_write_count = 0
+                slicer = None  # force SAHI re-init
+                publisher.publish_stream(status='started')
+                continue
+
             elapsed_time = time.time() - start_time
             elapsed_time1 = time.time() - start_time1
 
@@ -292,6 +363,16 @@ async def main(config):
 
             skip_inference = stream_settings.get('model', '') == 'none'
             prof.mark('setup')
+
+            # ── Periodic model-state diagnostic ──────────────────────
+            _now_mono = time.monotonic()
+            if _now_mono - _last_model_diag >= _model_diag_interval:
+                _last_model_diag = _now_mono
+                logger.info('[model-state] current_model_name=%s, '
+                            'stream_settings.model=%s, skip_inference=%s',
+                            config.current_model_name,
+                            stream_settings.get('model', '<not set>'),
+                            skip_inference)
 
             # ── Hot-reload model when the user picks a different one ──
             new_model_name = stream_settings.get('model', config.current_model_name)
@@ -512,12 +593,42 @@ async def main(config):
             prof.mark('gst_write')
             prof.end_loop()
 
-        logger.warning('Video source is not open: %s', device)
+        logger.warning('Video source is not open — waiting for source change...')
         cap.release()
-        try:
-            cv2.destroyAllWindows()
-        except cv2.error:
-            logger.debug('cv2.destroyAllWindows() not supported in headless mode')
+        while config._pending_source is None:
+            await sleep(1)
+
+        # A new source was requested — apply it and restart the main loop
+        pending = config._pending_source
+        config._pending_source = None
+        new_device = pending['device']
+        logger.info('Applying pending source: %s', new_device)
+
+        if pending.get('width'):
+            config.requested_width = pending['width']
+            config.resolution_x = pending['width']
+        if pending.get('height'):
+            config.requested_height = pending['height']
+            config.resolution_y = pending['height']
+
+        config.device = new_device
+        cap = setVideoSource(new_device, config)
+
+        _sw_retries = 0
+        while not cap.isOpened() and _sw_retries < 6:
+            _sw_retries += 1
+            logger.warning('New source not open, retrying in 3s (%d/6)...', _sw_retries)
+            await sleep(3)
+            cap = setVideoSource(new_device, config)
+
+        # Write updated resolution status file
+        with open(_resolution_file, 'w') as _rf:
+            json.dump({'width': config.resolution_x, 'height': config.resolution_y}, _rf)
+
+        publisher.publish_stream(status='started')
+
+        # Re-enter the main loop with the new source
+        return await main(config)
     except Exception as e:
         logger.critical('Fatal error in video loop: %s', e, exc_info=True)
         sys.exit(1)

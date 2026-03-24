@@ -18,6 +18,22 @@ _INFERENCE_KEYS = frozenset([
 # Processing keys (inside 'processing' section)
 _PROCESSING_KEYS = frozenset(['classList', 'classNames'])
 
+# Source fields that require re-opening the video capture
+_SOURCE_FIELDS = ('type', 'path', 'username', 'password', 'width', 'height')
+
+
+def _resolve_device(source: dict) -> str:
+    """Convert a source config dict into a device string (same logic as the TS backend)."""
+    src_type = source.get('type', '')
+    path = source.get('path', '') or ''
+    if src_type == 'IP' and path and '://' in path:
+        protocol, rest = path.split('://', 1)
+        username = source.get('username', '')
+        password = source.get('password', '')
+        userpw = (username + (':' + password if password else '') + '@') if username else ''
+        return f'{protocol}://{userpw}{rest}'
+    return path
+
 
 async def watchStreamConfig(ironflock, config: StreamConfig, on_change=None):
     """Subscribe to the ``streams`` table for live config updates.
@@ -31,13 +47,27 @@ async def watchStreamConfig(ironflock, config: StreamConfig, on_change=None):
     def _on_row(row):
         nonlocal last_config_repr, last_masks_repr
 
-        # Filter: only process rows for our stream
+        try:
+            _on_row_inner(row)
+        except Exception:
+            logger.error('[watcher] Unhandled error in _on_row callback', exc_info=True)
+
+    def _on_row_inner(row):
+        nonlocal last_config_repr, last_masks_repr
+
         row_stream = row.get('stream_name', '')
+        row_status = row.get('status', '')
+        logger.info('[watcher] Row received: stream=%s status=%s (our stream=%s)',
+                    row_stream, row_status, config.cam_stream)
+
+        # Filter: only process rows for our stream
         if row_stream != config.cam_stream:
+            logger.debug('[watcher] Ignoring row for different stream: %s', row_stream)
             return
 
         # Ignore deleted rows
         if row.get('deleted'):
+            logger.info('[watcher] Ignoring deleted row for %s', row_stream)
             return
 
         try:
@@ -46,6 +76,19 @@ async def watchStreamConfig(ironflock, config: StreamConfig, on_change=None):
         except Exception as e:
             logger.warning('[watcher] Failed to parse stream_config: %s', e)
             return
+
+        # ── Source change detection ─────────────────────────────
+        source = data.get('source', {})
+        old_source = config._full_config.get('source', {})
+        if any(source.get(k) != old_source.get(k) for k in _SOURCE_FIELDS):
+            new_device = _resolve_device(source)
+            if new_device != config.device:
+                logger.info('[watcher] Source changed: %s -> %s', config.device, new_device)
+                config._pending_source = {
+                    'device': new_device,
+                    'width': source.get('width'),
+                    'height': source.get('height'),
+                }
 
         # ── Settings update ─────────────────────────────────────
         # Keep full config blob in sync for the publisher
@@ -65,6 +108,30 @@ async def watchStreamConfig(ironflock, config: StreamConfig, on_change=None):
                 new_settings[k] = processing[k]
             elif k in data:  # flat fallback
                 new_settings[k] = data[k]
+
+        # Log extracted model value for diagnostics
+        if 'model' in new_settings:
+            logger.info('[watcher] Extracted model=%s (from inference=%s, flat=%s), '
+                        'current stream_settings.model=%s, current_model_name=%s',
+                        new_settings['model'],
+                        'model' in inference,
+                        'model' in data and 'model' not in inference,
+                        config.stream_settings.get('model'),
+                        config.current_model_name)
+        else:
+            logger.info('[watcher] No model key found in incoming config '
+                        '(inference keys: %s, top-level keys: %s)',
+                        list(inference.keys()), [k for k in data.keys()
+                         if k in _INFERENCE_KEYS])
+
+        # Debug: log what classList the watcher extracted
+        if 'classList' in new_settings:
+            logger.debug('[watcher] Extracted classList=%s from %s (nested=%s, flat=%s)',
+                         new_settings['classList'],
+                         config.cam_stream,
+                         'classList' in processing,
+                         'classList' in data and 'classList' not in processing)
+
         changed = {}
         for k, v in new_settings.items():
             old_v = config.stream_settings.get(k)

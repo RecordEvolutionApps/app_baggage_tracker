@@ -231,6 +231,10 @@ def setVideoSource(device: str, config: StreamConfig):
                      config.resolution_x, config.resolution_y)
     else:
         # USB camera
+        if not device:
+            logger.warning('No device/URL configured – waiting for source to be set')
+            cap = cv2.VideoCapture()  # unopened placeholder
+            return cap
         if device.startswith('/dev/video'):
             dev_index = int(device.replace('/dev/video', ''))
         elif device[-1].isdigit():

@@ -62,6 +62,10 @@ class StreamConfig:
     stream_settings: Dict[str, Any] = field(default_factory=dict)
     _full_config: Dict[str, Any] = field(default_factory=dict)
 
+    # Source switch: set by the watcher when the user changes the video source.
+    # The main loop checks this and re-opens the capture without restarting.
+    _pending_source: Dict[str, Any] | None = field(default=None, repr=False)
+
     # Live model bundle (set after getModel())
     model: Dict[str, Any] = field(default_factory=dict)
 

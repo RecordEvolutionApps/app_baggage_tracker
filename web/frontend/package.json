@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@material/web": "^2.4.1",
-    "ironflock": "^1.2.3",
+    "ironflock": "^1.2.4",
     "lit": "^3.3.2",
     "mediasoup-client": "^3.18.7",
     "pretty-bytes": "^7.1.0"

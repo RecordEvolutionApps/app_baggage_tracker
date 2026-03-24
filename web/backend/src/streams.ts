@@ -8,7 +8,6 @@ import {
     writeStreamConfig,
     deleteStreamConfig,
     listStreamConfigs,
-    sourceChanged,
     normalizeStreamConfig,
     waitForService,
     migrateFromLegacy,
@@ -292,7 +291,7 @@ export async function handleUpdateStream(ctx: Context) {
         incoming.source.type = 'Demo'
     }
 
-    // Read previous config to detect source changes
+    // Read previous config for defaults (masks fallback)
     const prev = await readStreamConfig(decoded)
 
     // For USB cameras, resolve device info from the video API
@@ -316,18 +315,6 @@ export async function handleUpdateStream(ctx: Context) {
     // Write the full config to the backend table
     const status = incoming.stopped ? 'stopped' : 'configured'
     await writeStreamConfig(decoded, incoming, status)
-
-    // Determine if we need to restart the video process
-    const needsRestart = sourceChanged(prev, incoming)
-
-    if (needsRestart && prev) {
-        console.log(`Source changed for ${decoded}, restarting video process`)
-        await killVideoStream(prev.source?.path ?? '', decoded, 'stop')
-    }
-
-    if (needsRestart && incoming.source.path && !incoming.stopped) {
-        startVideoStream(incoming, decoded)
-    }
 
     return { status: 'ok', camStream: decoded }
 }

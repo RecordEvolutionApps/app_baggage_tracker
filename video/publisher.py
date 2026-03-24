@@ -17,6 +17,7 @@ from config import StreamConfig
 logger = logging.getLogger('publisher')
 
 _publish_pool = ThreadPoolExecutor(max_workers=1)
+_io_pool = ThreadPoolExecutor(max_workers=1)
 
 
 def _encode_image(frame):
@@ -83,7 +84,20 @@ class Publisher:
     def publish_stream(self, *, status: str, deleted: bool = False):
         """Publish stream info to the ``streams`` table."""
         now = datetime.now().astimezone().isoformat()
-        full = {**self._config._full_config, **self._config.stream_settings}
+        # Build a properly nested config (don't flatten stream_settings into the
+        # top level — that creates stale duplicate keys the frontend may read back).
+        full = dict(self._config._full_config)
+        inference = dict(full.get('inference', {}))
+        processing = dict(full.get('processing', {}))
+        for k in ('model', 'useSahi', 'useSmoothing', 'confidence', 'frameBuffer',
+                  'nmsIou', 'sahiIou', 'overlapRatio'):
+            if k in self._config.stream_settings:
+                inference[k] = self._config.stream_settings[k]
+        for k in ('classList', 'classNames'):
+            if k in self._config.stream_settings:
+                processing[k] = self._config.stream_settings[k]
+        full['inference'] = inference
+        full['processing'] = processing
         stream_config = json.dumps(full)
         payload = {
             "tsp": now,
@@ -110,6 +124,7 @@ class StubIronFlock:
 
     def __init__(self):
         self._subs: dict[str, list] = {}
+        self._poll_tasks: set = set()  # prevent GC of poll tasks
 
     def _file_path(self, table: str) -> str:
         return os.path.join(self._STUB_DIR, f'{table}.json')
@@ -129,6 +144,18 @@ class StubIronFlock:
         os.replace(tmp, self._file_path(table))
 
     async def append_to_table(self, table, data, **kwargs):
+        loop = get_event_loop()
+        row = await loop.run_in_executor(_io_pool, self._append_sync, table, data)
+
+        # Fire local subscription callbacks (skip own if exclude_me)
+        exclude_me = kwargs.get('exclude_me', False)
+        if not exclude_me:
+            for cb in self._subs.get(table, []):
+                clean = {k: v for k, v in row.items() if k not in ('_rowId', '_publisher')}
+                cb(clean)
+
+    def _append_sync(self, table, data):
+        """Synchronous append — runs in a thread pool to avoid blocking the event loop."""
         rows = self._read_table(table)
         max_id = max((r.get('_rowId', 0) for r in rows), default=0)
         row = {**data, '_rowId': max_id + 1, '_publisher': 'py', 'latest_flag': True}
@@ -141,13 +168,7 @@ class StubIronFlock:
 
         rows.append(row)
         self._write_table(table, rows)
-
-        # Fire local subscription callbacks (skip own if exclude_me)
-        exclude_me = kwargs.get('exclude_me', False)
-        if not exclude_me:
-            for cb in self._subs.get(table, []):
-                clean = {k: v for k, v in row.items() if k not in ('_rowId', '_publisher')}
-                cb(clean)
+        return row
 
     async def getHistory(self, table, params=None):
         rows = self._read_table(table)
@@ -174,23 +195,67 @@ class StubIronFlock:
         self._subs[table].append(callback)
 
         # Poll the file for cross-process changes (rows published by the TS web backend)
-        rows = self._read_table(table)
+        loop = get_event_loop()
+        rows = await loop.run_in_executor(_io_pool, self._read_table, table)
         last_id = max((r.get('_rowId', 0) for r in rows), default=0)
+        logger.info('[StubIronFlock] subscribe_to_table(%s): initial last_id=%d, %d rows',
+                    table, last_id, len(rows))
+
+        # Periodic heartbeat interval (seconds) — log poll health even when idle
+        _heartbeat_interval = 30.0
 
         async def _poll():
             nonlocal last_id
+            _last_heartbeat = 0.0
+            _poll_count = 0
             while True:
-                await asyncio.sleep(1.5)
+                await asyncio.sleep(1.0)
+                _poll_count += 1
                 try:
-                    current = self._read_table(table)
+                    current = await loop.run_in_executor(_io_pool, self._read_table, table)
+                    max_id_in_file = max((r.get('_rowId', 0) for r in current), default=0)
                     new_rows = [r for r in current
                                 if r.get('_rowId', 0) > last_id and r.get('_publisher') != 'py']
+
+                    # Periodic heartbeat so we can confirm the poll is alive
+                    import time as _time
+                    _now = _time.monotonic()
+                    if _now - _last_heartbeat >= _heartbeat_interval:
+                        _last_heartbeat = _now
+                        logger.info('[StubIronFlock] poll(%s) alive: poll_count=%d, '
+                                    'last_id=%d, max_id_in_file=%d, total_rows=%d, '
+                                    'new_rows=%d',
+                                    table, _poll_count, last_id, max_id_in_file,
+                                    len(current), len(new_rows))
+
                     if new_rows:
-                        last_id = max(r.get('_rowId', 0) for r in current)
+                        logger.info('[StubIronFlock] poll(%s): %d new row(s) detected '
+                                    '(last_id was %d, max_id_in_file=%d)',
+                                    table, len(new_rows), last_id, max_id_in_file)
+                        # Call callbacks first — only advance last_id if they succeed,
+                        # so a failed callback doesn't permanently drop the update.
                         for r in new_rows:
                             clean = {k: v for k, v in r.items() if k not in ('_rowId', '_publisher')}
                             callback(clean)
-                except Exception:
-                    pass
+                        last_id = max(r.get('_rowId', 0) for r in current)
+                    else:
+                        # Advance last_id past py-only rows so we don't re-scan them
+                        if max_id_in_file > last_id:
+                            last_id = max_id_in_file
+                except Exception as exc:
+                    logger.warning('[StubIronFlock] poll error for %s: %s', table, exc,
+                                   exc_info=True)
 
-        asyncio.get_event_loop().create_task(_poll())
+        task = loop.create_task(_poll())
+        self._poll_tasks.add(task)
+        task.add_done_callback(lambda t: self._poll_tasks.discard(t))
+        # Log if the poll task ends unexpectedly
+        def _on_poll_done(t):
+            if t.cancelled():
+                logger.warning('[StubIronFlock] poll task for %s was cancelled', table)
+            elif t.exception():
+                logger.error('[StubIronFlock] poll task for %s crashed: %s',
+                             table, t.exception(), exc_info=t.exception())
+            else:
+                logger.warning('[StubIronFlock] poll task for %s ended unexpectedly', table)
+        task.add_done_callback(_on_poll_done)
