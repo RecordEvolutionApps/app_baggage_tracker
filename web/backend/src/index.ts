@@ -90,7 +90,7 @@ Bun.serve({
       });
       upstream.addEventListener('message', (ev: MessageEvent) => {
         const text = typeof ev.data === 'string' ? ev.data : JSON.stringify(ev.data);
-        try { const m = JSON.parse(text); console.log(`[ws-proxy] ← mediasoup:`, m.type || m.error || '(unknown)', m.camId || ''); } catch {}
+        try { const m = JSON.parse(text); if (m.type !== 'keyframeRequested') console.log(`[ws-proxy] ← mediasoup:`, m.type || m.error || '(unknown)', m.camId || ''); } catch {}
         ws.sendText(text);
       });
       upstream.addEventListener('close', (ev) => {
@@ -108,7 +108,7 @@ Bun.serve({
     },
     message(ws, message) {
       const str = typeof message === 'string' ? message : message.toString();
-      try { const m = JSON.parse(str); console.log(`[ws-proxy] → mediasoup:`, m.type || '(unknown)', m.camId || ''); } catch {}
+      try { const m = JSON.parse(str); if (m.type !== 'requestKeyFrame') console.log(`[ws-proxy] → mediasoup:`, m.type || '(unknown)', m.camId || ''); } catch {}
       const upstream = upstreamMap.get(ws);
       const buffer = bufferMap.get(ws);
       if (upstream && upstream.readyState === WebSocket.OPEN) {

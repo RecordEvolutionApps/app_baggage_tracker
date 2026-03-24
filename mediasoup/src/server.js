@@ -142,9 +142,13 @@ async function createCameraIngest(camId, rtpPort) {
     },
   });
 
-  // Log PlainTransport events only at debug level
+  // Log when the first RTP packet arrives from the video pipeline
+  let firstRtp = true;
   plainTransport.on('tuple', (tuple) => {
-    console.debug(`[mediasoup] PlainTransport ${camId} tuple: ${JSON.stringify(tuple)}`);
+    if (firstRtp) {
+      firstRtp = false;
+      console.log(`[mediasoup] First RTP received for ${camId} from ${tuple.remoteIp}:${tuple.remotePort}`);
+    }
   });
 
   cameras.set(camId, { plainTransport, producer });
@@ -247,12 +251,17 @@ function startSignaling() {
       let msg;
       try { msg = JSON.parse(raw); } catch { return; }
 
-      console.log(`[signaling] ← ${msg.type}`, msg.camId || '', `(id=${msg.id})`);
+      const isKeyFrame = msg.type === 'requestKeyFrame';
+      if (!isKeyFrame) {
+        console.log(`[signaling] ← ${msg.type}`, msg.camId || '', `(id=${msg.id})`);
+      }
 
       try {
         const reply = await handleMessage(msg, ws, consumerTransports, consumers);
         if (reply) {
-          console.log(`[signaling] → ${reply.type}`, reply.camId || '', `(id=${msg.id})`);
+          if (!isKeyFrame) {
+            console.log(`[signaling] → ${reply.type}`, reply.camId || '', `(id=${msg.id})`);
+          }
           ws.send(JSON.stringify({ id: msg.id, ...reply }));
         }
       } catch (err) {

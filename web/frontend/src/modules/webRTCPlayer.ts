@@ -392,16 +392,17 @@ async function subscribeToCamera(
       return;
     }
     void sendRequest({ type: 'requestKeyFrame', camId }).catch(() => {});
-  }, 1000);
+  }, 2000);
   keyframeTimers.set(camId, timerId);
 
   // If no frames arrive shortly after subscribe, resubscribe.
+  // GStreamer pipeline init on ARM can take 20+ seconds, so allow enough time.
   const noFramesId = window.setTimeout(() => {
     if (forSessionId !== sessionId) return;
     if (videoEl.videoWidth > 0 || videoEl.videoHeight > 0) return;
-
+    console.warn(`[mediasoup] No frames received for ${camId} after 30s — resubscribing`);
     scheduleResubscribe(camId, videoEl, forSessionId);
-  }, 10000);
+  }, 30000);
   noFramesTimers.set(camId, noFramesId);
 
   // resumeConsumer already sent above
