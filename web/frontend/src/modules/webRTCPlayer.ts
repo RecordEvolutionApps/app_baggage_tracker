@@ -160,21 +160,25 @@ async function initMediasoup(videoPlayers: VideoPlayers): Promise<void> {
     console.log('[mediasoup] connecting websocket', signalingUrl);
     ws = new WebSocket(signalingUrl);
     await new Promise<void>((resolve, reject) => {
-      ws.onopen = () => resolve();
-      ws.onerror = (e) => reject(e);
+      ws.onopen = () => { console.log('[mediasoup] WebSocket opened'); resolve(); };
+      ws.onerror = (e) => { console.error('[mediasoup] WebSocket connection error', e); reject(e); };
     });
     ws.onmessage = onWsMessage;
 
     // 1. Get router RTP capabilities
+    console.log('[mediasoup] requesting router RTP capabilities');
     const { data: routerRtpCapabilities } = await sendRequest({
       type: 'getRouterRtpCapabilities',
     });
+    console.log('[mediasoup] got router RTP capabilities, codecs:', routerRtpCapabilities?.codecs?.length);
 
     // 2. Create mediasoup-client Device and load capabilities
     device = new Device();
     await device.load({ routerRtpCapabilities });
+    console.log('[mediasoup] device loaded, can produce video:', device.canProduce('video'));
 
     // 3. For each camera that has a video element, subscribe (with retry)
+    console.log('[mediasoup] subscribing to cameras:', Object.keys(videoPlayers).filter(k => videoPlayers[k]));
     for (const [camId, videoEl] of Object.entries(videoPlayers)) {
       if (!videoEl) continue;
       void subscribeUntilReady(camId, videoEl, currentSessionId);
@@ -208,15 +212,20 @@ async function subscribeUntilReady(
     if (subscribeTokens.get(camId) !== token) return;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     try {
+      console.log(`[mediasoup] subscribe ${camId} attempt ${attempt}/${MAX_SUBSCRIBE_ATTEMPTS}`);
       await subscribeToCamera(camId, videoEl, forSessionId, token);
+      console.log(`[mediasoup] subscribe ${camId} succeeded on attempt ${attempt}`);
       return; // success
     } catch (err: any) {
       const isNotFound = err?.message?.includes('not found');
       const isWsClosed = err?.message?.includes('WebSocket not open');
       if ((isNotFound || isWsClosed) && attempt < MAX_SUBSCRIBE_ATTEMPTS) {
+        if (attempt <= 5 || attempt % 10 === 0) {
+          console.log(`[mediasoup] subscribe ${camId} attempt ${attempt}: ${err?.message} — retrying…`);
+        }
         await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
       } else {
-        console.warn('[mediasoup] subscribe failed for', camId, err);
+        console.warn('[mediasoup] subscribe failed for', camId, `after ${attempt} attempts:`, err);
         return;
       }
     }
@@ -264,8 +273,8 @@ async function subscribeToCamera(
   });
 
   transport.on('connectionstatechange', (state: string) => {
+    console.log(`[mediasoup] Transport ${camId} connectionState: ${state}`);
     if (state === 'failed' || state === 'disconnected') {
-      console.warn(`[mediasoup] Transport ${camId} ${state}`);
       scheduleResubscribe(camId, videoEl, forSessionId);
     }
   });
@@ -312,10 +321,12 @@ async function subscribeToCamera(
   });
 
   // 6. Attach to the video element
+  console.log(`[mediasoup] Attaching consumer track to video element for ${camId}, track state: ${consumer.track.readyState}, muted: ${consumer.track.muted}`);
   const stream = new MediaStream([consumer.track]);
   videoEl.srcObject = stream;
 
   videoEl.onloadedmetadata = () => {
+    console.log(`[mediasoup] ${camId} loadedmetadata: ${videoEl.videoWidth}x${videoEl.videoHeight}`);
     const noFramesId = noFramesTimers.get(camId);
     if (noFramesId) {
       clearTimeout(noFramesId);
@@ -325,7 +336,9 @@ async function subscribeToCamera(
   };
 
   // 7. Tell server we're ready to receive
+  console.log(`[mediasoup] Resuming consumer for ${camId}`);
   await sendRequest({ type: 'resumeConsumer', camId });
+  console.log(`[mediasoup] Consumer resumed for ${camId}`);
 
   videoEl.play().catch(() => {});
 

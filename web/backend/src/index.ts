@@ -77,24 +77,30 @@ Bun.serve({
   port: 1100,
   websocket: {
     open(ws) {
+      console.log(`[ws-proxy] Browser connected, opening upstream to ${MEDIASOUP_WS}`);
       const upstream = new WebSocket(MEDIASOUP_WS);
       upstreamMap.set(ws, upstream);
       const buffer: string[] = [];
       bufferMap.set(ws, buffer);
 
       upstream.addEventListener('open', () => {
+        console.log(`[ws-proxy] Upstream to mediasoup opened (buffered ${buffer.length} msgs)`);
         for (const msg of buffer) upstream.send(msg);
         buffer.length = 0;
       });
       upstream.addEventListener('message', (ev: MessageEvent) => {
-        ws.sendText(typeof ev.data === 'string' ? ev.data : JSON.stringify(ev.data));
+        const text = typeof ev.data === 'string' ? ev.data : JSON.stringify(ev.data);
+        try { const m = JSON.parse(text); console.log(`[ws-proxy] ← mediasoup:`, m.type || m.error || '(unknown)', m.camId || ''); } catch {}
+        ws.sendText(text);
       });
-      upstream.addEventListener('close', () => {
+      upstream.addEventListener('close', (ev) => {
+        console.log(`[ws-proxy] Upstream closed (code=${(ev as CloseEvent).code}, reason=${(ev as CloseEvent).reason})`);
         upstreamMap.delete(ws);
         bufferMap.delete(ws);
         try { ws.close(); } catch {}
       });
-      upstream.addEventListener('error', () => {
+      upstream.addEventListener('error', (ev) => {
+        console.error(`[ws-proxy] Upstream error:`, ev);
         upstreamMap.delete(ws);
         bufferMap.delete(ws);
         try { ws.close(); } catch {}
@@ -102,15 +108,20 @@ Bun.serve({
     },
     message(ws, message) {
       const str = typeof message === 'string' ? message : message.toString();
+      try { const m = JSON.parse(str); console.log(`[ws-proxy] → mediasoup:`, m.type || '(unknown)', m.camId || ''); } catch {}
       const upstream = upstreamMap.get(ws);
       const buffer = bufferMap.get(ws);
       if (upstream && upstream.readyState === WebSocket.OPEN) {
         upstream.send(str);
       } else if (buffer) {
+        console.log(`[ws-proxy] Upstream not ready, buffering message`);
         buffer.push(str);
+      } else {
+        console.warn(`[ws-proxy] No upstream and no buffer — dropping message`);
       }
     },
-    close(ws) {
+    close(ws, code, reason) {
+      console.log(`[ws-proxy] Browser disconnected (code=${code}, reason=${reason})`);
       const upstream = upstreamMap.get(ws);
       if (upstream) {
         upstream.close();
@@ -122,7 +133,9 @@ Bun.serve({
   fetch(req, server) {
     const url = new URL(req.url);
     if (url.pathname === '/ws') {
+      console.log(`[ws-proxy] WS upgrade request from ${req.headers.get('x-forwarded-for') || 'direct'}`);
       if (server.upgrade(req)) return undefined;
+      console.error(`[ws-proxy] WS upgrade FAILED`);
       return new Response('WebSocket upgrade failed', { status: 400 });
     }
     return app.fetch(req);

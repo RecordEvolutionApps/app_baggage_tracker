@@ -230,7 +230,7 @@ function startSignaling() {
   const wss = new WebSocketServer({ server: httpServer });
 
   wss.on('connection', (ws) => {
-    console.log('[signaling] New browser connection');
+    console.log('[signaling] New browser connection, active cameras:', [...cameras.keys()]);
     wsClients.add(ws);
 
     // Per-connection state
@@ -241,15 +241,18 @@ function startSignaling() {
       let msg;
       try { msg = JSON.parse(raw); } catch { return; }
 
+      console.log(`[signaling] ← ${msg.type}`, msg.camId || '', `(id=${msg.id})`);
+
       try {
         const reply = await handleMessage(msg, ws, consumerTransports, consumers);
         if (reply) {
+          console.log(`[signaling] → ${reply.type}`, reply.camId || '', `(id=${msg.id})`);
           ws.send(JSON.stringify({ id: msg.id, ...reply }));
         }
       } catch (err) {
         const isNotFound = err.message?.includes('not found');
         if (isNotFound) {
-          console.debug(`[signaling] ${msg.type}: ${err.message}`);
+          console.log(`[signaling] ${msg.type}: ${err.message}`);
         } else {
           console.error(`[signaling] Error handling "${msg.type}":`, err);
         }
@@ -258,7 +261,7 @@ function startSignaling() {
     });
 
     ws.on('close', () => {
-      console.log('[signaling] Browser disconnected, cleaning up');
+      console.log('[signaling] Browser disconnected, cleaning up transports:', [...consumerTransports.keys()]);
       wsClients.delete(ws);
       for (const consumer of consumers.values()) consumer.close();
       for (const transport of consumerTransports.values()) transport.close();
