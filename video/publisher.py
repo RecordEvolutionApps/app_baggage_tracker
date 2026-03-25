@@ -98,6 +98,40 @@ class Publisher:
                 processing[k] = self._config.stream_settings[k]
         full['inference'] = inference
         full['processing'] = processing
+
+        # ── Always stamp source with device path + actual resolution ────────
+        # Guards against two failure modes:
+        # 1. _full_config is empty (race on first start — no rows found in table)
+        #    → without this, publish_stream would write {"inference":{}, "processing":{}}
+        #      with no "source" section, clobbering the web-backend-written config and
+        #      causing the frontend to show "No video source configured".
+        # 2. Frontend wrote the config without width/height (e.g. Demo type never
+        #    persists those) → resolution would fall back to 640×480 in the frontend.
+        device = self._config.device
+        src = dict(full.get('source') or {})
+        if not src.get('path'):
+            # Reconstruct the source section from the CLI device string so we
+            # never publish a row that the frontend reads as "source not configured".
+            if device.startswith('demoVideo'):
+                src_type = 'Demo'
+            elif 'youtu' in device:
+                src_type = 'YouTube'
+            elif device.startswith('/dev/') or (device.isdigit() and device):
+                src_type = 'USB'
+            else:
+                src_type = 'IP'
+            src.setdefault('type', src_type)
+            src.setdefault('id', device)
+            src['path'] = device
+        # Always write the measured resolution so the frontend never shows a
+        # stale or defaulted 640×480 — cfg.resolution_x/y reflects the actual
+        # capture size set by setVideoSource() at startup and updated on every
+        # live source switch.
+        src['width'] = self._config.resolution_x
+        src['height'] = self._config.resolution_y
+        full['source'] = src
+        # ────────────────────────────────────────────────────────────────────
+
         stream_config = json.dumps(full)
         payload = {
             "tsp": now,
@@ -124,7 +158,6 @@ class StubIronFlock:
 
     def __init__(self):
         self._subs: dict[str, list] = {}
-        self._poll_tasks: set = set()  # prevent GC of poll tasks
 
     def _file_path(self, table: str) -> str:
         return os.path.join(self._STUB_DIR, f'{table}.json')
@@ -194,31 +227,36 @@ class StubIronFlock:
             self._subs[table] = []
         self._subs[table].append(callback)
 
-        # Poll the file for cross-process changes (rows published by the TS web backend)
-        loop = get_event_loop()
-        rows = await loop.run_in_executor(_io_pool, self._read_table, table)
+        # Read initial watermark synchronously (we're already in an async context but
+        # this is a tiny file read — acceptable).
+        rows = self._read_table(table)
         last_id = max((r.get('_rowId', 0) for r in rows), default=0)
         logger.info('[StubIronFlock] subscribe_to_table(%s): initial last_id=%d, %d rows',
                     table, last_id, len(rows))
 
-        # Periodic heartbeat interval (seconds) — log poll health even when idle
+        # ── Real background thread (not asyncio) ──────────────────────────
+        # Running the poll in a threading.Thread means it can update
+        # config.stream_settings while the inference loop is blocking the
+        # asyncio event loop.  The watcher callback only does dict mutations
+        # which are safe under CPython's GIL.
+        import threading
+        import time as _time
+
         _heartbeat_interval = 30.0
 
-        async def _poll():
+        def _poll_thread():
             nonlocal last_id
             _last_heartbeat = 0.0
             _poll_count = 0
             while True:
-                await asyncio.sleep(1.0)
+                _time.sleep(1.0)
                 _poll_count += 1
                 try:
-                    current = await loop.run_in_executor(_io_pool, self._read_table, table)
+                    current = self._read_table(table)
                     max_id_in_file = max((r.get('_rowId', 0) for r in current), default=0)
                     new_rows = [r for r in current
                                 if r.get('_rowId', 0) > last_id and r.get('_publisher') != 'py']
 
-                    # Periodic heartbeat so we can confirm the poll is alive
-                    import time as _time
                     _now = _time.monotonic()
                     if _now - _last_heartbeat >= _heartbeat_interval:
                         _last_heartbeat = _now
@@ -232,30 +270,18 @@ class StubIronFlock:
                         logger.info('[StubIronFlock] poll(%s): %d new row(s) detected '
                                     '(last_id was %d, max_id_in_file=%d)',
                                     table, len(new_rows), last_id, max_id_in_file)
-                        # Call callbacks first — only advance last_id if they succeed,
-                        # so a failed callback doesn't permanently drop the update.
                         for r in new_rows:
                             clean = {k: v for k, v in r.items() if k not in ('_rowId', '_publisher')}
                             callback(clean)
                         last_id = max(r.get('_rowId', 0) for r in current)
                     else:
-                        # Advance last_id past py-only rows so we don't re-scan them
                         if max_id_in_file > last_id:
                             last_id = max_id_in_file
                 except Exception as exc:
                     logger.warning('[StubIronFlock] poll error for %s: %s', table, exc,
                                    exc_info=True)
 
-        task = loop.create_task(_poll())
-        self._poll_tasks.add(task)
-        task.add_done_callback(lambda t: self._poll_tasks.discard(t))
-        # Log if the poll task ends unexpectedly
-        def _on_poll_done(t):
-            if t.cancelled():
-                logger.warning('[StubIronFlock] poll task for %s was cancelled', table)
-            elif t.exception():
-                logger.error('[StubIronFlock] poll task for %s crashed: %s',
-                             table, t.exception(), exc_info=t.exception())
-            else:
-                logger.warning('[StubIronFlock] poll task for %s ended unexpectedly', table)
-        task.add_done_callback(_on_poll_done)
+        t = threading.Thread(target=_poll_thread, daemon=True,
+                             name=f'stub-poll-{table}')
+        t.start()
+        logger.info('[StubIronFlock] started background poll thread for %s', table)

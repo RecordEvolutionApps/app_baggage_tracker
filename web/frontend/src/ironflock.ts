@@ -16,6 +16,7 @@ class StubIronFlock {
     private _pollTimers = new Map<string, ReturnType<typeof setInterval>>()
 
     async appendToTable(table: string, data: Record<string, any> | Record<string, any>[], _options?: Record<string, any>) {
+        // camera_hubs rows are written by the backend, not the browser; ignore them silently.
         if (table !== 'streams') return
 
         // The IronFlock SDK accepts an array of rows; handle both forms
@@ -57,6 +58,21 @@ class StubIronFlock {
     }
 
     async getHistory(table: string, params?: HistoryParams): Promise<any[]> {
+        if (table === 'camera_hubs') {
+            // In DEV mode the camera hub is the local server itself.
+            // Build a synthetic row from the ironflock-config endpoint.
+            const cfg = await this._fetchJson(`${this._basepath}/api/ironflock-config`)
+            if (!cfg) return []
+            return [{
+                tsp: new Date().toISOString(),
+                devname: cfg.deviceName ?? '',
+                webpage: cfg.deviceKey ? `https://${cfg.deviceKey}-visionai-1100.app.ironflock.com` : '',
+                devicelink: '',
+                deleted: false,
+                latest_flag: true,
+            }]
+        }
+
         if (table !== 'streams') return []
 
         const filters = params?.filterAnd ?? []
@@ -78,34 +94,37 @@ class StubIronFlock {
     }
 
     async subscribeToTable(table: string, callback: (row: any) => void) {
-        if (table !== 'streams') return
+        if (table !== 'streams' && table !== 'camera_hubs') return
 
-        // Initial snapshot
-        const initial = await this.getHistory('streams')
+        // Initial snapshot — fire immediately for each existing row
+        const initial = await this.getHistory(table)
         const entry = { callback, lastSnapshot: JSON.stringify(initial) }
+        for (const row of initial) callback(row)
 
         if (!this._subs.has(table)) this._subs.set(table, [])
         this._subs.get(table)!.push(entry)
 
-        // Start polling if not already
+        // Start polling for this table if not already running
         if (!this._pollTimers.has(table)) {
             const timer = setInterval(async () => {
-                const current = await this.getHistory('streams')
+                const current = await this.getHistory(table)
                 const currentStr = JSON.stringify(current)
                 for (const sub of this._subs.get(table) ?? []) {
                     if (currentStr !== sub.lastSnapshot) {
                         const prev = JSON.parse(sub.lastSnapshot) as any[]
                         sub.lastSnapshot = currentStr
+                        // Primary key differs by table
+                        const pk = table === 'streams' ? 'stream_name' : 'devname'
                         // Fire callback for each changed/new row
                         for (const row of current) {
-                            const old = prev.find((p: any) => p.stream_name === row.stream_name)
+                            const old = prev.find((p: any) => p[pk] === row[pk])
                             if (!old || JSON.stringify(old) !== JSON.stringify(row)) {
                                 sub.callback(row)
                             }
                         }
                         // Fire for deleted rows
                         for (const old of prev) {
-                            if (!current.find((c: any) => c.stream_name === old.stream_name)) {
+                            if (!current.find((c: any) => c[pk] === old[pk])) {
                                 sub.callback({ ...old, deleted: true })
                             }
                         }

@@ -149,16 +149,34 @@ export async function readStreamConfig(camStream: string): Promise<StreamConfig 
     return null
 }
 
-/** Write a full stream config to the backend table. */
+/** Write a full stream config to the backend table.
+ *
+ * Always performs a read-modify-write: reads the current row first and
+ * deep-merges the incoming config on top of it, so no caller can accidentally
+ * drop sections it didn't touch (source, inference, or processing/masks).
+ */
 export async function writeStreamConfig(camStream: string, config: StreamConfig, status = 'configured'): Promise<void> {
+    const existing = await readStreamConfig(camStream)
+
+    const merged: StreamConfig = existing ? {
+        ...existing,
+        ...config,
+        source: { ...(existing.source ?? {}), ...(config.source ?? {}) },
+        inference: { ...(existing.inference ?? {}), ...(config.inference ?? {}) },
+        processing: {
+            ...(existing.processing ?? {}),
+            ...(config.processing ?? {}),
+        },
+    } : config
+
     const now = new Date().toISOString()
     const { deviceKey } = getIronFlockConfig()
     await ironflock.appendToTable('streams', [{
         tsp: now,
         stream_name: camStream,
         stream_url: `https://${deviceKey}-visionai-1100.app.ironflock.com/#view/${encodeURIComponent(camStream)}`,
-        cam_path: config.source?.path ?? '',
-        stream_config: JSON.stringify(config),
+        cam_path: merged.source?.path ?? '',
+        stream_config: JSON.stringify(merged),
         status,
         deleted: false,
     }], { exclude_me: true })

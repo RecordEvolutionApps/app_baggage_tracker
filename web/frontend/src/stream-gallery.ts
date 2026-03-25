@@ -3,7 +3,7 @@ import { customElement, state } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { mainStyles, Camera } from './utils.js';
 import { initMediasoup, stopMediasoup } from './modules/webRTCPlayer.js';
-import { listStreams, writeStream, subscribeStreams } from './streams-sdk.js';
+import { listStreams, writeStream, subscribeStreams, getCameraHub, subscribeCameraHub, type CameraHub } from './streams-sdk.js';
 import type { StreamConfig } from './utils.js';
 
 import '@material/web/button/filled-button.js';
@@ -19,6 +19,7 @@ export class StreamGallery extends LitElement {
   @state() declare showAddDialog: boolean;
   @state() declare newStreamName: string;
   @state() declare loadingStreams: Set<string>;
+  @state() declare cameraHub: CameraHub | null;
 
   constructor() {
     super();
@@ -26,6 +27,7 @@ export class StreamGallery extends LitElement {
     this.showAddDialog = false;
     this.newStreamName = '';
     this.loadingStreams = new Set();
+    this.cameraHub = null;
   }
 
   private basepath = window.location.protocol + '//' + window.location.host;
@@ -36,6 +38,11 @@ export class StreamGallery extends LitElement {
     subscribeStreams((config) => {
       // Re-fetch the full list on any change to keep it in sync
       this.loadStreams();
+    });
+    // Subscribe to camera hub heartbeats so device info in the header stays live.
+    getCameraHub().then(hub => { if (hub) this.cameraHub = hub; });
+    subscribeCameraHub((hub) => {
+      if (!hub.deleted) this.cameraHub = hub;
     });
   }
 
@@ -170,6 +177,37 @@ export class StreamGallery extends LitElement {
         font-family: sans-serif;
         font-weight: 600;
         font-size: 1.5rem;
+      }
+
+      .hub-info {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-family: sans-serif;
+        font-size: 0.85rem;
+        color: #5e5f61;
+      }
+
+      .hub-name {
+        font-weight: 600;
+        color: #334d5c;
+      }
+
+      .hub-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: #002e6a;
+        text-decoration: none;
+        font-size: 0.8rem;
+        border: 1px solid #c5cfe0;
+        border-radius: 4px;
+        padding: 2px 8px;
+        transition: background 0.15s;
+      }
+
+      .hub-link:hover {
+        background: rgba(0, 46, 106, 0.06);
       }
 
       .grid {
@@ -358,6 +396,21 @@ export class StreamGallery extends LitElement {
     return html`
       <div class="header">
         <h2>Video Streams</h2>
+        ${this.cameraHub ? html`
+          <div class="hub-info">
+            ${this.cameraHub.devname ? html`<span class="hub-name">${this.cameraHub.devname}</span>` : ''}
+            ${this.cameraHub.webpage ? html`
+              <a class="hub-link" href=${this.cameraHub.webpage} target="_blank" rel="noopener">
+                <md-icon style="font-size:14px">open_in_new</md-icon>
+                Web
+              </a>` : ''}
+            ${this.cameraHub.devicelink ? html`
+              <a class="hub-link" href=${this.cameraHub.devicelink} target="_blank" rel="noopener">
+                <md-icon style="font-size:14px">settings</md-icon>
+                Device
+              </a>` : ''}
+          </div>
+        ` : ''}
       </div>
 
       <div class="grid">

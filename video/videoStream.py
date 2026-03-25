@@ -241,6 +241,7 @@ async def main(config):
     publisher = config._publisher
     stream_settings = config.stream_settings
     saved_masks = config.saved_masks
+    loop = asyncio.get_event_loop()
 
     try:
         fps_monitor = sv.FPSMonitor()
@@ -493,6 +494,11 @@ async def main(config):
             prof.mark('read')
 
             # ── Run inference on this frame ──────────────────────────────
+            # Inference is dispatched to a thread executor so the asyncio event
+            # loop stays free during the blocking GPU/CPU call.  This lets WAMP
+            # callbacks (production) and the stub poll thread (LOCAL) update
+            # config.stream_settings while inference runs, so the new settings
+            # are picked up on the very next iteration instead of one cycle later.
             if skip_inference:
                 detections = empty_detections()
             else:
@@ -500,7 +506,8 @@ async def main(config):
                 _t_inference_start = time.monotonic()
                 try:
                     if use_sahi:
-                        detections, slicer, sahi_grid = run_sahi_inference(
+                        detections, slicer, sahi_grid = await loop.run_in_executor(
+                            None, run_sahi_inference,
                             frame, slicer, model, saved_masks, stream_settings, config)
                         _dt_inf = time.monotonic() - _t_inference_start
                         if _dt_inf + _t_inference_start - _last_inf_log >= _inf_log_interval:
@@ -515,7 +522,8 @@ async def main(config):
                         slicer = None
                         conf = float(stream_settings.get('confidence', config.conf))
                         nms_iou = float(stream_settings.get('nmsIou', config.nms_iou))
-                        detections = infer(frame, model, confidence=conf, iou=nms_iou, config=config)
+                        detections = await loop.run_in_executor(
+                            None, infer, frame, model, conf, nms_iou, config)
                         _dt_inf = time.monotonic() - _t_inference_start
                         if _dt_inf + _t_inference_start - _last_inf_log >= _inf_log_interval:
                             _last_inf_log = _t_inference_start + _dt_inf
@@ -639,16 +647,25 @@ async def main(config):
 if __name__ == "__main__":
     ENV = os.environ.get('ENV', '')
 
+    # Create the event loop explicitly before constructing IronFlock.
+    # With ironflock-py ≥ 1.3.14 the loop is passed to IronFlock(loop=loop),
+    # so WAMP subscription callbacks are dispatched on *this* loop — the same
+    # one that main() runs on.  Combined with `await loop.run_in_executor(...)`
+    # for inference, this means config updates (class filter, model, etc.) are
+    # applied within one inference cycle in production, not after two or more.
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
     if ENV == 'LOCAL':
         ironflock = StubIronFlock()
     else:
         from ironflock import IronFlock
-        ironflock = IronFlock()
+        ironflock = IronFlock(loop=loop)
 
     async def _startup():
         """Async startup — runs after the IronFlock connection is established."""
         global model
-        loop = asyncio.get_event_loop()
+        # `loop` is the explicitly created event loop from the enclosing scope.
 
         # Load stream config from backend table (connection is now ready)
         await _load_stream_config_from_table(ironflock, cfg)
@@ -712,7 +729,7 @@ if __name__ == "__main__":
         await main(cfg)
 
     if ENV == 'LOCAL':
-        asyncio.run(_startup())
+        loop.run_until_complete(_startup())
     else:
         ironflock.mainFunc = _startup
         ironflock.run()

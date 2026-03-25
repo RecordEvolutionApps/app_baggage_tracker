@@ -83,8 +83,24 @@ export class StreamEditor extends LitElement {
         }
       }
 
-      // Update full config
+      // Update full config (used when saving name or other top-level edits)
       this.fullConfig = config;
+
+      // Push the full config directly into camera-player so all downstream
+      // components (video-canvas, canvas-toolbox, inference-setup, camera-dialog)
+      // update immediately via Lit property bindings, without waiting for the
+      // player's own subscription callback to fire.
+      const player = this.shadowRoot?.querySelector('camera-player') as CameraPlayer;
+      if (player && config.source?.path) {
+        (player as any).camSetup = {
+          ...config,
+          source: {
+            ...config.source,
+            width: config.source.width ?? (player as any).camSetup?.source?.width ?? 640,
+            height: config.source.height ?? (player as any).camSetup?.source?.height ?? 480,
+          },
+        };
+      }
     });
   }
 

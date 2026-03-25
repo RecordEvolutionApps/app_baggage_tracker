@@ -7,6 +7,37 @@
 import { ironflock, ironflockReady, deviceKey } from './ironflock.js'
 import { type StreamConfig, normalizeStreamConfig } from './utils.js'
 
+// ── Camera Hub ─────────────────────────────────────────────────────────────
+
+export type CameraHub = {
+    tsp?: string
+    devname?: string
+    webpage?: string
+    devicelink?: string
+    deleted?: boolean
+}
+
+/** Read the latest (non-deleted) camera hub row. */
+export async function getCameraHub(): Promise<CameraHub | null> {
+    await ironflockReady
+    const rows = await ironflock.getHistory('camera_hubs', {
+        limit: 1,
+        filterAnd: [
+            { column: 'latest_flag', operator: '=', value: true },
+            { column: 'deleted', operator: '!=', value: true },
+        ],
+    })
+    return (rows && rows.length > 0) ? rows[0] as CameraHub : null
+}
+
+/** Subscribe to camera hub updates (heartbeats + config changes). */
+export async function subscribeCameraHub(callback: (hub: CameraHub) => void): Promise<void> {
+    await ironflockReady
+    ironflock.subscribeToTable('camera_hubs', (row: any) => {
+        callback(row as CameraHub)
+    })
+}
+
 // ── Row ↔ StreamConfig conversion ──────────────────────────────────────────
 
 function rowToStreamConfig(row: any): StreamConfig {
@@ -47,16 +78,42 @@ export async function readStream(camStream: string): Promise<StreamConfig | null
     return null
 }
 
-/** Write (create or update) a stream config to the backend table. */
+/** Write (create or update) a stream config to the backend table.
+ *
+ * Always performs a read-modify-write: reads the current persisted row first
+ * and deep-merges the incoming config on top of it before writing.  This
+ * guarantees that every row in the table is always a complete StreamConfig,
+ * regardless of which component (camera-dialog, inference-setup, polygon
+ * manager, …) triggered the write and how much of the config it knew about.
+ */
 export async function writeStream(camStream: string, config: StreamConfig, status = 'configured'): Promise<void> {
     await ironflockReady
+
+    // Read the current persisted state so we never lose sections the caller
+    // didn't touch (e.g. changing the source must not wipe inference settings,
+    // and saving inference settings must not wipe masks).
+    const existing = await readStream(camStream)
+
+    const merged: StreamConfig = existing ? {
+        // Scalar top-level fields: incoming wins (name, stopped, camStream)
+        ...existing,
+        ...config,
+        // Deep-merge each structured section independently.
+        source: { ...(existing.source ?? {}), ...(config.source ?? {}) },
+        inference: { ...(existing.inference ?? {}), ...(config.inference ?? {}) },
+        processing: {
+            ...(existing.processing ?? {}),
+            ...(config.processing ?? {}),
+        },
+    } : config
+
     const now = new Date().toISOString()
     await ironflock.appendToTable('streams', [{
         tsp: now,
         stream_name: camStream,
         stream_url: `https://${deviceKey}-visionai-1100.app.ironflock.com/#view/${encodeURIComponent(camStream)}`,
-        cam_path: config.source?.path ?? '',
-        stream_config: JSON.stringify(config),
+        cam_path: merged.source?.path ?? '',
+        stream_config: JSON.stringify(merged),
         status,
         deleted: false,
     }])

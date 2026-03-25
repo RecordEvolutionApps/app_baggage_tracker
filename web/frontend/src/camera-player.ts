@@ -2,7 +2,7 @@ import { LitElement, html, css } from 'lit';
 import { property, customElement, state } from 'lit/decorators.js';
 import './video-canvas.js';
 import { mainStyles, CamSetup } from './utils.js';
-import { readStream } from './streams-sdk.js';
+import { readStream, subscribeStreams } from './streams-sdk.js';
 
 @customElement('camera-player')
 export class CameraPlayer extends LitElement {
@@ -11,7 +11,10 @@ export class CameraPlayer extends LitElement {
   @property({ type: Boolean }) declare stopped: boolean;
   basepath: string;
 
-  @state()
+  // @property so that stream-editor (or any parent) can push a freshly-received
+  // full StreamConfig directly into this component without waiting for the
+  // WAMP subscription to fire again.
+  @property({ type: Object })
   declare camSetup?: CamSetup;
 
   animation_handle: any;
@@ -51,9 +54,38 @@ export class CameraPlayer extends LitElement {
 
 protected async firstUpdated() {
   const videoElement = this.shadowRoot?.getElementById('video') as HTMLVideoElement;
-  // this.videoElement = videoElement; // Still set the property internally
 
   this.getCameraMetadata();
+
+  // Subscribe to WAMP stream-config updates for this specific stream.
+  // The Python publisher calls publish_stream() which writes a new row to the
+  // IronFlock 'streams' table; that triggers this callback on all subscribers.
+  // This ensures camSetup (source type, path, and — critically — actual
+  // capture resolution written by setVideoSource) stays in sync without a
+  // browser refresh, even when the publisher row arrives after firstUpdated.
+  subscribeStreams((config) => {
+    if (config.camStream !== this.id) return;
+    if ((config as any).deleted) return;
+    // Accept every non-deleted row for this stream — source, inference, and
+    // processing sections all need to flow downstream through Lit bindings:
+    //   camera-player → video-canvas → canvas-toolbox → camera-dialog
+    //                                                  → inference-setup
+    // Only skip a row that carries no meaningful data at all (e.g. the bare
+    // shell written when a new stream is first created with no source yet).
+    const hasContent = !!(config.source?.path || config.source?.type ||
+                          config.inference?.model || config.name);
+    if (!hasContent) return;
+    this.camSetup = {
+      ...config,
+      source: {
+        ...config.source,
+        // Keep the last known measured resolution when the incoming row omits it,
+        // so the canvas never reverts to 640×480 mid-stream.
+        width: config.source?.width ?? this.camSetup?.source?.width ?? 640,
+        height: config.source?.height ?? this.camSetup?.source?.height ?? 480,
+      },
+    } as CamSetup;
+  });
 
   // Force a re-render so video-canvas gets the real <video> element
   // (on first render, shadow DOM was empty so this.videoElement was null)
