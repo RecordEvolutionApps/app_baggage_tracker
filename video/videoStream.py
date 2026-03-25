@@ -647,10 +647,9 @@ async def main(config):
 if __name__ == "__main__":
     ENV = os.environ.get('ENV', '')
 
-    # Create the event loop explicitly before constructing IronFlock.
-    # With ironflock-py ≥ 1.3.14 the loop is passed to IronFlock(loop=loop),
-    # so WAMP subscription callbacks are dispatched on *this* loop — the same
-    # one that main() runs on.  Combined with `await loop.run_in_executor(...)`
+    # Create the event loop explicitly and pass it to ironflock.run().
+    # This ensures WAMP subscription callbacks are dispatched on the same loop
+    # that main() runs on.  Combined with `await loop.run_in_executor(...)`
     # for inference, this means config updates (class filter, model, etc.) are
     # applied within one inference cycle in production, not after two or more.
     loop = asyncio.new_event_loop()
@@ -660,7 +659,7 @@ if __name__ == "__main__":
         ironflock = StubIronFlock()
     else:
         from ironflock import IronFlock
-        ironflock = IronFlock(loop=loop)
+        ironflock = IronFlock()
 
     async def _startup():
         """Async startup — runs after the IronFlock connection is established."""
@@ -732,4 +731,4 @@ if __name__ == "__main__":
         loop.run_until_complete(_startup())
     else:
         ironflock.mainFunc = _startup
-        ironflock.run()
+        ironflock.run(loop)
