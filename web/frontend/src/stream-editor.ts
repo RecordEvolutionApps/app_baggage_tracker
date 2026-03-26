@@ -5,6 +5,7 @@ import './camera-player.js';
 import { CameraPlayer } from './camera-player.js';
 import { initMediasoup, stopMediasoup } from './modules/webRTCPlayer.js';
 import { readStream, writeStream, deleteStream, subscribeStreams } from './streams-sdk.js';
+import { ironflock, ironflockReady, deviceKey } from './ironflock.js';
 
 import '@material/web/button/filled-button.js';
 import '@material/web/button/text-button.js';
@@ -33,8 +34,6 @@ export class StreamEditor extends LitElement {
     this.editingName = false;
     this.fullConfig = null;
   }
-
-  private basepath = window.location.protocol + '//' + window.location.host;
 
   connectedCallback() {
     super.connectedCallback();
@@ -161,14 +160,15 @@ export class StreamEditor extends LitElement {
     if (this.toggling) return;
     this.toggling = true;
     try {
-      const action = this.stopped ? 'start' : 'stop';
-      const res = await fetch(
-        `${this.basepath}/streams/${encodeURIComponent(this.camStream)}/${action}`,
-        { method: 'POST' },
-      );
-      if (!res.ok) {
-        console.error(`Failed to ${action} stream`, await res.text());
-        return;
+      await ironflockReady;
+      if (this.stopped) {
+        // Start the stream subprocess
+        await ironflock.callDeviceFunction(deviceKey, 'startStream', [this.camStream, this.fullConfig?.source ?? {}]);
+        await writeStream(this.camStream, { stopped: false } as any, 'started');
+      } else {
+        // Stop the stream subprocess
+        await ironflock.callDeviceFunction(deviceKey, 'stopStream', [this.camStream]);
+        await writeStream(this.camStream, { stopped: true } as any, 'stopped');
       }
       // State will be updated by the subscription callback.
       // Set it locally too for immediate feedback.
@@ -211,6 +211,9 @@ export class StreamEditor extends LitElement {
 
   private async confirmDelete() {
     try {
+      await ironflockReady;
+      // Kill the subprocess before removing the config
+      await ironflock.callDeviceFunction(deviceKey, 'deleteStream', [this.camStream]).catch(() => {});
       await deleteStream(this.camStream);
     } catch (err) {
       console.error('Failed to delete stream', err);

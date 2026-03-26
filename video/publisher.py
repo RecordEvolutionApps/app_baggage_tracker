@@ -130,6 +130,9 @@ class Publisher:
         src['width'] = self._config.resolution_x
         src['height'] = self._config.resolution_y
         full['source'] = src
+        # Include backend status (model, precision, device, etc.)
+        if self._config.backend_status:
+            full['backendStatus'] = self._config.backend_status
         # ────────────────────────────────────────────────────────────────────
 
         stream_config = json.dumps(full)
@@ -285,3 +288,11 @@ class StubIronFlock:
                              name=f'stub-poll-{table}')
         t.start()
         logger.info('[StubIronFlock] started background poll thread for %s', table)
+
+    async def register_device_function(self, topic, handler, options=None):
+        """No-op in LOCAL mode — RPCs are served by HTTP routes instead."""
+        pass
+
+    def stop(self):
+        """No-op."""
+        pass

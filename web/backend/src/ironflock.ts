@@ -1,6 +1,7 @@
 import { IronFlock } from 'ironflock'
 import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
+import { initStreamRPCs } from './streams.js'
 
 const ENV = Bun.env.ENV || ''
 const STUB_DIR = '/data/stub'
@@ -99,6 +100,7 @@ class StubIronFlock {
 
     start() {}
     stop() {}
+    async registerDeviceFunction(_topic: string, _handler: (...args: any[]) => any) {}
 }
 
 // ── IronFlock config for the frontend SDK (IronFlockOptions from env) ──────
@@ -123,6 +125,9 @@ if (ENV === 'LOCAL') {
 } else {
     ironflock = new IronFlock()
     await ironflock.start()
+    // Register device-scoped WAMP RPCs (stream management only — model RPCs
+    // are now registered by the Python video service).
+    await initStreamRPCs(ironflock)
 }
 
 export { ironflock }

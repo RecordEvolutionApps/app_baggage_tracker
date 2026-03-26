@@ -69,6 +69,9 @@ class StreamConfig:
     # Live model bundle (set after getModel())
     model: Dict[str, Any] = field(default_factory=dict)
 
+    # Backend status (set by update_backend_status, published to streams table)
+    backend_status: Dict[str, Any] = field(default_factory=dict)
+
     def settings_fingerprint(self) -> str:
         """Build a hashable fingerprint of all settings that affect inference."""
         parts = (

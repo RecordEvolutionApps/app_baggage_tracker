@@ -3,6 +3,7 @@ import { property, customElement, state } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { mainStyles, CamSetup, DeviceCameraInfo, StreamConfig } from './utils.js';
 import { writeStream } from './streams-sdk.js';
+import { ironflock, ironflockReady, deviceKey } from './ironflock.js';
 
 import '@material/web/dialog/dialog.js';
 import { MdDialog } from '@material/web/dialog/dialog.js';
@@ -39,7 +40,6 @@ export class CameraDialog extends LitElement {
   @state() declare loading: boolean;
 
   private dialog?: MdDialog;
-  private basepath = window.location.protocol + '//' + window.location.host;
 
   constructor() {
     super();
@@ -252,9 +252,10 @@ export class CameraDialog extends LitElement {
   private async fetchLocalCameras() {
     try {
       this.loading = true;
-      const res = await fetch(`${this.basepath}/cameras`);
-      if (res.ok) {
-        this.localCameras = await res.json();
+      await ironflockReady;
+      const data = await ironflock.callDeviceFunction(deviceKey, 'listCameras');
+      if (Array.isArray(data)) {
+        this.localCameras = data;
       }
     } catch (err) {
       console.error('Failed to fetch cameras:', err);

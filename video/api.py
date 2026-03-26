@@ -9,6 +9,7 @@ Start with:  uvicorn api:app
 from __future__ import annotations
 
 import logging
+import os
 import signal
 from contextlib import asynccontextmanager
 
@@ -30,12 +31,27 @@ from routes.streams import router as streams_router, processes, delete_mediasoup
 from routes.cameras import router as cameras_router
 from routes.models import router as models_router
 
+ENV = os.environ.get('ENV', '')
 
 # -- Lifespan ----------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # ── Startup: initialise IronFlock and register WAMP RPCs ────────────
+    if ENV == 'LOCAL':
+        from publisher import StubIronFlock
+        ifl = StubIronFlock()
+    else:
+        from ironflock import IronFlock
+        ifl = IronFlock()
+        await ifl.start()
+
+    import rpc
+    await rpc.register_all(ifl)
+    app.state.ironflock = ifl
+
     yield
-    # On shutdown, kill all running streams and clean up mediasoup ingests
+
+    # ── Shutdown: kill streams, clean up, disconnect ────────────────────
     for cam_stream, proc in processes.items():
         print(f"[api] Shutting down stream {cam_stream} (pid={proc.pid})")
         try:
@@ -45,6 +61,12 @@ async def lifespan(app: FastAPI):
             proc.kill()
         delete_mediasoup_ingest(cam_stream)
     processes.clear()
+
+    if hasattr(ifl, 'stop'):
+        try:
+            ifl.stop()
+        except Exception:
+            pass
 
 
 # -- App ----------------------------------------------------------------------

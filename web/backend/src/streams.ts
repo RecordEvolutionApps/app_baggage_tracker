@@ -116,6 +116,22 @@ export async function killVideoStream(camPath: string, camStream: string, method
 
 // ── Backend status ─────────────────────────────────────────────────────────
 
+const DEFAULT_BACKEND_STATUS = {
+    backend: 'unknown',
+    model: '',
+    precision: 'n/a',
+    device: 'unknown',
+    trt_cached: false,
+    requested_backend: '',
+    message: 'Stream has not reported backend status yet',
+}
+
+export async function getBackendStatusByStream(camStream: string): Promise<any> {
+    const config = await readStreamConfig(camStream)
+    if (!config) return DEFAULT_BACKEND_STATUS
+    return config.backendStatus ?? DEFAULT_BACKEND_STATUS
+}
+
 export async function getStreamBackendStatus(ctx: Context): Promise<any> {
     const url = new URL(ctx.request.url)
     const camStream = url.pathname.split('/streams/')[1]?.split('/')[0]
@@ -123,19 +139,14 @@ export async function getStreamBackendStatus(ctx: Context): Promise<any> {
         ctx.set.status = 400
         return { error: 'camStream is required' }
     }
-    try {
-        const res = await fetch(
-            `${VIDEO_API}/streams/${encodeURIComponent(camStream)}/backend`,
-            { signal: AbortSignal.timeout(5000) },
-        )
-        if (res.ok) return await res.json()
-        ctx.set.status = res.status
-        return { error: `Video API returned ${res.status}` }
-    } catch (err) {
-        console.error('Failed to fetch backend status:', err)
-        ctx.set.status = 502
-        return { error: 'Could not reach video API' }
-    }
+    return getBackendStatusByStream(decodeURIComponent(camStream))
+}
+
+// ── WAMP RPC registration (production only) ─────────────────────────────────
+
+export async function initStreamRPCs(ifl: any) {
+    await ifl.registerDeviceFunction('getBackendStatus', async (camStream: string) => getBackendStatusByStream(camStream))
+    console.log('Registered stream WAMP RPCs')
 }
 
 // ── Initialization ─────────────────────────────────────────────────────────
@@ -211,19 +222,6 @@ export async function handleGetStream(ctx: Context): Promise<any> {
 
     let width = config.source?.width
     let height = config.source?.height
-
-    // If the camera config doesn't have a resolution, read it from the
-    // status file written by the video process after opening the source.
-    if (!width || !height) {
-        try {
-            const resFile = Bun.file(`/data/status/${camStream}.resolution.json`)
-            if (await resFile.exists()) {
-                const res = await resFile.json()
-                width = res.width ?? width
-                height = res.height ?? height
-            }
-        } catch (_) { /* resolution file not written yet */ }
-    }
 
     return {
         ...config,

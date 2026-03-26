@@ -159,13 +159,9 @@ logger.info('Resolution: %dx%d, source: %s', cfg.resolution_x, cfg.resolution_y,
 cap.set(3, cfg.resolution_x)
 cap.set(4, cfg.resolution_y)
 
-# Write the actual resolved resolution so the web backend / frontend can read it
-_status_dir = os.path.join('/data', 'status')
-os.makedirs(_status_dir, exist_ok=True)
-_resolution_file = os.path.join(_status_dir, f'{cfg.cam_stream}.resolution.json')
-with open(_resolution_file, 'w') as _rf:
-    json.dump({'width': cfg.resolution_x, 'height': cfg.resolution_y}, _rf)
-logger.info('Wrote resolution status: %dx%d → %s', cfg.resolution_x, cfg.resolution_y, _resolution_file)
+# Resolution is published to the streams table via publisher.publish_stream()
+# after startup, so the web backend / frontend can read source.width/height
+# directly from the stream config.
 
 # ── Load persisted settings from IronFlock backend table ───────────────────
 # Query the streams table for any previously saved config for this stream,
@@ -333,10 +329,6 @@ async def main(config):
                 logger.info('Source switched to %s (%dx%d)', new_device,
                             config.resolution_x, config.resolution_y)
 
-                # Write updated resolution status file
-                with open(_resolution_file, 'w') as _rf:
-                    json.dump({'width': config.resolution_x, 'height': config.resolution_y}, _rf)
-
                 # Reload masks for the new resolution
                 if config.saved_masks:
                     from masks import prepMasks
@@ -386,7 +378,8 @@ async def main(config):
                     config.model = model
                     config.current_model_name = 'none'
                     slicer = None
-                    write_backend_status(config.cam_stream, model, detect_backend=config.detect_backend)
+                    write_backend_status(config.cam_stream, model, detect_backend=config.detect_backend, config=config)
+                    publisher.publish_stream(status='started')
                     logger.info('Model unloaded, inference disabled')
                 else:
                     # Switching to a real model — load it
@@ -399,7 +392,8 @@ async def main(config):
                         slicer = None  # force SAHI re-init with new model
                         logger.info('Model reloaded: %s, native input: %s',
                                     config.current_model_name, model.get('native_input_wh', 'unknown'))
-                        write_backend_status(config.cam_stream, model, detect_backend=config.detect_backend)
+                        write_backend_status(config.cam_stream, model, detect_backend=config.detect_backend, config=config)
+                        publisher.publish_stream(status='started')
                     except Exception as e:
                         logger.error('Failed to reload model %s: %s', new_model_name, e, exc_info=True)
 
@@ -629,10 +623,6 @@ async def main(config):
             await sleep(3)
             cap = setVideoSource(new_device, config)
 
-        # Write updated resolution status file
-        with open(_resolution_file, 'w') as _rf:
-            json.dump({'width': config.resolution_x, 'height': config.resolution_y}, _rf)
-
         publisher.publish_stream(status='started')
 
         # Re-enter the main loop with the new source
@@ -688,7 +678,8 @@ if __name__ == "__main__":
                     model.get('backend', '?'), cfg.object_model, cfg.use_sahi,
                     'CUDA' if torch.cuda.is_available() else 'CPU',
                     cfg.resolution_x, cfg.resolution_y)
-        write_backend_status(cfg.cam_stream, model, detect_backend=cfg.detect_backend)
+        write_backend_status(cfg.cam_stream, model, detect_backend=cfg.detect_backend, config=cfg)
+        publisher.publish_stream(status='started')
 
         # ── Signal handlers ─────────────────────────────────────────────
         import signal as _signal

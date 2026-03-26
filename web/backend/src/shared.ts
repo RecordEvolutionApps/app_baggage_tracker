@@ -49,6 +49,16 @@ export type ProcessingConfig = {
     classNames?: string[]
 }
 
+export type BackendStatus = {
+    backend: string
+    model: string
+    precision: string
+    device: string
+    trt_cached: boolean
+    requested_backend: string
+    message: string
+}
+
 export type StreamConfig = {
     camStream: string
     name: string
@@ -56,6 +66,7 @@ export type StreamConfig = {
     source: SourceConfig
     inference?: InferenceConfig
     processing?: ProcessingConfig
+    backendStatus?: BackendStatus
 }
 
 /** @deprecated Use StreamConfig instead */

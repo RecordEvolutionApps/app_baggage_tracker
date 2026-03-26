@@ -3,6 +3,7 @@ import { property, customElement, state } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { mainStyles, CamSetup, ModelOption, ClassOption } from './utils.js';
 import { readStream, writeStream } from './streams-sdk.js';
+import { ironflock, ironflockReady, deviceKey } from './ironflock.js';
 import prettyBytes from 'pretty-bytes';
 import '@material/web/chips/filter-chip.js';
 import '@material/web/dialog/dialog.js';
@@ -122,14 +123,8 @@ export class InferenceSetup extends LitElement {
   @state()
   declare trtBuildMessage: string;
 
-  private backendPollTimer: ReturnType<typeof setInterval> | null = null;
-  private fastPollTimer: ReturnType<typeof setInterval> | null = null;
-  private modelSizeTimer: ReturnType<typeof setTimeout> | null = null;
-  private modelSizeAttempts = 0;
-
   classDialog?: MdDialog;
   modelDialog?: MdDialog;
-  private basepath = window.location.protocol + '//' + window.location.host;
 
   constructor() {
     super();
@@ -1014,56 +1009,21 @@ export class InferenceSetup extends LitElement {
     this.modelDialog = this.shadowRoot?.getElementById('model-dialog') as MdDialog;
     this.fetchModels();
     this.fetchBackendStatus();
-    this.backendPollTimer = setInterval(() => this.fetchBackendStatus(), 10000);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    if (this.backendPollTimer) {
-      clearInterval(this.backendPollTimer);
-      this.backendPollTimer = null;
-    }
-    if (this.fastPollTimer) {
-      clearInterval(this.fastPollTimer);
-      this.fastPollTimer = null;
-    }
-    if (this.modelSizeTimer) {
-      clearTimeout(this.modelSizeTimer);
-      this.modelSizeTimer = null;
-    }
   }
 
   private async fetchBackendStatus() {
     if (!this.camStream) return;
     try {
-      const res = await fetch(
-        `${this.basepath}/streams/${encodeURIComponent(this.camStream)}/backend`,
-        { signal: AbortSignal.timeout(5000) },
-      );
-      if (res.ok) {
-        this.backendInfo = await res.json();
-        // Stop fast polling once the running model matches the selected model
-        if (this.fastPollTimer && !this._isModelMismatch) {
-          clearInterval(this.fastPollTimer);
-          this.fastPollTimer = null;
-        }
-      }
+      await ironflockReady;
+      const data = await ironflock.callDeviceFunction(deviceKey, 'getBackendStatus', [this.camStream]);
+      if (data) this.backendInfo = data;
     } catch {
       // Silently ignore — badge stays as-is
     }
-  }
-
-  /** Poll backend status every 3s until the running model catches up to the selected one. */
-  private _startFastBackendPoll() {
-    if (this.fastPollTimer) clearInterval(this.fastPollTimer);
-    this.fastPollTimer = setInterval(() => this.fetchBackendStatus(), 3000);
-    // Safety: stop after 2 minutes regardless
-    setTimeout(() => {
-      if (this.fastPollTimer) {
-        clearInterval(this.fastPollTimer);
-        this.fastPollTimer = null;
-      }
-    }, 120_000);
   }
 
   private get _isModelMismatch(): boolean {
@@ -1128,54 +1088,33 @@ export class InferenceSetup extends LitElement {
     this.trtBuildMessage = 'Starting TensorRT build...';
 
     try {
-      const res = await fetch(`${this.basepath}/cameras/models/build-trt`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model }),
-      });
+      await ironflockReady;
+      const result = await ironflock.callDeviceFunction(
+        deviceKey, 'buildTrt', [model], {},
+        {
+          receive_progress: true,
+          on_progress: async (event: any) => {
+            this.trtBuildStatus = event.status === 'building' ? 'building' : event.status;
+            this.trtBuildProgress = event.progress ?? 0;
+            this.trtBuildMessage = event.message ?? '';
+            await new Promise(r => requestAnimationFrame(r));
+          },
+        },
+      );
 
-      if (!res.ok || !res.body) {
-        this.trtBuildStatus = 'error';
-        this.trtBuildMessage = `Failed to start TRT build (HTTP ${res.status})`;
-        return;
-      }
-
-      // Read SSE stream
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-        let updated = false;
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const event = JSON.parse(line.slice(6));
-              this.trtBuildStatus = event.status === 'building' ? 'building' : event.status;
-              this.trtBuildProgress = event.progress ?? 0;
-              this.trtBuildMessage = event.message ?? '';
-              updated = true;
-            } catch { /* ignore parse errors */ }
-          }
-        }
-        if (updated) {
-          await new Promise(r => requestAnimationFrame(r));
-        }
+      // Apply final event
+      if (result) {
+        this.trtBuildStatus = result.status ?? 'ready';
+        this.trtBuildProgress = result.progress ?? 100;
+        this.trtBuildMessage = result.message ?? '';
       }
 
       if (this.trtBuildStatus === 'ready') {
         // TRT engine built — restart stream to pick it up
         this.trtBuildMessage = 'TensorRT engine built! Restarting stream...';
         await this.applyModel(model);
-        // Refresh backend status
+        // Refresh backend status after stream restart (with delay for process startup)
         setTimeout(() => this.fetchBackendStatus(), 3000);
-        this._startFastBackendPoll();
         // Auto-clear after a few seconds
         setTimeout(() => {
           if (this.trtBuildStatus === 'ready') {
@@ -1225,13 +1164,12 @@ export class InferenceSetup extends LitElement {
 
   private async fetchModels() {
     try {
-      const res = await fetch(`${this.basepath}/cameras/models`);
-      if (res.ok) this.models = await res.json();
+      await ironflockReady;
+      const data = await ironflock.callDeviceFunction(deviceKey, 'getModels');
+      if (data) this.models = data;
     } catch (err) {
       console.error('Failed to fetch models', err);
     }
-    this.modelSizeAttempts = 0;
-    this.scheduleModelSizeRefresh();
     this.fetchTags();
     this.fetchCachedModels();
     // Set current model from camSetup if available
@@ -1246,8 +1184,9 @@ export class InferenceSetup extends LitElement {
 
   private async fetchTags() {
     try {
-      const res = await fetch(`${this.basepath}/cameras/models/tags`);
-      if (res.ok) this.availableTags = await res.json();
+      await ironflockReady;
+      const data = await ironflock.callDeviceFunction(deviceKey, 'getModelTags');
+      if (data) this.availableTags = data;
     } catch (err) {
       console.error('Failed to fetch model tags', err);
     }
@@ -1255,10 +1194,10 @@ export class InferenceSetup extends LitElement {
 
   private async fetchCachedModels() {
     try {
-      const res = await fetch(`${this.basepath}/cameras/models/cache`);
-      if (res.ok) {
-        const data = await res.json();
-        this.cachedModelIds = new Set((data as any[]).map((c: any) => c.model));
+      await ironflockReady;
+      const data = await ironflock.callDeviceFunction(deviceKey, 'getCachedModels');
+      if (Array.isArray(data)) {
+        this.cachedModelIds = new Set(data.map((c: any) => c.model));
       }
     } catch (err) {
       console.error('Failed to fetch cached models', err);
@@ -1268,12 +1207,11 @@ export class InferenceSetup extends LitElement {
   private async deleteCachedModel(modelId: string, ev: Event) {
     ev.stopPropagation();
     try {
-      const res = await fetch(`${this.basepath}/cameras/models/${encodeURIComponent(modelId)}/cache`, { method: 'DELETE' });
-      if (res.ok) {
-        const next = new Set(this.cachedModelIds);
-        next.delete(modelId);
-        this.cachedModelIds = next;
-      }
+      await ironflockReady;
+      await ironflock.callDeviceFunction(deviceKey, 'deleteCachedModel', [modelId]);
+      const next = new Set(this.cachedModelIds);
+      next.delete(modelId);
+      this.cachedModelIds = next;
     } catch (err) {
       console.error('Failed to delete cached model', err);
     }
@@ -1282,53 +1220,12 @@ export class InferenceSetup extends LitElement {
   private async clearAllCache() {
     if (!confirm('Delete all cached model files? This will free disk space but models will need to be re-downloaded.')) return;
     try {
-      const res = await fetch(`${this.basepath}/cameras/models/cache`, { method: 'DELETE' });
-      if (res.ok) {
-        this.cachedModelIds = new Set();
-      }
+      await ironflockReady;
+      await ironflock.callDeviceFunction(deviceKey, 'clearAllCache');
+      this.cachedModelIds = new Set();
     } catch (err) {
       console.error('Failed to clear cache', err);
     }
-  }
-
-  private scheduleModelSizeRefresh(delayMs: number = 2000) {
-    if (this.modelSizeTimer) {
-      clearTimeout(this.modelSizeTimer);
-    }
-    const missingSizes = this.models.some(m => m.id !== 'none' && m.fileSize === undefined);
-    if (!missingSizes || this.modelSizeAttempts >= 6) return;
-    this.modelSizeTimer = setTimeout(() => this.fetchModelSizes(), delayMs);
-  }
-
-  private async fetchModelSizes() {
-    this.modelSizeAttempts += 1;
-    try {
-      const res = await fetch(`${this.basepath}/cameras/models`);
-      if (!res.ok) {
-        this.scheduleModelSizeRefresh(3000);
-        return;
-      }
-      const fresh = await res.json();
-      if (!Array.isArray(fresh)) {
-        this.scheduleModelSizeRefresh(3000);
-        return;
-      }
-      const sizeMap = new Map<string, number>();
-      for (const m of fresh) {
-        if (m?.id && typeof m.fileSize === 'number') {
-          sizeMap.set(m.id, m.fileSize);
-        }
-      }
-      if (sizeMap.size) {
-        this.models = this.models.map(m =>
-          sizeMap.has(m.id) ? { ...m, fileSize: sizeMap.get(m.id) } : m,
-        );
-      }
-    } catch (err) {
-      console.error('Failed to refresh model sizes', err);
-    }
-
-    this.scheduleModelSizeRefresh(3000 + this.modelSizeAttempts * 500);
   }
 
   /** Models filtered by the search term and grouped by architecture */
@@ -1492,11 +1389,6 @@ export class InferenceSetup extends LitElement {
     return this.models.find(m => m.id === this.pendingModelId);
   }
 
-  private get modelSizesPending(): boolean {
-    const missing = this.models.some(m => m.id !== 'none' && m.fileSize === undefined);
-    return missing && this.modelSizeAttempts < 6;
-  }
-
   /** Whether the currently selected model is an open-vocabulary model */
   private get isOpenVocab(): boolean {
     const model = this.models.find(m => m.id === this.selectedModel);
@@ -1602,47 +1494,25 @@ export class InferenceSetup extends LitElement {
     this.modelStatusMessage = 'Checking model cache...';
 
     try {
-      const res = await fetch(`${this.basepath}/cameras/models/prepare`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model }),
-      });
+      await ironflockReady;
+      const result = await ironflock.callDeviceFunction(
+        deviceKey, 'prepareModel', [model], {},
+        {
+          receive_progress: true,
+          on_progress: async (event: any) => {
+            this.modelStatus = event.status;
+            this.modelProgress = event.progress ?? 0;
+            this.modelStatusMessage = event.message ?? '';
+            await new Promise(r => requestAnimationFrame(r));
+          },
+        },
+      );
 
-      if (!res.ok || !res.body) {
-        this.modelStatus = 'error';
-        this.modelStatusMessage = `Failed to prepare model (HTTP ${res.status})`;
-        return;
-      }
-
-      // Read SSE stream
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        // Parse SSE events from buffer
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-        let updated = false;
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const event = JSON.parse(line.slice(6));
-              this.modelStatus = event.status;
-              this.modelProgress = event.progress ?? 0;
-              this.modelStatusMessage = event.message ?? '';
-              updated = true;
-            } catch { /* ignore parse errors */ }
-          }
-        }
-        // Yield to let Lit render the updated progress
-        if (updated) {
-          await new Promise(r => requestAnimationFrame(r));
-        }
+      // Apply final event
+      if (result) {
+        this.modelStatus = result.status ?? 'ready';
+        this.modelProgress = result.progress ?? 100;
+        this.modelStatusMessage = result.message ?? '';
       }
 
       if (this.modelStatus === 'error') {
@@ -1661,10 +1531,12 @@ export class InferenceSetup extends LitElement {
       const nextCached = new Set(this.cachedModelIds);
       nextCached.add(model);
       this.cachedModelIds = nextCached;
-      // Refresh backend status after stream restart (with delay for process startup)
-      setTimeout(() => this.fetchBackendStatus(), 5000);
-      // Poll faster until the running model catches up
-      this._startFastBackendPoll();
+      // Refresh backend status after stream restart with bounded retries
+      for (const delay of [5000, 15000, 30000]) {
+        await new Promise(r => setTimeout(r, delay));
+        await this.fetchBackendStatus();
+        if (!this._isModelMismatch) break;
+      }
       // Auto-clear the status bar after a short delay
       setTimeout(() => {
         if (this.modelStatus === 'ready') {
@@ -1773,11 +1645,12 @@ export class InferenceSetup extends LitElement {
     }
     this.classesLoading = true;
     this.classesError = '';
+    await ironflockReady;
     for (let attempt = 0; attempt <= retries; attempt += 1) {
       try {
-        const res = await fetch(`${this.basepath}/cameras/models/${encodeURIComponent(modelId)}/classes`);
-        if (res.ok) {
-          this.availableClasses = await res.json();
+        const data = await ironflock.callDeviceFunction(deviceKey, 'getModelClasses', [modelId]);
+        if (Array.isArray(data)) {
+          this.availableClasses = data;
           // If no persisted selection, default to all classes selected
           if (this.selectedClassIds.size === 0 && !this.hasPersistedClassList) {
             this.selectedClassIds = new Set(this.availableClasses.map(c => c.id));
@@ -1785,10 +1658,6 @@ export class InferenceSetup extends LitElement {
           this.classesLoading = false;
           this.classesError = '';
           return;
-        }
-        if (res.status < 500) {
-          this.classesError = `Failed to load classes (HTTP ${res.status})`;
-          break;
         }
       } catch (err) {
         if (attempt === retries) {
@@ -1948,6 +1817,7 @@ export class InferenceSetup extends LitElement {
           </div>
         ` : ''}
 
+        ${this.selectedModel && this.selectedModel !== 'none' ? html`
         <div class="frame-buffer-row">
           <label for="confidence" class="fb-label">Confidence</label>
           <input
@@ -2061,6 +1931,7 @@ export class InferenceSetup extends LitElement {
             </span>
           ` : ''}
         </div>
+        ` : ''}
       </div>
 
       <md-dialog

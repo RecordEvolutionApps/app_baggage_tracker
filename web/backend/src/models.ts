@@ -191,6 +191,12 @@ export async function buildTrtModel(ctx: Context): Promise<Response> {
     }
 }
 
+export async function getModelClassesById(modelId: string): Promise<any> {
+    const res = await fetch(`${VIDEO_API}/models/${encodeURIComponent(modelId)}/classes`, { signal: AbortSignal.timeout(30000) })
+    if (res.ok) return await res.json()
+    throw new Error(`Video API returned ${res.status}`)
+}
+
 export async function getModelClasses(ctx: Context): Promise<any> {
     const url = new URL(ctx.request.url)
     const modelId = (ctx as any).params?.modelId ?? url.pathname.split('/cameras/models/')[1]?.split('/')[0]
@@ -199,10 +205,7 @@ export async function getModelClasses(ctx: Context): Promise<any> {
         return { error: 'model id is required' }
     }
     try {
-        const res = await fetch(`${VIDEO_API}/models/${encodeURIComponent(modelId)}/classes`, { signal: AbortSignal.timeout(30000) })
-        if (res.ok) return await res.json()
-        ctx.set.status = res.status
-        return { error: `Video API returned ${res.status}` }
+        return await getModelClassesById(modelId)
     } catch (err) {
         console.error('Failed to fetch model classes:', err)
         ctx.set.status = 502
@@ -241,6 +244,16 @@ export async function deleteCachedModel(ctx: Context): Promise<any> {
         ctx.set.status = 502
         return { error: 'Could not reach video API' }
     }
+}
+
+// ── WAMP RPC registration (production only) ───────────────────────────────
+
+export async function initModelRPCs(ifl: any) {
+    await ifl.registerDeviceFunction('getModels', async () => getModels())
+    await ifl.registerDeviceFunction('getModelTags', async () => getModelTags())
+    await ifl.registerDeviceFunction('getCachedModels', async () => getCachedModels())
+    await ifl.registerDeviceFunction('getModelClasses', async (modelId: string) => getModelClassesById(modelId))
+    console.log('Registered model WAMP RPCs')
 }
 
 export async function clearAllCache(ctx: Context): Promise<any> {

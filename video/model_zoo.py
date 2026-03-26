@@ -399,11 +399,15 @@ def _download_with_progress(url: str, dest: str, report_fn):
 
 def write_backend_status(cam_stream: str, model_bundle: Dict[str, Any],
                          extra: Dict[str, Any] | None = None,
-                         detect_backend: str = 'mmdet'):
-    """Write a JSON status file so the API / frontend can inspect the active backend."""
-    status_dir = Path('/data/status')
-    status_dir.mkdir(parents=True, exist_ok=True)
+                         detect_backend: str = 'mmdet',
+                         config=None):
+    """Update backend status on the config object (and optionally on disk for
+    backwards compatibility).
 
+    When *config* is supplied the status dict is stored on
+    ``config.backend_status`` and no file is written.  The caller is
+    responsible for publishing via ``publisher.publish_stream()``.
+    """
     backend = model_bundle.get('backend', 'unknown')
     model_name = model_bundle.get('model_name', '')
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
@@ -443,9 +447,15 @@ def write_backend_status(cam_stream: str, model_bundle: Dict[str, Any],
     if extra:
         status.update(extra)
 
-    status_file = status_dir / f'{cam_stream}.backend.json'
-    with open(status_file, 'w') as f:
-        json.dump(status, f)
+    if config is not None:
+        config.backend_status = status
+    else:
+        # Legacy file-based path (kept for callers that don't pass config)
+        status_dir = Path('/data/status')
+        status_dir.mkdir(parents=True, exist_ok=True)
+        status_file = status_dir / f'{cam_stream}.backend.json'
+        with open(status_file, 'w') as f:
+            json.dump(status, f)
     logger.info('[status] %s: %s', cam_stream, message)
 
 

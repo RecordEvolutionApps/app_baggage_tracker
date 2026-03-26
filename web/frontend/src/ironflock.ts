@@ -135,6 +135,98 @@ class StubIronFlock {
         }
     }
 
+    async callDeviceFunction(_deviceKey: string, topic: string, args?: unknown[], _kwargs?: Record<string, unknown>, options?: Record<string, any>): Promise<any> {
+        const routeMap: Record<string, () => Promise<any>> = {
+            getModels: () => this._fetchJson(`${this._basepath}/cameras/models`),
+            getModelTags: () => this._fetchJson(`${this._basepath}/cameras/models/tags`),
+            getCachedModels: () => this._fetchJson(`${this._basepath}/cameras/models/cache`),
+            getModelClasses: () => {
+                const modelId = args?.[0] as string
+                return this._fetchJson(`${this._basepath}/cameras/models/${encodeURIComponent(modelId)}/classes`)
+            },
+            getBackendStatus: () => {
+                const camStream = args?.[0] as string
+                return this._fetchJson(`${this._basepath}/streams/${encodeURIComponent(camStream)}/backend`)
+            },
+            getModelStatus: () => {
+                const modelId = args?.[0] as string
+                return this._fetchJson(`${this._basepath}/cameras/models/${encodeURIComponent(modelId)}/status`)
+            },
+            deleteCachedModel: async () => {
+                const modelId = args?.[0] as string
+                const res = await fetch(`${this._basepath}/cameras/models/${encodeURIComponent(modelId)}/cache`, { method: 'DELETE' })
+                return res.ok ? res.json() : null
+            },
+            clearAllCache: async () => {
+                const res = await fetch(`${this._basepath}/cameras/models/cache`, { method: 'DELETE' })
+                return res.ok ? res.json() : null
+            },
+            validateModel: async () => {
+                const model = args?.[0] as string
+                const res = await fetch(`${this._basepath}/cameras/models/validate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model }),
+                })
+                return res.ok ? res.json() : null
+            },
+            listCameras: () => this._fetchJson(`${this._basepath}/cameras`),
+            prepareModel: () => this._sseToProgress(`${this._basepath}/cameras/models/prepare`, args?.[0] as string, options),
+            buildTrt: () => this._sseToProgress(`${this._basepath}/cameras/models/build-trt`, args?.[0] as string, options),
+            startStream: async () => {
+                const camStream = args?.[0] as string
+                const res = await fetch(`${this._basepath}/streams/${encodeURIComponent(camStream)}/start`, { method: 'POST' })
+                return res.ok ? res.json() : null
+            },
+            stopStream: async () => {
+                const camStream = args?.[0] as string
+                const res = await fetch(`${this._basepath}/streams/${encodeURIComponent(camStream)}/stop`, { method: 'POST' })
+                return res.ok ? res.json() : null
+            },
+            deleteStream: async () => {
+                const camStream = args?.[0] as string
+                const res = await fetch(`${this._basepath}/streams/${encodeURIComponent(camStream)}`, { method: 'DELETE' })
+                return res.ok ? res.json() : null
+            },
+        }
+        const handler = routeMap[topic]
+        if (!handler) throw new Error(`StubIronFlock: unknown device function "${topic}"`)
+        return handler()
+    }
+
+    /** Simulate progressive results by reading an SSE stream and calling on_progress. */
+    private async _sseToProgress(url: string, model: string, options?: Record<string, any>): Promise<any> {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model }),
+        })
+        if (!res.ok || !res.body) return { status: 'error', progress: 0, message: `HTTP ${res.status}` }
+
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        let lastEvent: any = null
+
+        while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+            buffer = lines.pop() || ''
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    try {
+                        const event = JSON.parse(line.slice(6))
+                        lastEvent = event
+                        if (options?.on_progress) await options.on_progress(event)
+                    } catch { /* skip */ }
+                }
+            }
+        }
+        return lastEvent
+    }
+
     run() {}
     start() {}
 

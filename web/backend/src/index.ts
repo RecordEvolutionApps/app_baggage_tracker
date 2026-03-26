@@ -2,7 +2,8 @@ import { Elysia } from "elysia";
 import { staticPlugin } from '@elysiajs/static'
 import { html } from '@elysiajs/html'
 import { cors } from '@elysiajs/cors'
-import { getUSBCameras, handleListStreams, handleGetStream, handleCreateStream, handleUpdateStream, handleDeleteStream, handleStopStream, handleStartStream, getModels, getModelTags, getModelClasses, getModelStatus, prepareModel, buildTrtModel, getCachedModels, deleteCachedModel, clearAllCache, getStreamBackendStatus } from './cameras.js'
+import { getUSBCameras, handleListStreams, handleGetStream, handleCreateStream, handleUpdateStream, handleDeleteStream, handleStopStream, handleStartStream, getStreamBackendStatus } from './cameras.js'
+import { getModels, getModelTags, getModelClasses, getModelStatus, prepareModel, buildTrtModel, getCachedModels, deleteCachedModel, clearAllCache } from './models.js'
 import { ironflock, getIronFlockConfig } from './ironflock.js'
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -46,7 +47,8 @@ app.post('/streams/:camStream/start', handleStartStream)
 app.get('/streams/:camStream/backend', getStreamBackendStatus)
 // ── Camera discovery ───────────────────────────────────────────────────────
 app.get('/cameras', getUSBCameras)
-// ── Model catalog ──────────────────────────────────────────────────────────
+// ── Model catalog (DEV mode only — in production the frontend calls the ────
+// ── video service directly via WAMP RPCs)                                ────
 app.get('/cameras/models', getModels)
 app.get('/cameras/models/tags', getModelTags)
 app.get('/cameras/models/cache', getCachedModels)
