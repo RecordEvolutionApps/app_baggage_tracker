@@ -1,4 +1,4 @@
-import { ironflock, getIronFlockConfig } from './ironflock.js'
+import { ironflock, getIronFlockConfig, formatError } from './ironflock.js'
 
 // ── Config constants ───────────────────────────────────────────────────────
 
@@ -155,7 +155,7 @@ export async function readStreamConfig(camStream: string): Promise<StreamConfig 
         }) as any[] | null
         if (rows && rows.length > 0) return rowToStreamConfig(rows[0])
     } catch (err) {
-        console.error(`Failed to read stream config for ${camStream}:`, err)
+        console.error(`Failed to read stream config for ${camStream}:`, formatError(err))
     }
     return null
 }
@@ -220,7 +220,7 @@ export async function listStreamConfigs(): Promise<StreamConfig[]> {
         }) as any[] | null
         return (rows ?? []).map(rowToStreamConfig)
     } catch (err) {
-        console.error('Failed to list stream configs:', err)
+        console.error('Failed to list stream configs:', formatError(err))
         return []
     }
 }

@@ -145,7 +145,7 @@ export async function getStreamBackendStatus(ctx: Context): Promise<any> {
 // ── WAMP RPC registration (production only) ─────────────────────────────────
 
 export async function initStreamRPCs(ifl: any) {
-    await ifl.registerDeviceFunction('getBackendStatus', async (camStream: string) => getBackendStatusByStream(camStream))
+    await ifl.registerDeviceFunction('getBackendStatus', async (args: unknown[]) => getBackendStatusByStream(args[0] as string))
     console.log('Registered stream WAMP RPCs')
 }
 
@@ -310,9 +310,30 @@ export async function handleUpdateStream(ctx: Context) {
         incoming.processing.masks = prev?.processing?.masks ?? { polygons: [] }
     }
 
+    // Auto-start: when a source is set for the first time, start the stream with model=none
+    const prevPath = prev?.source?.path ?? ''
+    const newPath = incoming.source?.path ?? ''
+    const sourceJustSet = !prevPath && !!newPath
+
+    if (sourceJustSet) {
+        // Ensure inference.model defaults to 'none' so the stream starts without a model
+        if (!incoming.inference) {
+            incoming.inference = { model: 'none' }
+        } else if (!incoming.inference.model) {
+            incoming.inference.model = 'none'
+        }
+        incoming.stopped = false
+    }
+
     // Write the full config to the backend table
     const status = incoming.stopped ? 'stopped' : 'configured'
     await writeStreamConfig(decoded, incoming, status)
+
+    // If source was just set, auto-start the video stream process
+    if (sourceJustSet) {
+        console.log(`[streams] Source set for the first time on ${decoded} — auto-starting with model=none`)
+        startVideoStream(incoming, decoded)
+    }
 
     return { status: 'ok', camStream: decoded }
 }

@@ -252,7 +252,7 @@ export async function initModelRPCs(ifl: any) {
     await ifl.registerDeviceFunction('getModels', async () => getModels())
     await ifl.registerDeviceFunction('getModelTags', async () => getModelTags())
     await ifl.registerDeviceFunction('getCachedModels', async () => getCachedModels())
-    await ifl.registerDeviceFunction('getModelClasses', async (modelId: string) => getModelClassesById(modelId))
+    await ifl.registerDeviceFunction('getModelClasses', async (args: unknown[]) => getModelClassesById(args[0] as string))
     console.log('Registered model WAMP RPCs')
 }
 

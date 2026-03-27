@@ -118,6 +118,24 @@ export function getIronFlockConfig() {
     }
 }
 
+/** Format an error for logging, handling autobahn's custom Error objects that
+ *  have {error, args, kwargs} but no useful toString(). */
+function formatError(err: unknown): string {
+    if (err instanceof globalThis.Error) return err.stack ?? err.message
+    if (err && typeof err === 'object') {
+        const obj = err as Record<string, unknown>
+        // autobahn Error: { error: string, args: any[], kwargs: object }
+        if ('error' in obj) {
+            const parts = [String(obj.error)]
+            if (Array.isArray(obj.args) && obj.args.length) parts.push(`args=${JSON.stringify(obj.args)}`)
+            if (obj.kwargs && Object.keys(obj.kwargs as object).length) parts.push(`kwargs=${JSON.stringify(obj.kwargs)}`)
+            return parts.join(' | ')
+        }
+        try { return JSON.stringify(obj) } catch { /* fall through */ }
+    }
+    return String(err)
+}
+
 let ironflock: IronFlock | StubIronFlock
 
 if (ENV === 'LOCAL') {
@@ -125,9 +143,21 @@ if (ENV === 'LOCAL') {
 } else {
     ironflock = new IronFlock()
     await ironflock.start()
+
+    // Wrap getHistory to log meaningful error details instead of [object Object]
+    const origGetHistory = ironflock.getHistory.bind(ironflock)
+    ironflock.getHistory = async (table: string, params?: any) => {
+        try {
+            return await origGetHistory(table, params)
+        } catch (err) {
+            console.error(`getHistory('${table}') failed:`, formatError(err))
+            throw err
+        }
+    }
+
     // Register device-scoped WAMP RPCs (stream management only — model RPCs
     // are now registered by the Python video service).
     await initStreamRPCs(ironflock)
 }
 
-export { ironflock }
+export { ironflock, formatError }

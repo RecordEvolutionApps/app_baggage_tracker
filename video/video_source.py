@@ -215,9 +215,14 @@ def setVideoSource(device: str, config: StreamConfig):
 
     elif device.startswith('demoVideo'):
         cap = cv2.VideoCapture('/app/video/luggagebelt.m4v', cv2.CAP_FFMPEG)
-        time.sleep(0.3)
-        config.resolution_x = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        config.resolution_y = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        for _attempt in range(20):
+            time.sleep(0.1)
+            actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            if actual_w > 0 and actual_h > 0:
+                config.resolution_x = actual_w
+                config.resolution_y = actual_h
+                break
         logger.info('Demo video opened: %dx%d (FFmpeg backend)',
                      config.resolution_x, config.resolution_y)
 
