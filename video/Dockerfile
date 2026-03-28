@@ -117,12 +117,12 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
 			fastapi==0.115.0 "uvicorn[standard]==0.30.6" \
 			onnx onnxruntime && \
 		pip install "autobahn[serialization]<25" "timm>=0.9,<1" && \
-		pip install ironflock==1.3.14 --no-deps --ignore-requires-python; \
+		pip install ironflock==1.3.15 --no-deps --ignore-requires-python; \
 	else \
 		uv pip install --system \
 			"transformers==5.2.0" "huggingface_hub>=1.3,<2" \
 			"safetensors>=0.5" "timm>=1.0.11" \
-			ironflock==1.3.14 matplotlib==3.8.4 pyyaml==6.0.1 \
+			ironflock==1.3.15 matplotlib==3.8.4 pyyaml==6.0.1 \
 			defusedxml==0.7.1 pillow==10.3.0 lapx==0.5.5 yt_dlp==2024.4.9 \
 			numpy==1.26.4 fastapi==0.115.0 "uvicorn[standard]==0.30.6" \
 			onnx onnxruntime; \
